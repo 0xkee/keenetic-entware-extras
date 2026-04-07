@@ -26,7 +26,7 @@ format_age() {
 
 # Detect ISP interface from default route
 detect_isp_interface() {
-  ip route show default | awk '{print $5; exit}'
+  ip route show default | sed -n 's/.*dev \([^ ]*\).*/\1/p' | head -1
 }
 
 # Show routing mode and resolved interface
@@ -54,10 +54,18 @@ show_mode() {
 
 # Show ipset existence and entry count
 show_ipset() {
-  local count
+  local count mem
   if ipset list "$IPSET_NAME" -t >/dev/null 2>&1; then
-    count=$(ipset list "$IPSET_NAME" -t | grep -E "^Number" | awk '{print $NF}')
-    echo "  Ipset:       $IPSET_NAME ($count entries) ✓"
+    # Try "Number of entries" header first, fallback to counting members
+    count=$(ipset list "$IPSET_NAME" -t 2>/dev/null | awk '/Number of entries/ {print $NF}')
+    if [ -z "$count" ]; then
+      count=$(ipset list "$IPSET_NAME" 2>/dev/null | grep -c '/')
+    fi
+    mem=$(ipset list "$IPSET_NAME" -t 2>/dev/null | awk '/Size in memory/ {print $NF}')
+    if [ -n "$mem" ]; then
+      mem=" / $(( mem / 1024 ))KB"
+    fi
+    echo "  Ipset:       $IPSET_NAME (${count:-0} entries${mem}) ✓"
   else
     echo "  Ipset:       $IPSET_NAME ✗ (not loaded)"; STATUS_OK=1
   fi
@@ -87,7 +95,7 @@ show_iptables() {
 show_subnets() {
   if [ -f "$SUBNET_LIST_FILE" ]; then
     local age age_label max_label
-    age=$(( $(date +%s) - $(stat -c %Y "$SUBNET_LIST_FILE") ))
+    age=$(( $(date +%s) - $(file_mtime "$SUBNET_LIST_FILE") ))
     age_label="$(format_age "$age")"
     max_label="$(format_age "$MAX_CACHE_AGE")"
     if [ "$age" -le "$MAX_CACHE_AGE" ]; then
@@ -107,7 +115,7 @@ show_domains() {
   if [ -f "$DOMAINS_CACHE_FILE" ]; then
     local count age age_label max_label
     count=$(wc -l < "$DOMAINS_CACHE_FILE")
-    age=$(( $(date +%s) - $(stat -c %Y "$DOMAINS_CACHE_FILE") ))
+    age=$(( $(date +%s) - $(file_mtime "$DOMAINS_CACHE_FILE") ))
     age_label="$(format_age "$age")"
     max_label="$(format_age "$interval")"
     if [ "$age" -le "$interval" ]; then

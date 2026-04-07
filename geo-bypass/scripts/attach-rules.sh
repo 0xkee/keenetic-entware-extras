@@ -15,7 +15,7 @@ TARGET_INTERFACE=""
 
 # Detect ISP interface from default route
 detect_isp_interface() {
-  ip route show default | awk '{print $5; exit}'
+  ip route show default | sed -n 's/.*dev \([^ ]*\).*/\1/p' | head -1
 }
 
 # Resolve target interface based on ROUTE_MODE
@@ -53,28 +53,37 @@ resolve_target_interface() {
 setup_ip_rules() {
   require_cmd ip
 
+  # Extract gateway if present (some routes are "scope link" without via)
   local gw
-  gw=$(ip route show dev "$TARGET_INTERFACE" | awk '/default/ {print $3}')
+  gw=$(ip route show default dev "$TARGET_INTERFACE" 2>/dev/null \
+    | sed -n 's/.*via \([^ ]*\).*/\1/p' | head -1)
 
-  if [ -z "$gw" ]; then
-    log_error "Cannot find default gateway for $TARGET_INTERFACE"
-    exit 1
+  if [ -n "$gw" ]; then
+    ip route replace default via "$gw" dev "$TARGET_INTERFACE" table "$ROUTE_TABLE" 2>/dev/null || true
+    log "Route table $ROUTE_TABLE: default via $gw dev $TARGET_INTERFACE"
+  else
+    # Direct link route (no gateway — e.g. LTE, scope link)
+    ip route replace default dev "$TARGET_INTERFACE" table "$ROUTE_TABLE" 2>/dev/null || true
+    log "Route table $ROUTE_TABLE: default dev $TARGET_INTERFACE (scope link)"
   fi
 
-  ip route replace default via "$gw" dev "$TARGET_INTERFACE" table "$ROUTE_TABLE" 2>/dev/null || true
-  log "Route table $ROUTE_TABLE: default via $gw dev $TARGET_INTERFACE"
+  local fwmark="${FWMARK:-0x20000000}"
+  local fwmask="${FWMARK_MASK:-0x20000000}"
 
-  local fwmark="0x${ROUTE_TABLE}"
+  # Remove old rules (legacy full-mark and bitwise variants)
+  ip rule del fwmark "0x${ROUTE_TABLE}" table "$ROUTE_TABLE" 2>/dev/null || true
+  ip rule del fwmark "$fwmark/$fwmask" table "$ROUTE_TABLE" 2>/dev/null || true
 
-  # Remove old rule if exists, then add new
-  ip rule del fwmark "$fwmark" table "$ROUTE_TABLE" 2>/dev/null || true
-  ip rule add fwmark "$fwmark" table "$ROUTE_TABLE" priority "$RULE_PRIORITY"
-  log "IP rule: fwmark $fwmark → table $ROUTE_TABLE (priority $RULE_PRIORITY)"
+  # Add rule with bitwise mask: match ONLY our bit, ignore Keenetic marks
+  ip rule add fwmark "$fwmark/$fwmask" table "$ROUTE_TABLE" priority "$RULE_PRIORITY"
+  log "IP rule: fwmark $fwmark/$fwmask → table $ROUTE_TABLE (priority $RULE_PRIORITY)"
 
-  # iptables: mark packets destined for ipset subnets
-  iptables -t mangle -D PREROUTING -m set --match-set "$IPSET_NAME" dst -j MARK --set-mark "$fwmark" 2>/dev/null || true
-  iptables -t mangle -A PREROUTING -m set --match-set "$IPSET_NAME" dst -j MARK --set-mark "$fwmark"
-  log "iptables mangle: mark $IPSET_NAME dst → $fwmark"
+  # iptables mangle: set our bit via xmark (preserves Keenetic's bits 0-27).
+  # --set-xmark value/mask: newmark = (oldmark & ~mask) | (value & mask)
+  iptables -t mangle -D PREROUTING -m set --match-set "$IPSET_NAME" dst -j MARK --set-mark "0x${ROUTE_TABLE}" 2>/dev/null || true
+  iptables -t mangle -D PREROUTING -m set --match-set "$IPSET_NAME" dst -j MARK --set-xmark "$fwmark/$fwmask" 2>/dev/null || true
+  iptables -t mangle -A PREROUTING -m set --match-set "$IPSET_NAME" dst -j MARK --set-xmark "$fwmark/$fwmask"
+  log "iptables mangle: xmark $IPSET_NAME dst → $fwmark/$fwmask (bit 29)"
 }
 
 # --- main ---

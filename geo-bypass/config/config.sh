@@ -26,10 +26,16 @@ ROUTE_TABLE="1000"
 # IP rule priority (lower = higher priority)
 RULE_PRIORITY="100"
 
-# URL to fetch GEO IP subnets (RIPE data)
+# Firewall mark for geo-bypass traffic (must NOT overlap with Keenetic NDM marks).
+# Keenetic uses bits 0-27 (0x0FFFFAxx range). Bits 28-31 are free.
+# Bit 29 (0x20000000) is safe and confirmed working.
+FWMARK="0x20000000"
+FWMARK_MASK="0x20000000"
+
+# URL to fetch GEO IP subnets (plain CIDR list)
 # RU ip4 example
-# Alternative: https://stat.ripe.net/data/country-resource-list/data.json?resource=RU
-SUBNET_URL="https://raw.githubusercontent.com/herrbischoff/country-ip-blocks/master/ipv4/ru.cidr"
+# Alternative: https://stat.ripe.net/data/country-resource-list/data.json?resource=RU (requires ripe-json loader + jq)
+SUBNET_URL="https://ipbl.herrbischoff.com/geoip/ru.netset"
 
 # Loader script name in loaders/ directory (without .sh)
 # Available: cidr-plain (default), ripe-json (requires jq)
@@ -44,11 +50,16 @@ LOG_TAG="geo-bypass"
 # Max age of cached subnet list in seconds (7 days)
 MAX_CACHE_AGE=604800
 
-# Number of download retries on failure
-DOWNLOAD_RETRIES=3
+# Number of download retries per interface on failure
+DOWNLOAD_RETRIES=2
 
 # Delay between retries in seconds
-DOWNLOAD_RETRY_DELAY=5
+DOWNLOAD_RETRY_DELAY=3
+
+# Outgoing interfaces to try for downloads (in order of preference).
+# "default" = system default route (no --interface).
+# Tries each interface with DOWNLOAD_RETRIES attempts before moving to next.
+DOWNLOAD_INTERFACES="default nwg* ovpn_br*"
 
 # Optional domains list file (resolved via dig → added to ipset)
 # Leave empty or comment out to skip domain resolution

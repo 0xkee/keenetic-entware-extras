@@ -10,10 +10,14 @@ keenetic-entware/
 ├── lib/                  # переиспользуемые функции
 │   └── common.sh
 ├── config/               # шаблоны конфигов
-├── geo-bypass/      # подпроект: маршрутизация .ru мимо VPN
+├── geo-bypass/           # подпроект: маршрутизация .ru мимо VPN
 │   ├── scripts/
 │   ├── config/
 │   ├── lists/
+│   └── README.md
+├── smartdns/             # подпроект: DNS-сервер с группами ru/default
+│   ├── scripts/
+│   ├── config/
 │   └── README.md
 ├── .project/             # targets для Roo
 ├── .roo/                 # конфигурация Roo
@@ -26,11 +30,16 @@ keenetic-entware/
 
 Прямая маршрутизация .ru доменов (и других российских ресурсов) в обход VPN.
 
+### [smartdns](smartdns/README.md)
+
+DNS-сервер с разделением запросов по доменным группам (`.ru` → Yandex/AdGuard, остальное → Cloudflare/Google).
+
 ## Требования
 
 - Keenetic с установленным Entware
 - `bash` (`opkg install bash`)
 - `curl` (`opkg install curl`)
+- `smartdns` (`opkg install smartdns`)
 
 ## Деплой на роутер
 

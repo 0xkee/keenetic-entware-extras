@@ -1,6 +1,7 @@
-#!/opt/bin/bash
+#!/opt/bin/sh
 # Install geo-bypass: cron job + init script.
-set -euo pipefail
+# shellcheck disable=SC1091  # sourced files resolved at runtime on router
+set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/common.sh"
@@ -8,6 +9,24 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INSTALL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 log "Installing geo-bypass from: $INSTALL_DIR"
+
+# --- Install Entware dependencies ---
+log "Checking required dependencies..."
+for pkg in ipset curl; do
+  if ! command -v "$pkg" >/dev/null 2>&1; then
+    log "Installing $pkg..."
+    opkg install "$pkg"
+  else
+    log "$pkg: already installed"
+  fi
+done
+
+# Optional: dig for domain DNS resolution (domains.txt → ipset)
+if ! command -v dig >/dev/null 2>&1; then
+  log "Optional: dig not found. Install for domain resolution: opkg install bind-dig"
+else
+  log "dig: already installed (domain resolution available)"
+fi
 
 # --- Create init script ---
 INIT_SCRIPT="/opt/etc/init.d/S99geo-bypass"
@@ -41,11 +60,21 @@ INITEOF
 chmod +x "$INIT_SCRIPT"
 log "Created init script: $INIT_SCRIPT"
 
+# --- Install NDM hook (interface up/down) ---
+NDM_HOOK_DIR="/opt/etc/ndm/ifstatechanged.d"
+NDM_HOOK_LINK="$NDM_HOOK_DIR/geo-bypass-hook"
+HOOK_SCRIPT="$INSTALL_DIR/scripts/ndm-hook.sh"
+
+mkdir -p "$NDM_HOOK_DIR"
+chmod +x "$HOOK_SCRIPT"
+ln -sf "$HOOK_SCRIPT" "$NDM_HOOK_LINK"
+log "Installed NDM hook: $NDM_HOOK_LINK → $HOOK_SCRIPT"
+
 # --- Add cron job (update subnets daily at 4:00) ---
 CRON_LINE="0 4 * * * $INSTALL_DIR/scripts/update-domains.sh --force && $INSTALL_DIR/scripts/apply-routes.sh"
 CRON_FILE="/opt/etc/crontab"
 
-if [[ -f "$CRON_FILE" ]] && grep -q "geo-bypass" "$CRON_FILE"; then
+if [ -f "$CRON_FILE" ] && grep -q "geo-bypass" "$CRON_FILE"; then
   log "Cron job already exists, skipping"
 else
   echo "# geo-bypass: update subnets daily" >> "$CRON_FILE"

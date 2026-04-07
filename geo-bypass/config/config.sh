@@ -24,7 +24,7 @@ IPSET_NAME="geo-bypass"
 ROUTE_TABLE="1000"
 
 # IP rule priority (lower = higher priority)
-RULE_PRIORITY="100"
+RULE_PRIORITY="50"
 
 # LAN interfaces for ip rule iif (space-separated).
 # Each interface gets its own ip rule → custom route table.

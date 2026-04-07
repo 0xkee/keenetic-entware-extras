@@ -1,0 +1,8 @@
+# Optional domain list for DNS resolution.
+# IPs resolved from these domains will be added to ipset.
+# One domain per line. Lines starting with # are ignored.
+# Requires: dig (bind-dig) — install via: opkg install bind-dig
+# Example:
+# gosuslugi.ru
+# nalog.ru
+# mos.ru

@@ -15,7 +15,7 @@ is_cache_fresh() {
   local file="$1" max_age="$2"
   [ -f "$file" ] || return 1
   local file_age
-  file_age=$(( $(date +%s) - $(stat -c %Y "$file") ))
+  file_age=$(( $(date +%s) - $(file_mtime "$file") ))
   [ "$file_age" -le "$max_age" ]
 }
 

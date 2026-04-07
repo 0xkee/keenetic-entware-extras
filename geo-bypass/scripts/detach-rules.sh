@@ -11,13 +11,21 @@ _CONFIG_DIR="$SCRIPT_DIR/../config"
 
 # Remove ip rule, flush route table, and delete iptables mangle mark
 main() {
-  local fwmark="0x${ROUTE_TABLE}"
+  local fwmark="${FWMARK:-0x20000000}"
+  local fwmask="${FWMARK_MASK:-0x20000000}"
 
-  ip rule del fwmark "$fwmark" table "$ROUTE_TABLE" 2>/dev/null || true
+  # Remove ip rules (legacy full-mark and bitwise variants)
+  ip rule del fwmark "0x${ROUTE_TABLE}" table "$ROUTE_TABLE" 2>/dev/null || true
+  ip rule del fwmark "$fwmark/$fwmask" table "$ROUTE_TABLE" 2>/dev/null || true
   ip route flush table "$ROUTE_TABLE" 2>/dev/null || true
+
+  # Remove mangle marks (legacy and bitwise)
   iptables -t mangle -D PREROUTING \
     -m set --match-set "$IPSET_NAME" dst \
-    -j MARK --set-mark "$fwmark" 2>/dev/null || true
+    -j MARK --set-mark "0x${ROUTE_TABLE}" 2>/dev/null || true
+  iptables -t mangle -D PREROUTING \
+    -m set --match-set "$IPSET_NAME" dst \
+    -j MARK --set-xmark "$fwmark/$fwmask" 2>/dev/null || true
 
   log "Rules detached"
 }

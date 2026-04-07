@@ -36,3 +36,10 @@ require_cmd() {
 is_entware() {
   [ -d /opt/etc ]
 }
+
+# Get file modification time as epoch seconds (BusyBox compatible).
+# BusyBox stat does not support GNU -c format.
+# Args: $1 - file path
+file_mtime() {
+  stat -t "$1" | awk '{print $13}'
+}

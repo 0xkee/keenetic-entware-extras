@@ -1,0 +1,73 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Shellcheck current file",
+      "type": "shell",
+      "command": "shellcheck",
+      "args": [
+        "-x",
+        "-s", "bash",
+        "${relativeFile}"
+      ],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": [
+        "$shellcheck"
+      ]
+    },
+    {
+      "label": "Shellcheck all scripts",
+      "type": "shell",
+      "command": "find . -name '*.sh' -exec shellcheck -x -s bash {} +",
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": [
+        "$shellcheck"
+      ]
+    },
+    {
+      "label": "Run current script",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "${relativeFile}"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Deploy to router",
+      "type": "shell",
+      "command": "scp",
+      "args": [
+        "-r",
+        "scripts/",
+        "config/",
+        "root@192.168.1.1:/opt/keenetic-entware/geo-bypass/"
+      ],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "folders": [
+    {
+      "path": ".",
+      "name": "keenetic-entware"
+    },
+    {
+      "path": "geo-bypass",
+      "name": "geo-bypass"
+    }
+  ],
+  "settings": {
+    "files.associations": {
+      "*.sh": "shellscript"
+    }
+  }
+}

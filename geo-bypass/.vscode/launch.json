@@ -1,0 +1,32 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "bashdb",
+      "request": "launch",
+      "name": "Debug Current Script",
+      "program": "${file}",
+      "cwd": "${workspaceFolder}",
+      "args": [],
+      "terminalKind": "integrated"
+    },
+    {
+      "type": "bashdb",
+      "request": "launch",
+      "name": "Run update-domains.sh",
+      "program": "${workspaceFolder}/scripts/update-domains.sh",
+      "cwd": "${workspaceFolder}",
+      "args": ["--force"],
+      "terminalKind": "integrated"
+    },
+    {
+      "type": "bashdb",
+      "request": "launch",
+      "name": "Run apply-routes.sh",
+      "program": "${workspaceFolder}/scripts/apply-routes.sh",
+      "cwd": "${workspaceFolder}",
+      "args": [],
+      "terminalKind": "integrated"
+    }
+  ]
+}

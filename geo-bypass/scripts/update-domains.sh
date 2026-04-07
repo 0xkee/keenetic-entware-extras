@@ -90,7 +90,11 @@ main() {
   fi
 
   if [ "$force" = "--force" ] || ! is_cache_fresh "$DOMAINS_CACHE_FILE" "$update_interval"; then
+    local t_start t_end
+    t_start=$(date +%s)
     resolve_domains
+    t_end=$(date +%s)
+    log "Domain update completed ($((t_end - t_start))s)"
   else
     log "Domain cache is fresh, skipping update"
   fi

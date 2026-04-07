@@ -77,7 +77,11 @@ main() {
   local force="${1:-}"
 
   if [ "$force" = "--force" ] || ! is_cache_fresh "$SUBNET_LIST_FILE" "$MAX_CACHE_AGE"; then
+    local t_start t_end
+    t_start=$(date +%s)
     download_subnets
+    t_end=$(date +%s)
+    log "Subnet update completed ($((t_end - t_start))s)"
   fi
 }
 

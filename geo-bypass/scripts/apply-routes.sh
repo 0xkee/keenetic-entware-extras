@@ -8,7 +8,9 @@ set -eu
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/common.sh"
 
+t_start=$(date +%s)
 log "Applying geo-bypass routes..."
 "$SCRIPT_DIR/load-ipset.sh"
 "$SCRIPT_DIR/attach-rules.sh"
-log "geo-bypass routes applied successfully"
+t_end=$(date +%s)
+log "geo-bypass routes applied successfully (total: $((t_end - t_start))s)"

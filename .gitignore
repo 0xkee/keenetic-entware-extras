@@ -1,0 +1,20 @@
+# Backup files
+*.bak
+*~
+
+# Editor files
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Secrets / credentials
+*.key
+*.pem
+secrets/
+
+# Generated / temp
+*.tmp
+*.log

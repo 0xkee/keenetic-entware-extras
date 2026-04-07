@@ -1,0 +1,20 @@
+{
+  "spellright.language": [
+    "en-US-10-1."
+  ],
+  "spellright.documentTypes": [
+    "markdown",
+    "latex",
+    "plaintext"
+  ],
+  "files.associations": {
+    "*.sh": "shellscript"
+  },
+  "shellcheck.enable": true,
+  "shellcheck.executablePath": "shellcheck",
+  "shellcheck.run": "onSave",
+  "shellcheck.customArgs": [
+    "-x",
+    "-s", "bash"
+  ]
+}

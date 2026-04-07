@@ -10,29 +10,62 @@
 | `vpn` | GEO-трафик направляется в VPN-туннель | `VPN_INTERFACE` |
 | `auto` | Автоопределение ISP-интерфейса, GEO-трафик через ISP | `ip route show default` |
 
-## Принцип работы
+## Архитектура
 
-1. `update-domains.sh` — загружает актуальные GEO IP-подсети
-2. `apply-routes.sh` — определяет целевой интерфейс по `ROUTE_MODE`, загружает подсети в `ipset`, настраивает `ip rule` + `iptables mangle`
+### Принцип: async-данные + мгновенные правила
+
+Загрузка данных (CIDR-подсети, DNS-резолвинг доменов) выполняется **асинхронно** через cron. Подключение маршрутных правил — **мгновенно** из кэша (<1 сек). Это разделение обеспечивает быстрый старт и надёжную работу при перезагрузках и переключении интерфейсов.
+
+### Boot flow (S99geo-bypass start)
+
+```
+1. load-ipset.sh     — загрузить кэш-файлы (subnets + domains) в ipset  ~мгновенно
+2. attach-rules.sh   — подключить ip rule + iptables mangle             ~мгновенно
+3. update-subnets.sh — фоново: проверить свежесть, скачать если stale   (background)
+4. update-domains.sh — фоново: проверить свежесть, обновить если stale  (background)
+```
+
+### Cron flow (каждые 15 мин)
+
+```
+update-subnets.sh → проверить возраст кэша → если stale → loader → файл → load-ipset.sh
+update-domains.sh → проверить возраст кэша → если stale → dig → файл → ipset add
+```
+
+Скрипты сами проверяют свежесть кэша (`MAX_CACHE_AGE`, `DOMAINS_UPDATE_INTERVAL`) — cron вызывает их часто, но реальная загрузка происходит только при необходимости.
+
+### NDM hook flow (интерфейс up/down)
+
+```
+interface up   → attach-rules.sh (ip rule + iptables)    <1 сек
+interface down → detach-rules.sh (cleanup правил)         <1 сек
+                 + failover: если есть другой default route → re-attach
+```
 
 ## Файлы
 
 | Файл | Назначение |
 |------|-----------|
-| `scripts/update-domains.sh` | Обновление списка GEO IP-подсетей |
-| `scripts/apply-routes.sh` | Определение интерфейса + применение маршрутов |
-| `scripts/ndm-hook.sh` | NDM hook — реакция на interface up/down |
-| `scripts/install.sh` | Установка в cron, автозапуск и NDM hook |
-| `config/config.sh` | Настройки (режим, интерфейсы, ipset и т.д.) |
-| `lists/` | Загруженные списки IP (генерируются автоматически) |
-| `lists/domains.txt` | Опциональный список доменов для DNS-резолвинга |
-| `lists/domains-resolved.txt` | Кэш resolved IP доменов (авто, не редактировать) |
+| `scripts/apply-routes.sh` | Оркестратор: load-ipset + attach-rules |
+| `scripts/attach-rules.sh` | Подключить ip rule + iptables mangle (<1 сек) |
+| `scripts/detach-rules.sh` | Отключить маршрутные правила |
+| `scripts/load-ipset.sh` | Загрузить кэш-файлы (subnets + domains) в ipset |
+| `scripts/update-subnets.sh` | Скачать CIDR-подсети через loader |
+| `scripts/update-domains.sh` | DNS-резолвинг доменов (dig → ipset + кэш) |
+| `scripts/ndm-hook.sh` | NDM hook: реакция на interface up/down |
+| `scripts/install.sh` | Установка: init-скрипт + cron + NDM hook |
+| `scripts/uninstall.sh` | Удаление: cleanup правил + файлов |
+| `scripts/status.sh` | Диагностика: режим, ipset, правила, кэши |
+| `loaders/cidr-plain.sh` | Загрузчик: plain CIDR (одна подсеть на строку) |
+| `loaders/ripe-json.sh` | Загрузчик: RIPE JSON API (требует jq) |
+| `config/config.sh` | Конфигурация (режим, интерфейсы, URL, интервалы) |
+| `lists/domains.txt` | Пользовательский список доменов |
 
 ## Настройка
 
 Отредактируйте `config/config.sh`:
 
-```bash
+```sh
 # Режим маршрутизации: bypass | vpn | auto
 ROUTE_MODE="auto"
 
@@ -53,26 +86,73 @@ ROUTE_TABLE="1000"
 ### Примеры конфигурации
 
 **bypass — GEO-трафик через конкретный ISP-интерфейс:**
-```bash
+```sh
 ROUTE_MODE="bypass"
 ISP_INTERFACE="lte_br0"
 ```
 
 **vpn — GEO-трафик через WireGuard:**
-```bash
+```sh
 ROUTE_MODE="vpn"
 VPN_INTERFACE="nwg0"
 ```
 
 **auto — автоопределение ISP (рекомендуется):**
-```bash
+```sh
 ROUTE_MODE="auto"
 ISP_INTERFACE=""
 ```
 
-## DNS-резолвинг доменов (опционально!)
+### Параметры кэширования
 
-Помимо CIDR-подсетей, можно добавить отдельные домены — их IP будут отрезолвлены через `dig @localhost` и добавлены в ipset.
+```sh
+# Максимальный возраст кэша подсетей (7 дней, в секундах)
+MAX_CACHE_AGE=604800
+
+# Интервал обновления DNS-резолва доменов (1 час, в секундах)
+# 0 = отключить автоматическое обновление доменов
+DOMAINS_UPDATE_INTERVAL=3600
+```
+
+## Загрузчики (Loaders)
+
+Загрузчики — скрипты в каталоге `loaders/`, которые скачивают CIDR-подсети из внешнего источника и выдают их в stdout (одна подсеть на строку).
+
+### Доступные загрузчики
+
+| Загрузчик | Описание | Зависимости |
+|-----------|----------|-------------|
+| `cidr-plain` | Plain-текст: одна CIDR-подсеть на строку | `curl` |
+| `ripe-json` | RIPE Stat JSON API | `curl`, `jq` |
+
+### Выбор загрузчика
+
+В `config/config.sh`:
+
+```sh
+SUBNET_LOADER="cidr-plain"
+SUBNET_URL="https://raw.githubusercontent.com/herrbischoff/country-ip-blocks/master/ipv4/ru.cidr"
+```
+
+### Как создать свой загрузчик
+
+1. Создайте файл `loaders/my-loader.sh`
+2. Скрипт получает URL через `$1` (первый аргумент)
+3. Скрипт должен выводить в stdout CIDR-подсети (одна на строку)
+4. Укажите имя в конфиге: `SUBNET_LOADER="my-loader"`
+
+Пример минимального загрузчика:
+
+```sh
+#!/opt/bin/sh
+# My custom loader: URL → stdout CIDRs
+set -eu
+curl -sSf "$1" | grep -E '^[0-9]+\.'
+```
+
+## DNS-резолвинг доменов
+
+Отдельный скрипт `update-domains.sh` резолвит домены из `lists/domains.txt` и добавляет IP в ipset.
 
 ### Настройка
 
@@ -86,35 +166,37 @@ mos.ru
 
 2. Убедитесь что в `config/config.sh` указан путь к файлу:
 
-```bash
-DOMAINS_LIST_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lists/domains.txt"
+```sh
+DOMAINS_LIST_FILE="${_CONFIG_DIR:-.}/../lists/domains.txt"
 ```
 
-3. Настройте время жизни кэша (по умолчанию 1 час):
+3. Настройте интервал обновления (по умолчанию 1 час):
 
-```bash
-DOMAINS_CACHE_AGE=3600
+```sh
+DOMAINS_UPDATE_INTERVAL=3600
 ```
 
 ### Как работает
 
-- `apply-routes.sh` после загрузки CIDR вызывает `resolve_domains()`
+- `update-domains.sh` вызывается по cron каждые 15 минут
+- Скрипт проверяет возраст кэша (`DOMAINS_CACHE_FILE`) — обновляет только если stale
 - Каждый домен резолвится через `dig +short <domain> @localhost`
 - Приватные IP (10.x, 192.168.x, 172.16-31.x, 127.x) отфильтровываются
-- Resolved IP добавляются в существующий ipset поштучно (`ipset add -exist`)
-- Результат кэшируется в `lists/domains-resolved.txt` на `DOMAINS_CACHE_AGE` секунд
+- Resolved IP добавляются в ipset (`ipset add -exist`)
+- Результат кэшируется в `lists/domains-resolved.txt`
+- Флаг `--force` принудительно обновляет кэш
 
 ### Требования
 
-- `dig` (пакет `bind-dig`) — если не установлен, функция тихо пропускается
+- `dig` (пакет `bind-dig`) — если не установлен, скрипт завершится с ошибкой
 - [SmartDNS](../smartdns/) на localhost — для DNS-резолвинга
 
 ### Отключение
 
 Чтобы отключить резолвинг доменов, в `config/config.sh`:
 
-```bash
-DOMAINS_LIST_FILE=""
+```sh
+DOMAINS_UPDATE_INTERVAL=0
 ```
 
 ## NDM Hook (interface up/down)
@@ -125,8 +207,10 @@ geo-bypass автоматически реагирует на изменение
 
 | Событие | Действие |
 |---------|----------|
-| `yes-up-up` (интерфейс поднялся) | Запускает `apply-routes.sh` в background |
-| `no-down-*` (интерфейс упал) | Удаляет `ip rule` и `iptables mangle` правило; если доступен failover-интерфейс — пере-применяет маршруты |
+| `yes-up-up` (интерфейс поднялся) | `attach-rules.sh` — подключает ip rule + iptables |
+| `no-down-*` (интерфейс упал) | `detach-rules.sh` — отключает правила; если есть failover → re-attach |
+
+Hook вызывает только `attach-rules.sh` / `detach-rules.sh` — мгновенное подключение/отключение правил без загрузки данных.
 
 ### Какой интерфейс слушает
 
@@ -140,14 +224,46 @@ geo-bypass автоматически реагирует на изменение
 
 При переключении аплинков hook автоматически пере-применяет маршруты:
 
-1. **Uplink1 down → Uplink2 up** — cleanup + re-apply через новый интерфейс
-2. **Uplink2 up → Uplink1 down** — после cleanup, если есть failover default route — re-apply
+1. **Uplink1 down → Uplink2 up** — cleanup + re-attach через новый интерфейс
+2. **Uplink2 up → Uplink1 down** — после cleanup, если есть failover default route — re-attach
 
 Hook устанавливается автоматически при запуске `install.sh` как symlink на `scripts/ndm-hook.sh`.
 
-## Установка на роутере
+## Команда status
 
-```bash
+Диагностика текущего состояния geo-bypass:
+
+```sh
+/opt/keenetic-entware/geo-bypass/scripts/status.sh
+```
+
+Или через init-скрипт:
+
+```sh
+/opt/etc/init.d/S99geo-bypass status
+```
+
+Пример вывода:
+
+```
+geo-bypass status:
+  Mode:        auto
+  Interface:   ppp0 (auto-detected)
+  Ipset:       geo-bypass (14523 entries) ✓
+  IP rule:     fwmark 0x1000 → table 1000 ✓
+  Iptables:    PREROUTING mangle → mark 0x1000 ✓
+  Subnets:     cache 2d 5h old (max 7d) ✓
+  Domains:     12 in cache, 45m old (max 1h) ✓
+  Loader:      cidr-plain
+```
+
+**Exit code:** `0` — всё в порядке, `1` — есть проблемы (✗ в выводе).
+
+## Установка / Удаление
+
+### Установка
+
+```sh
 # 1. Скопировать на роутер
 scp -r geo-bypass/ root@192.168.1.1:/opt/keenetic-entware/geo-bypass/
 
@@ -155,12 +271,36 @@ scp -r geo-bypass/ root@192.168.1.1:/opt/keenetic-entware/geo-bypass/
 ssh root@192.168.1.1 '/opt/keenetic-entware/geo-bypass/scripts/install.sh'
 ```
 
-## Зависимости (Entware)
+`install.sh` автоматически:
+- Установит зависимости (`ipset`, `curl`)
+- Создаст init-скрипт `/opt/etc/init.d/S99geo-bypass`
+- Установит NDM hook
+- Настроит cron-задания (обновление подсетей + доменов каждые 15 мин)
 
-```bash
-opkg install ipset curl
-# Опционально, для DNS-резолвинга доменов:
-opkg install bind-dig
+### Удаление
+
+```sh
+ssh root@192.168.1.1 '/opt/keenetic-entware/geo-bypass/scripts/uninstall.sh'
 ```
 
-- [SmartDNS](../smartdns/) — DNS-сервер для резолвинга доменов
+`uninstall.sh` удалит:
+- Init-скрипт
+- NDM hook symlink
+- Cron-задания
+- Маршрутные правила (ip rule, iptables, ipset)
+- Кэш-файлы подсетей
+
+## Зависимости (Entware)
+
+```sh
+# Обязательные
+opkg install ipset curl
+
+# Опционально — для DNS-резолвинга доменов:
+opkg install bind-dig
+
+# Опционально — для загрузчика ripe-json:
+opkg install jq
+```
+
+- [SmartDNS](../smartdns/) — DNS-сервер для резолвинга доменов (если используется `lists/domains.txt`)

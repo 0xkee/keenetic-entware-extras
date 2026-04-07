@@ -111,13 +111,19 @@ install_cron_jobs() {
     log "Cleaned old cron entries"
   fi
 
-  # Add new cron jobs
+  # Add new cron jobs (system crontab format: schedule + user + command)
   {
     echo "# geo-bypass: periodic updates (cache freshness checked internally)"
-    echo "*/15 * * * * $INSTALL_DIR/scripts/update-subnets.sh"
-    echo "*/15 * * * * $INSTALL_DIR/scripts/update-domains.sh"
+    echo "*/15 * * * * root $INSTALL_DIR/scripts/update-subnets.sh"
+    echo "*/15 * * * * root $INSTALL_DIR/scripts/update-domains.sh"
   } >> "$cron_file"
   log "Added cron jobs to $cron_file"
+
+  # Restart crond to pick up new entries
+  if [ -x /opt/etc/init.d/S10cron ]; then
+    /opt/etc/init.d/S10cron restart
+    log "Restarted crond"
+  fi
 }
 
 # --- Main ---

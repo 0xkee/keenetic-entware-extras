@@ -75,9 +75,13 @@ load_subnets() {
   local count
   count=$(($(wc -l < "$_TMP_RESTORE_FILE") - 1))
 
-  # Batch load into tmp set
+  # Batch load into tmp set (timed — this is the heavy operation)
+  local t_start t_end t_elapsed
+  t_start=$(date +%s)
   ipset restore < "$_TMP_RESTORE_FILE"
-  log "Loaded $count subnets into tmp ipset ${tmp_set}"
+  t_end=$(date +%s)
+  t_elapsed=$((t_end - t_start))
+  log "Loaded $count subnets into tmp ipset ${tmp_set} (${t_elapsed}s)"
 
   # Atomic swap: zero-downtime replacement
   ipset swap "$tmp_set" "$IPSET_NAME"

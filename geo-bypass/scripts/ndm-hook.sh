@@ -40,32 +40,26 @@ if [ -n "$TARGET_IFACE" ]; then
   [ "${system_name:-}" != "$TARGET_IFACE" ] && exit 0
 fi
 
-APPLY_SCRIPT="$HOOK_DIR/apply-routes.sh"
-
 case "${connected:-}-${link:-}-${up:-}" in
   yes-up-up)
     # In auto mode (empty TARGET_IFACE), only react if this interface has default route
     if [ -z "$TARGET_IFACE" ]; then
       ip route show default | grep -q "dev ${system_name:-}" || exit 0
     fi
-    logger -t "$LOG_TAG" "Interface ${system_name:-} up, applying routes"
-    "$APPLY_SCRIPT" &
+    logger -t "$LOG_TAG" "Interface ${system_name:-} up, attaching rules"
+    "$HOOK_DIR/attach-rules.sh" &
     ;;
   no-down-*)
     # In auto mode (empty TARGET_IFACE), only react if our route table uses this interface
     if [ -z "$TARGET_IFACE" ]; then
       ip route show table "$ROUTE_TABLE" 2>/dev/null | grep -q "dev ${system_name:-}" || exit 0
     fi
-    logger -t "$LOG_TAG" "Interface ${system_name:-} down, cleaning rules"
-    fwmark="0x${ROUTE_TABLE}"
-    ip rule del fwmark "$fwmark" table "$ROUTE_TABLE" 2>/dev/null || true
-    iptables -t mangle -D PREROUTING \
-      -m set --match-set "$IPSET_NAME" dst \
-      -j MARK --set-mark "$fwmark" 2>/dev/null || true
-    # Failover: if another default route exists, re-apply via new interface
+    logger -t "$LOG_TAG" "Interface ${system_name:-} down, detaching rules"
+    "$HOOK_DIR/detach-rules.sh"
+    # Failover: if another default route exists, re-attach via new interface
     if ip route show default | grep -q "dev"; then
-      logger -t "$LOG_TAG" "Failover: re-applying routes via available interface"
-      "$APPLY_SCRIPT" &
+      logger -t "$LOG_TAG" "Failover: re-attaching rules via available interface"
+      "$HOOK_DIR/attach-rules.sh" &
     fi
     ;;
 esac

@@ -26,6 +26,19 @@ Inherits all rules from root [`.project/target-code.md`](../../.project/target-c
 - `ip rule add fwmark <mark> table 1000 priority 100` — routes marked packets
 - `ip route replace default via <gw> dev <IFACE> table 1000` — single default route in custom table
 
+### Loader Pipe Convention
+- Loaders live in `loaders/` — each is a standalone script receiving URL via `$1`
+- Loader outputs CIDRs to stdout (one per line), caller pipes to cache file
+- `update-subnets.sh` calls: `loaders/${SUBNET_LOADER}.sh "$SUBNET_URL" > cache`
+- Adding a new source = new loader file + config change (no code modifications)
+
+### Async Cron Pattern
+- Data scripts (`update-subnets.sh`, `update-domains.sh`) check cache freshness internally
+- Cron calls them frequently (every 15 min), but actual download happens only when stale
+- `MAX_CACHE_AGE` (subnets, default 7d), `DOMAINS_UPDATE_INTERVAL` (domains, default 1h)
+- `--force` flag bypasses freshness check for manual/emergency updates
+- Boot: load from cache first (instant), then background-update if stale
+
 ### Dependencies (Entware)
 - `ipset` — `opkg install ipset`
 - `iptables` — pre-installed on Keenetic (kernel module)

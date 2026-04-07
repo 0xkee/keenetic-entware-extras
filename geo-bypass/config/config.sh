@@ -31,14 +31,18 @@ RULE_PRIORITY="100"
 # Alternative: https://stat.ripe.net/data/country-resource-list/data.json?resource=RU
 SUBNET_URL="https://raw.githubusercontent.com/herrbischoff/country-ip-blocks/master/ipv4/ru.cidr"
 
+# Loader script name in loaders/ directory (without .sh)
+# Available: cidr-plain (default), ripe-json (requires jq)
+SUBNET_LOADER="cidr-plain"
+
 # Local cached subnet list
 SUBNET_LIST_FILE="${_CONFIG_DIR:-.}/../lists/ru-subnets.txt"
 
 # Log tag
 LOG_TAG="geo-bypass"
 
-# Max age of cached list in seconds (24 hours)
-MAX_CACHE_AGE=86400
+# Max age of cached subnet list in seconds (7 days)
+MAX_CACHE_AGE=604800
 
 # Number of download retries on failure
 DOWNLOAD_RETRIES=3
@@ -53,5 +57,6 @@ DOMAINS_LIST_FILE="${_CONFIG_DIR:-.}/../lists/domains.txt"
 # Cache file for resolved domain IPs (auto-generated, do not edit)
 DOMAINS_CACHE_FILE="${_CONFIG_DIR:-.}/../lists/domains-resolved.txt"
 
-# Max age of domain IP cache in seconds (1 hour)
-DOMAINS_CACHE_AGE=3600
+# Domain resolution update interval in seconds (1 hour)
+# 0 = disable automatic domain updates
+DOMAINS_UPDATE_INTERVAL=3600

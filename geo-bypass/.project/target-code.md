@@ -22,9 +22,9 @@ Inherits all rules from root [`.project/target-code.md`](../../.project/target-c
 
 ### Routing Specifics
 - `ipset` hash:net — stores GEO CIDRs, loaded via `ipset restore` + atomic `swap`
-- `iptables -t mangle PREROUTING` — marks packets by dst match in ipset (`--set-mark`)
-- `ip rule add fwmark <mark> table 1000 priority 100` — routes marked packets
-- `ip route replace default via <gw> dev <IFACE> table 1000` — single default route in custom table
+- `ip rule add iif br0 table 1000 priority 100` — LAN traffic uses custom route table
+- Per-subnet routes in table 1000 via `ip-full -batch` (~13K routes in ~1s)
+- Fallback: BusyBox `ip route add` loop if `ip-full` not installed
 
 ### Loader Pipe Convention
 - Loaders live in `loaders/` — each is a standalone script receiving URL via `$1`
@@ -41,6 +41,6 @@ Inherits all rules from root [`.project/target-code.md`](../../.project/target-c
 
 ### Dependencies (Entware)
 - `ipset` — `opkg install ipset`
-- `iptables` — pre-installed on Keenetic (kernel module)
+- `ip-full` — `opkg install ip-full` (for `-batch` bulk route loading)
 - `curl` — `opkg install curl`
 - `bind-dig` (optional) — `opkg install bind-dig` (for domain DNS resolution)

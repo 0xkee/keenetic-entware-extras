@@ -26,29 +26,22 @@ format_age() {
 
 # Detect ISP interface from default route
 detect_isp_interface() {
-  ip route show default | sed -n 's/.*dev \([^ ]*\).*/\1/p' | head -1
+  ip route show default | sed -n 's/.*dev \([^ ]*\).*/\1/p' | grep -v '^br' | head -1
 }
 
-# Show routing mode and resolved interface
+# Show routing mode and active interface(s) from route table
 show_mode() {
-  local iface="" src=""
-  case "$ROUTE_MODE" in
-    bypass)
-      if [ -n "$ISP_INTERFACE" ]; then iface="$ISP_INTERFACE"; src="config"
-      else iface="$(detect_isp_interface)"; src="auto-detected"; fi
-      ;;
-    vpn)
-      iface="$VPN_INTERFACE"; src="config"
-      ;;
-    auto)
-      iface="$(detect_isp_interface)"; src="auto-detected"
-      ;;
-  esac
   echo "  Mode:        $ROUTE_MODE"
-  if [ -n "$iface" ]; then
-    echo "  Interface:   $iface ($src)"
+
+  # Show active interface from real routes in table (ground truth)
+  local active_ifaces
+  active_ifaces=$(ip route show table "$ROUTE_TABLE" 2>/dev/null \
+    | sed -n 's/.*dev \([^ ]*\).*/\1/p' | sort -u | tr '\n' ' ' | sed 's/ $//')
+
+  if [ -n "$active_ifaces" ]; then
+    echo "  Interface:   $active_ifaces (active in table $ROUTE_TABLE)"
   else
-    echo "  Interface:   ✗ (not detected)"; STATUS_OK=1
+    echo "  Interface:   — detached"
   fi
 }
 
@@ -71,23 +64,27 @@ show_ipset() {
   fi
 }
 
-# Show ip rule fwmark status
+# Show ip rule iif status for each LAN interface
 show_ip_rule() {
-  local fwmark="0x${ROUTE_TABLE}"
-  if ip rule show | grep -q "fwmark $fwmark"; then
-    echo "  IP rule:     fwmark $fwmark → table $ROUTE_TABLE ✓"
-  else
-    echo "  IP rule:     fwmark $fwmark → table $ROUTE_TABLE ✗"; STATUS_OK=1
-  fi
+  local iface rules_output
+  rules_output=$(ip rule show)
+  for iface in $LAN_INTERFACES; do
+    if echo "$rules_output" | grep -qE "iif $iface.*lookup $ROUTE_TABLE"; then
+      echo "  IP rule:     iif $iface → table $ROUTE_TABLE ✓"
+    else
+      echo "  IP rule:     iif $iface → table $ROUTE_TABLE ✗"; STATUS_OK=1
+    fi
+  done
 }
 
-# Show iptables mangle PREROUTING status
-show_iptables() {
-  local fwmark="0x${ROUTE_TABLE}"
-  if iptables -t mangle -L PREROUTING -n 2>/dev/null | grep -q "$IPSET_NAME"; then
-    echo "  Iptables:    PREROUTING mangle → mark $fwmark ✓"
+# Show route table entry count
+show_routes() {
+  local count
+  count=$(ip route show table "$ROUTE_TABLE" 2>/dev/null | wc -l)
+  if [ "$count" -gt 0 ]; then
+    echo "  Routes:      $count in table $ROUTE_TABLE ✓"
   else
-    echo "  Iptables:    PREROUTING mangle → mark $fwmark ✗"; STATUS_OK=1
+    echo "  Routes:      0 in table $ROUTE_TABLE ✗"; STATUS_OK=1
   fi
 }
 
@@ -133,7 +130,7 @@ echo "geo-bypass status:"
 show_mode
 show_ipset
 show_ip_rule
-show_iptables
+show_routes
 show_subnets
 show_domains
 echo "  Loader:      $SUBNET_LOADER"

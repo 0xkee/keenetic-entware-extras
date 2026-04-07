@@ -18,12 +18,12 @@ log "Installing geo-bypass from: $INSTALL_DIR"
 
 install_dependencies() {
   log "Checking required dependencies..."
-  for pkg in ipset curl iptables; do
-    if ! command -v "$pkg" >/dev/null 2>&1; then
+  for pkg in ipset curl ip-full; do
+    if opkg status "$pkg" 2>/dev/null | grep -q "Status:.*installed"; then
+      log "$pkg: already installed"
+    else
       log "Installing $pkg..."
       opkg install "$pkg"
-    else
-      log "$pkg: already installed"
     fi
   done
 

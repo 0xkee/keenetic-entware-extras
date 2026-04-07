@@ -26,11 +26,16 @@ ROUTE_TABLE="1000"
 # IP rule priority (lower = higher priority)
 RULE_PRIORITY="100"
 
-# Firewall mark for geo-bypass traffic (must NOT overlap with Keenetic NDM marks).
-# Keenetic uses bits 0-27 (0x0FFFFAxx range). Bits 28-31 are free.
-# Bit 29 (0x20000000) is safe and confirmed working.
-FWMARK="0x20000000"
-FWMARK_MASK="0x20000000"
+# LAN interfaces for ip rule iif (space-separated).
+# Each interface gets its own ip rule → custom route table.
+# Keenetic bridges: br0 = Home LAN, br1 = Guest network
+LAN_INTERFACES="br0"
+
+# ip-full binary path (Entware package ip-full, supports -batch)
+IP_FULL="/opt/sbin/ip"
+
+# Temporary batch file for ip-full -batch route loading
+BATCH_FILE="/tmp/geo-routes.batch"
 
 # URL to fetch GEO IP subnets (plain CIDR list)
 # RU ip4 example

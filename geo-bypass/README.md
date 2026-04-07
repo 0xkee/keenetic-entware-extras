@@ -14,13 +14,23 @@
 
 ### Принцип: async-данные + мгновенные правила
 
-Загрузка данных (CIDR-подсети, DNS-резолвинг доменов) выполняется **асинхронно** через cron. Подключение маршрутных правил — **мгновенно** из кэша (<1 сек). Это разделение обеспечивает быстрый старт и надёжную работу при перезагрузках и переключении интерфейсов.
+Загрузка данных (CIDR-подсети, DNS-резолвинг доменов) выполняется **асинхронно** через cron. Подключение маршрутных правил — **мгновенно** из кэша (~1 сек для 13K+ маршрутов через `ip-full -batch`). Это разделение обеспечивает быстрый старт и надёжную работу при перезагрузках и переключении интерфейсов.
+
+### Подход: route-based (без iptables)
+
+Вместо `iptables mangle MARK` (который конфликтует с Keenetic NDM per-device routing) используется **route-based** подход:
+
+1. `ip rule add iif br0 table 1000` — весь LAN-трафик попадает в таблицу 1000
+2. Per-subnet маршруты в таблице 1000 — трафик к GEO-подсетям идёт через целевой интерфейс
+3. Трафик, не попавший ни в один маршрут таблицы 1000, проходит по обычному маршруту
+
+Подробнее о несовместимости fwmark: [docs/keenetic-fwmark-analysis.md](../docs/keenetic-fwmark-analysis.md)
 
 ### Boot flow (S99geo-bypass start)
 
 ```
 1. load-ipset.sh     — загрузить кэш-файлы (subnets + domains) в ipset  ~мгновенно
-2. attach-rules.sh   — подключить ip rule + iptables mangle             ~мгновенно
+2. attach-rules.sh   — ip rule iif br0 + загрузить маршруты (ip-full -batch)  ~1 сек
 3. update-subnets.sh — фоново: проверить свежесть, скачать если stale   (background)
 4. update-domains.sh — фоново: проверить свежесть, обновить если stale  (background)
 ```
@@ -37,8 +47,8 @@ update-domains.sh → проверить возраст кэша → если st
 ### NDM hook flow (интерфейс up/down)
 
 ```
-interface up   → attach-rules.sh (ip rule + iptables)    <1 сек
-interface down → detach-rules.sh (cleanup правил)         <1 сек
+interface up   → attach-rules.sh (ip rule iif br0 + routes)  ~1 сек
+interface down → detach-rules.sh (ip rule del + route flush)  <1 сек
                  + failover: если есть другой default route → re-attach
 ```
 
@@ -47,7 +57,7 @@ interface down → detach-rules.sh (cleanup правил)         <1 сек
 | Файл | Назначение |
 |------|-----------|
 | `scripts/apply-routes.sh` | Оркестратор: load-ipset + attach-rules |
-| `scripts/attach-rules.sh` | Подключить ip rule + iptables mangle (<1 сек) |
+| `scripts/attach-rules.sh` | Подключить ip rule iif br0 + per-subnet маршруты (~1 сек) |
 | `scripts/detach-rules.sh` | Отключить маршрутные правила |
 | `scripts/load-ipset.sh` | Загрузить кэш-файлы (subnets + domains) в ipset |
 | `scripts/update-subnets.sh` | Скачать CIDR-подсети через loader |
@@ -81,6 +91,10 @@ IPSET_NAME="geo-bypass"
 
 # Таблица маршрутизации
 ROUTE_TABLE="1000"
+
+# LAN-интерфейсы (через пробел)
+# br0 = домашняя сеть, br1 = гостевая
+LAN_INTERFACES="br0"
 ```
 
 ### Примеры конфигурации
@@ -207,7 +221,7 @@ geo-bypass автоматически реагирует на изменение
 
 | Событие | Действие |
 |---------|----------|
-| `yes-up-up` (интерфейс поднялся) | `attach-rules.sh` — подключает ip rule + iptables |
+| `yes-up-up` (интерфейс поднялся) | `attach-rules.sh` — подключает ip rule + маршруты |
 | `no-down-*` (интерфейс упал) | `detach-rules.sh` — отключает правила; если есть failover → re-attach |
 
 Hook вызывает только `attach-rules.sh` / `detach-rules.sh` — мгновенное подключение/отключение правил без загрузки данных.
@@ -250,8 +264,8 @@ geo-bypass status:
   Mode:        auto
   Interface:   ppp0 (auto-detected)
   Ipset:       geo-bypass (14523 entries) ✓
-  IP rule:     fwmark 0x1000 → table 1000 ✓
-  Iptables:    PREROUTING mangle → mark 0x1000 ✓
+  IP rule:     iif br0 → table 1000 ✓
+  Routes:      13424 in table 1000 ✓
   Subnets:     cache 2d 5h old (max 7d) ✓
   Domains:     12 in cache, 45m old (max 1h) ✓
   Loader:      cidr-plain
@@ -272,7 +286,7 @@ ssh root@192.168.1.1 '/opt/keenetic-entware/geo-bypass/scripts/install.sh'
 ```
 
 `install.sh` автоматически:
-- Установит зависимости (`ipset`, `curl`)
+- Установит зависимости (`ipset`, `curl`, `ip-full`)
 - Создаст init-скрипт `/opt/etc/init.d/S99geo-bypass`
 - Установит NDM hook
 - Настроит cron-задания (обновление подсетей + доменов каждые 15 мин)
@@ -287,14 +301,14 @@ ssh root@192.168.1.1 '/opt/keenetic-entware/geo-bypass/scripts/uninstall.sh'
 - Init-скрипт
 - NDM hook symlink
 - Cron-задания
-- Маршрутные правила (ip rule, iptables, ipset)
+- Маршрутные правила (ip rule, route table, ipset)
 - Кэш-файлы подсетей
 
 ## Зависимости (Entware)
 
 ```sh
 # Обязательные
-opkg install ipset curl
+opkg install ipset curl ip-full
 
 # Опционально — для DNS-резолвинга доменов:
 opkg install bind-dig

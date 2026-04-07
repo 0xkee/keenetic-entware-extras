@@ -1,6 +1,7 @@
 #!/opt/bin/sh
-# Attach GEO routing rules: ip rule + iptables mangle.
-# Requires ipset to be already loaded (see load-ipset.sh).
+# Attach GEO routing rules: ip rule iif br0 + per-subnet routes via ip-batch.
+# Route-based approach — no iptables mangle/fwmark (compatible with Keenetic NDM).
+# Requires subnet list file (see update-subnets.sh).
 # shellcheck disable=SC3043  # 'local' supported by ash/busybox sh
 # shellcheck disable=SC1091  # sourced files resolved at runtime on router
 set -eu
@@ -13,9 +14,10 @@ _CONFIG_DIR="$SCRIPT_DIR/../config"
 # Resolved target interface (set by resolve_target_interface)
 TARGET_INTERFACE=""
 
-# Detect ISP interface from default route
+# Detect ISP interface from default route.
+# Excludes LAN bridges (br*) — those are NOT ISP interfaces.
 detect_isp_interface() {
-  ip route show default | sed -n 's/.*dev \([^ ]*\).*/\1/p' | head -1
+  ip route show default | sed -n 's/.*dev \([^ ]*\).*/\1/p' | grep -v '^br' | head -1
 }
 
 # Resolve target interface based on ROUTE_MODE
@@ -49,44 +51,67 @@ resolve_target_interface() {
   fi
 }
 
-# Set up ip rule + iptables for routing via resolved TARGET_INTERFACE
+# Add ip rules: LAN traffic (iif) → custom route table.
+# Creates one rule per interface in LAN_INTERFACES.
 setup_ip_rules() {
-  require_cmd ip
+  local iface
+  for iface in $LAN_INTERFACES; do
+    # Remove stale rule if present
+    ip rule del iif "$iface" table "$ROUTE_TABLE" 2>/dev/null || true
 
-  # Extract gateway if present (some routes are "scope link" without via)
-  local gw
-  gw=$(ip route show default dev "$TARGET_INTERFACE" 2>/dev/null \
-    | sed -n 's/.*via \([^ ]*\).*/\1/p' | head -1)
+    ip rule add iif "$iface" table "$ROUTE_TABLE" priority "$RULE_PRIORITY"
+    log "IP rule: iif $iface → table $ROUTE_TABLE (priority $RULE_PRIORITY)"
+  done
+}
 
-  if [ -n "$gw" ]; then
-    ip route replace default via "$gw" dev "$TARGET_INTERFACE" table "$ROUTE_TABLE" 2>/dev/null || true
-    log "Route table $ROUTE_TABLE: default via $gw dev $TARGET_INTERFACE"
-  else
-    # Direct link route (no gateway — e.g. LTE, scope link)
-    ip route replace default dev "$TARGET_INTERFACE" table "$ROUTE_TABLE" 2>/dev/null || true
-    log "Route table $ROUTE_TABLE: default dev $TARGET_INTERFACE (scope link)"
+# Load per-subnet routes into the custom route table via ip-full -batch.
+# Falls back to BusyBox ip loop if ip-full is not available.
+load_routes_batch() {
+  if [ ! -f "$SUBNET_LIST_FILE" ]; then
+    log_error "Subnet list not found: $SUBNET_LIST_FILE"
+    exit 1
   fi
 
-  local fwmark="${FWMARK:-0x20000000}"
-  local fwmask="${FWMARK_MASK:-0x20000000}"
+  local count
+  count=$(grep -cvE '^#|^$' "$SUBNET_LIST_FILE" || true)
+  log "Loading $count routes into table $ROUTE_TABLE via $TARGET_INTERFACE..."
 
-  # Remove old rules (legacy full-mark and bitwise variants)
-  ip rule del fwmark "0x${ROUTE_TABLE}" table "$ROUTE_TABLE" 2>/dev/null || true
-  ip rule del fwmark "$fwmark/$fwmask" table "$ROUTE_TABLE" 2>/dev/null || true
+  local t_start t_end elapsed
 
-  # Add rule with bitwise mask: match ONLY our bit, ignore Keenetic marks
-  ip rule add fwmark "$fwmark/$fwmask" table "$ROUTE_TABLE" priority "$RULE_PRIORITY"
-  log "IP rule: fwmark $fwmark/$fwmask → table $ROUTE_TABLE (priority $RULE_PRIORITY)"
+  if [ -x "$IP_FULL" ]; then
+    # Fast path: ip-full -batch (handles 13K+ routes in ~1s)
+    {
+      echo "route flush table $ROUTE_TABLE"
+      grep -vE '^#|^$' "$SUBNET_LIST_FILE" | while read -r subnet; do
+        echo "route add $subnet dev $TARGET_INTERFACE table $ROUTE_TABLE"
+      done
+    } > "$BATCH_FILE"
 
-  # iptables mangle: set our bit via xmark (preserves Keenetic's bits 0-27).
-  # --set-xmark value/mask: newmark = (oldmark & ~mask) | (value & mask)
-  iptables -t mangle -D PREROUTING -m set --match-set "$IPSET_NAME" dst -j MARK --set-mark "0x${ROUTE_TABLE}" 2>/dev/null || true
-  iptables -t mangle -D PREROUTING -m set --match-set "$IPSET_NAME" dst -j MARK --set-xmark "$fwmark/$fwmask" 2>/dev/null || true
-  iptables -t mangle -A PREROUTING -m set --match-set "$IPSET_NAME" dst -j MARK --set-xmark "$fwmark/$fwmask"
-  log "iptables mangle: xmark $IPSET_NAME dst → $fwmark/$fwmask (bit 29)"
+    t_start=$(date +%s)
+    "$IP_FULL" -batch "$BATCH_FILE"
+    t_end=$(date +%s)
+    elapsed=$((t_end - t_start))
+
+    rm -f "$BATCH_FILE"
+    log "Routes loaded via ip-full -batch ($count routes in ${elapsed}s)"
+  else
+    # Slow fallback: BusyBox ip loop
+    log "ip-full not found at $IP_FULL, using BusyBox loop (slow)"
+    ip route flush table "$ROUTE_TABLE" 2>/dev/null || true
+
+    t_start=$(date +%s)
+    grep -vE '^#|^$' "$SUBNET_LIST_FILE" | while read -r subnet; do
+      ip route add "$subnet" dev "$TARGET_INTERFACE" table "$ROUTE_TABLE" 2>/dev/null || true
+    done
+    t_end=$(date +%s)
+    elapsed=$((t_end - t_start))
+
+    log "Routes loaded via BusyBox loop ($count routes in ${elapsed}s)"
+  fi
 }
 
 # --- main ---
 resolve_target_interface
 setup_ip_rules
-log "Rules attached via $TARGET_INTERFACE"
+load_routes_batch
+log "Rules attached: $TARGET_INTERFACE, table $ROUTE_TABLE, iif: $LAN_INTERFACES"

@@ -58,8 +58,8 @@ Backup: `backups/router-1-unblock-20260407/`
 - `dig @localhost` resolves through SmartDNS
 
 ### Routing Tables
-- Keenetic fwmark-based: tables 4096–4115, 16384–16401
-- Table `1000` reserved for geo-bypass/unblock
+- Keenetic fwmark-based: tables 4096–4115, 16384–16401 (DO NOT use fwmark — conflicts with NDM)
+- Table `1000` reserved for geo-bypass/unblock (route-based: `ip rule iif br0 table 1000`)
 
 ## Target Architecture (geo-bypass/)
 

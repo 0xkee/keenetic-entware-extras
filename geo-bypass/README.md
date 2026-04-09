@@ -248,7 +248,7 @@ Hook устанавливается автоматически при запус
 Диагностика текущего состояния geo-bypass:
 
 ```sh
-/opt/keenetic-entware/geo-bypass/scripts/status.sh
+/opt/keenetic-entware-extras/geo-bypass/scripts/status.sh
 ```
 
 Или через init-скрипт:
@@ -279,10 +279,10 @@ geo-bypass status:
 
 ```sh
 # 1. Скопировать на роутер
-scp -r geo-bypass/ root@192.168.1.1:/opt/keenetic-entware/geo-bypass/
+scp -r geo-bypass/ root@192.168.1.1:/opt/keenetic-entware-extras/geo-bypass/
 
 # 2. Запустить установку
-ssh root@192.168.1.1 '/opt/keenetic-entware/geo-bypass/scripts/install.sh'
+ssh root@192.168.1.1 '/opt/keenetic-entware-extras/geo-bypass/scripts/install.sh'
 ```
 
 `install.sh` автоматически:
@@ -294,7 +294,7 @@ ssh root@192.168.1.1 '/opt/keenetic-entware/geo-bypass/scripts/install.sh'
 ### Удаление
 
 ```sh
-ssh root@192.168.1.1 '/opt/keenetic-entware/geo-bypass/scripts/uninstall.sh'
+ssh root@192.168.1.1 '/opt/keenetic-entware-extras/geo-bypass/scripts/uninstall.sh'
 ```
 
 `uninstall.sh` удалит:

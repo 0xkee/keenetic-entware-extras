@@ -5,7 +5,7 @@ Shell-скрипты для Keenetic роутера с Entware.
 ## Структура
 
 ```
-keenetic-entware/
+keenetic-entware-extras/
 ├── scripts/              # общие скрипты
 ├── lib/                  # переиспользуемые функции
 │   └── common.sh
@@ -44,7 +44,7 @@ DNS-сервер с разделением запросов по доменны�
 ## Деплой на роутер
 
 ```bash
-scp -r scripts/ lib/ root@192.168.1.1:/opt/keenetic-entware/
+scp -r scripts/ lib/ root@192.168.1.1:/opt/keenetic-entware-extras/
 ```
 
 ## Разработка

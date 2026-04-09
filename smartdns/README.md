@@ -20,10 +20,10 @@ DNS-сервер с разделением запросов по доменны�
 
 ```sh
 # 1. Скопировать на роутер
-scp -r smartdns/ root@192.168.1.1:/opt/keenetic-entware/smartdns/
+scp -r smartdns/ root@192.168.1.1:/opt/keenetic-entware-extras/smartdns/
 
 # 2. Запустить установку
-ssh root@192.168.1.1 '/opt/keenetic-entware/smartdns/scripts/install.sh'
+ssh root@192.168.1.1 '/opt/keenetic-entware-extras/smartdns/scripts/install.sh'
 ```
 
 Скрипт установки:
@@ -37,7 +37,7 @@ ssh root@192.168.1.1 '/opt/keenetic-entware/smartdns/scripts/install.sh'
 ## Удаление
 
 ```sh
-ssh root@192.168.1.1 '/opt/keenetic-entware/smartdns/scripts/uninstall.sh'
+ssh root@192.168.1.1 '/opt/keenetic-entware-extras/smartdns/scripts/uninstall.sh'
 ```
 
 ## Настройка

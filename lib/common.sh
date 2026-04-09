@@ -1,5 +1,5 @@
 #!/opt/bin/sh
-# Common shared functions for keenetic-entware scripts.
+# Common shared functions for keenetic-entware-extras scripts.
 # Usage: source this file from other scripts:
 #   SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 #   . "$SCRIPT_DIR/../lib/common.sh"

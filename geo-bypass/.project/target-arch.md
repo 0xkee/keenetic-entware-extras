@@ -97,9 +97,13 @@ geo-bypass/
 
 ### Deploy on Router
 ```
-/opt/etc/keenetic-entware/geo-bypass/config.sh    # config
-/opt/scripts/keenetic-entware/geo-bypass/*.sh      # scripts
-/opt/etc/ndm/ifstatechanged.d/geo-bypass-hook     # NDM hook
-/opt/etc/cron.daily/geo-bypass-update              # cron symlink
-/opt/tmp/geo-bypass/                               # runtime data (lists, PID)
+/opt/keenetic-entware-extras/                              # project root (remote_base)
+/opt/keenetic-entware-extras/lib/common.sh                 # shared library
+/opt/keenetic-entware-extras/geo-bypass/config/config.sh   # config
+/opt/keenetic-entware-extras/geo-bypass/scripts/*.sh       # scripts
+/opt/keenetic-entware-extras/geo-bypass/lists/             # cached CIDR/domain lists
+/opt/keenetic-entware-extras/geo-bypass/loaders/           # subnet loaders
+/opt/etc/init.d/S99geo-bypass                              # init script (system path)
+/opt/etc/ndm/ifstatechanged.d/geo-bypass-hook              # NDM hook (system path)
+/opt/etc/crontab                                           # cron entries (system path)
 ```

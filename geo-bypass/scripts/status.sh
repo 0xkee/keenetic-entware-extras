@@ -95,7 +95,7 @@ show_subnets() {
     age=$(( $(date +%s) - $(file_mtime "$SUBNET_LIST_FILE") ))
     age_label="$(format_age "$age")"
     max_label="$(format_age "$MAX_CACHE_AGE")"
-    if [ "$age" -le "$MAX_CACHE_AGE" ]; then
+    if [ "$age" -lt "$MAX_CACHE_AGE" ]; then
       echo "  Subnets:     cache ${age_label} old (max ${max_label}) ✓"
     else
       echo "  Subnets:     cache ${age_label} old (max ${max_label}) ✗ stale"; STATUS_OK=1
@@ -115,7 +115,7 @@ show_domains() {
     age=$(( $(date +%s) - $(file_mtime "$DOMAINS_CACHE_FILE") ))
     age_label="$(format_age "$age")"
     max_label="$(format_age "$interval")"
-    if [ "$age" -le "$interval" ]; then
+    if [ "$age" -lt "$interval" ]; then
       echo "  Domains:     $count in cache, ${age_label} old (max ${max_label}) ✓"
     else
       echo "  Domains:     $count in cache, ${age_label} old (max ${max_label}) ✗ stale"; STATUS_OK=1

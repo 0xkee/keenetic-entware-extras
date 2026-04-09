@@ -16,7 +16,7 @@ is_cache_fresh() {
   [ -f "$file" ] || return 1
   local file_age
   file_age=$(( $(date +%s) - $(file_mtime "$file") ))
-  [ "$file_age" -le "$max_age" ]
+  [ "$file_age" -lt "$max_age" ]
 }
 
 # Filter out private/special IPs from stdin

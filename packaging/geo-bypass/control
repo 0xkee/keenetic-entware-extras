@@ -1,5 +1,5 @@
 Package: geo-bypass
-Version: 0.1.0
+Version: 0.2.0
 Architecture: all
 Maintainer: ald
 Depends: keenetic-entware-extras, ip-full, ipset, curl, bind-dig

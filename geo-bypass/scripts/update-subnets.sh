@@ -8,6 +8,7 @@ set -eu
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/common.sh"
 . "$SCRIPT_DIR/../../lib/lists.sh"
+. "$SCRIPT_DIR/../../lib/ip.sh"
 _CONFIG_DIR="$(cd "$SCRIPT_DIR/../config" && pwd)"
 . "$_CONFIG_DIR/config.sh"
 
@@ -82,6 +83,15 @@ try_download() {
         log_error "Downloaded list too small ($count lines) via $iface, possible error"
         rm -f "$tmp_file"
       else
+        # Aggregate overlapping/adjacent CIDRs if enabled
+        if [ "${SUBNET_AGGREGATE:-0}" = "1" ]; then
+          local before_count="$count"
+          list_aggregate_cidrs < "$tmp_file" > "${tmp_file}.agg"
+          mv "${tmp_file}.agg" "$tmp_file"
+          count=$(wc -l < "$tmp_file")
+          log "Aggregated CIDRs: $before_count -> $count"
+        fi
+
         mv "$tmp_file" "$SUBNET_LIST_FILE"
         log "Updated subnet list: $count subnets (via $iface)"
         return 0

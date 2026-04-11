@@ -7,7 +7,7 @@ set -eu
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/common.sh"
 . "$SCRIPT_DIR/../../lib/lists.sh"
-_CONFIG_DIR="$SCRIPT_DIR/../config"
+_CONFIG_DIR="$(cd "$SCRIPT_DIR/../config" && pwd)"
 . "$_CONFIG_DIR/config.sh"
 
 # Filter out private/special IPs from stdin
@@ -113,7 +113,7 @@ main() {
   # 0 = domain updates disabled
   if [ "$update_interval" = "0" ]; then
     log "Domain updates disabled (DOMAINS_UPDATE_INTERVAL=0)"
-    exit 0
+    return 10
   fi
 
   if [ "$force" = "--force" ] || ! is_cache_fresh "$DOMAINS_CACHE_FILE" "$update_interval"; then
@@ -131,17 +131,18 @@ main() {
     t_end=$(date +%s)
     log "Domain update completed ($((t_end - t_start))s)"
 
-    # Activate routes only if resolved IPs changed
     if [ ! -f "$old_cache" ] || ! cmp -s "$old_cache" "$DOMAINS_CACHE_FILE"; then
-      log "Domain cache changed, activating routes..."
-      "$SCRIPT_DIR/attach-rules.sh"
+      log "Domain cache changed"
+      rm -f "$old_cache"
+      return 0  # data changed → caller should re-activate
     else
-      log "Domain cache unchanged, skipping route reload"
+      log "Domain cache unchanged"
+      rm -f "$old_cache"
+      return 10  # no changes → no re-activation needed
     fi
-    rm -f "$old_cache"
-  else
-    log "Domain cache is fresh, skipping update"
   fi
+  log "Domain cache is fresh, skipping update"
+  return 10   # cache fresh → no re-activation needed
 }
 
 main "$@"

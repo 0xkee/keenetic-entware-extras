@@ -6,7 +6,7 @@ set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/common.sh"
-_CONFIG_DIR="$SCRIPT_DIR/../config"
+_CONFIG_DIR="$(cd "$SCRIPT_DIR/../config" && pwd)"
 . "$_CONFIG_DIR/config.sh"
 
 STATUS_OK=0
@@ -125,14 +125,110 @@ show_domains() {
   fi
 }
 
+# Show last successful download interface (from cache)
+show_download_iface() {
+  if [ -f "$LAST_IFACE_CACHE" ]; then
+    local iface
+    iface=$(cat "$LAST_IFACE_CACHE")
+    echo "  DL iface:    $iface (cached)"
+  else
+    echo "  DL iface:    — (no history)"
+  fi
+}
+
+# Show DNS resolver used for domain resolution (re-probes live)
+show_dns_resolver() {
+  if [ -n "${DNS_FULL_RESOLVER_PORT:-}" ]; then
+    echo "  DNS:         localhost:$DNS_FULL_RESOLVER_PORT (configured)"
+  elif dig +short +time=1 +tries=1 localhost @localhost -p 6153 >/dev/null 2>&1; then
+    echo "  DNS:         localhost:6153 (SmartDNS no-speed-check)"
+  elif dig +short +time=1 +tries=1 localhost @localhost -p 6053 >/dev/null 2>&1; then
+    echo "  DNS:         localhost:6053 (SmartDNS)"
+  else
+    echo "  DNS:         system resolver"
+  fi
+}
+
+# Show cron job registration status
+show_cron() {
+  local cron_file="/opt/etc/crontab"
+  if [ ! -f "$cron_file" ]; then
+    echo "  Cron:        — ($cron_file missing)"; STATUS_OK=1
+    return
+  fi
+  local count
+  count=$(grep -c '^[^#]*geo-bypass' "$cron_file" 2>/dev/null) || count=0
+  if [ "$count" -gt 0 ]; then
+    echo "  Cron:        $count job(s) ✓"
+  else
+    echo "  Cron:        ✗ (no geo-bypass jobs)"; STATUS_OK=1
+  fi
+}
+
+# Show NDM hook symlink status
+show_ndm_hook() {
+  local hook="/opt/etc/ndm/ifstatechanged.d/geo-bypass-hook"
+  if [ -L "$hook" ]; then
+    echo "  NDM hook:    $hook ✓"
+  elif [ -f "$hook" ]; then
+    echo "  NDM hook:    $hook (not a symlink) ✓"
+  else
+    echo "  NDM hook:    ✗ (missing)"; STATUS_OK=1
+  fi
+}
+
+# Show installed package version
+show_version() {
+  local ver
+  ver=$(opkg info geo-bypass 2>/dev/null | sed -n 's/^Version: //p')
+  if [ -n "$ver" ]; then
+    echo "  Version:     $ver"
+  else
+    echo "  Version:     — (not installed via opkg)"
+  fi
+}
+
+# Show background update processes (if any _refresh_if_stale or update scripts are running)
+show_background() {
+  local pids
+  # shellcheck disable=SC2009
+  pids=$(ps 2>/dev/null | grep -E 'update-(subnets|domains)\.sh|_refresh_if_stale' | grep -v grep | awk '{print $1}' | tr '\n' ' ')
+  if [ -n "$pids" ]; then
+    echo "  Background:  update running (PIDs: ${pids})"
+  else
+    echo "  Background:  idle"
+  fi
+}
+
+# Show domain source list count (how many domains are configured)
+show_domain_sources() {
+  if [ -f "$DOMAINS_LIST_FILE" ]; then
+    local src_count
+    src_count=$(grep -cEv '^[[:space:]]*(#|$)' "$DOMAINS_LIST_FILE" 2>/dev/null) || src_count=0
+    echo "  Dom sources: $src_count domain(s) configured"
+  else
+    echo "  Dom sources: — (no list file)"
+  fi
+}
+
 # --- main ---
 echo "geo-bypass status:"
 show_mode
 show_ipset
 show_ip_rule
 show_routes
+echo
 show_subnets
 show_domains
+show_domain_sources
+echo
+show_cron
+show_ndm_hook
+show_download_iface
+show_dns_resolver
+show_background
+echo
 echo "  Loader:      $SUBNET_LOADER"
+show_version
 
 exit "$STATUS_OK"

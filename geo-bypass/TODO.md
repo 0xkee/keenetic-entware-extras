@@ -6,8 +6,11 @@
 - [x] **Создать либу для списков** — включение подсписков по `@[dir/]filename`; общие функции: сортировка, дедупликация, валидация формата; библиотека для всех подпроектов (`lib/`), сразу .ipk!
 - [ ] **TTL-aware domain cache** — учитывать TTL DNS записей при обновлении кэша доменов, не перезаписывать при неизменных данных
 - [ ] **Мониторинг** — периодическая проверка доступности OZON/критичных доменов через cron; алерт при маршрутных аномалиях
-- [ ] кешировать последний удачный iface для subnet loader и начинать с него
+- [x] кешировать последний удачный iface для subnet loader и начинать с него
 - [ ] сгенерировать белый список для ru (из беголо списка ркн)
+- [x] **Деплой .ipk на router-2** — установить keenetic-entware-extras + geo-bypass через opkg
+- [ ] **GitHub Releases** — CI/CD для автоматической сборки и публикации .ipk при тегах (потом)
+- [ ] надо изучитить инет на предмет какие интерфейсы туннелей, кроме nwg,opvn бывают в кинетиках и добавить в дефолт конфига все
 
 ---
 
@@ -50,3 +53,27 @@
 - [x] **Shellcheck** — все файлы проходят `shellcheck -x -s sh` без ошибок
 - [x] **Тестирование** — деплой + restart на router-1 и router-2, PASS на обоих
 - [x] **Design doc** — `docs/lists-lib-design.md`
+
+### .ipk пакетирование (2026-04-11)
+
+- [x] **Обновлён план** — `docs/opkg-packaging-plan.md`: 2 пакета (keenetic-entware-extras + geo-bypass), Entware tar.gz формат
+- [x] **Пакет `keenetic-entware-extras`** — `packaging/keenetic-entware-extras/control`: lib/common.sh + lib/lists.sh
+- [x] **Пакет `geo-bypass`** — `packaging/geo-bypass/`: control, conffiles, postinst (cron, NDM hook), prerm (stop, cleanup), postrm (rmdir)
+- [x] **Скрипт сборки** — `scripts/build-ipk.sh`: `./scripts/build-ipk.sh all` → `dist/*.ipk`
+- [x] **Фиксы** — Entware формат (tar.gz не ar), tar `--owner=0 --group=0`, postrm cleanup каталогов
+- [x] **Протестировано на router-1** — `opkg install/remove/reinstall` PASS, ownership root:root, postrm cleanup OK
+
+### Деплой .ipk на router-2 (2026-04-11)
+
+- [x] **opkg install** — очистка старого scp-деплоя (`uninstall.sh` + `rm -rf`), установка `keenetic-entware-extras 0.1.0` + `geo-bypass 0.1.0` через opkg
+- [x] **Фикс double-lib** — `build-ipk.sh:67`: dest `$data_dir/opt/keenetic-entware-extras` вместо `$data_dir/opt/keenetic-entware-extras/lib`
+- [x] **Фикс cold-start crash** — `attach-rules.sh`: graceful degradation (`return 0` вместо `exit 1`); `S99geo-bypass`: cold/warm split (sync download при отсутствии кэша)
+
+### Рефакторинг архитектуры (2026-04-11)
+
+- [x] **update-скрипты → чистые fetcher-ы** — `update-subnets.sh` и `update-domains.sh` больше не вызывают активацию (apply-routes/attach-rules). Exit code: 0 = данные обновлены, 10 = кэш свежий.
+- [x] **Единый оркестратор** — `S99geo-bypass`: `_refresh_if_stale()` helper, cold/warm start split, `update-subnets)`/`update-domains)` команды с условной активацией
+- [x] **Cron через S99** — `postinst`: `*/15 * * * * root /opt/etc/init.d/S99geo-bypass update-subnets`
+- [x] **Нормализация путей** — `_LISTS_DIR` в `config.sh` через parameter expansion `${_CONFIG_DIR%/*}/lists`; `_CONFIG_DIR` резолвится через `cd && pwd` в 6 скриптах
+- [x] **status.sh** — 7 новых метрик: cron jobs, NDM hook, version, domain sources, секционная группировка
+- [x] **Деплой** — оба роутера (router-2 + router-1) обновлены, status ✓

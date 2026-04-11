@@ -4,6 +4,9 @@
 # shellcheck disable=SC2034  # all variables are used by sourcing scripts
 # NOTE: _CONFIG_DIR must be set by the sourcing script before sourcing this file
 
+# Derived path to lists directory (strips /config, appends /lists)
+_LISTS_DIR="${_CONFIG_DIR%/*}/lists"
+
 # Routing mode: bypass | vpn | auto
 #   bypass — GEO traffic goes directly via ISP, bypassing VPN
 #   vpn    — GEO traffic is routed through VPN tunnel
@@ -35,7 +38,7 @@ LAN_INTERFACES="br0"
 IP_FULL="/opt/sbin/ip"
 
 # Temporary batch file for ip-full -batch route loading
-BATCH_FILE="/tmp/geo-routes.batch"
+BATCH_FILE="/opt/tmp/geo-routes.batch"
 
 # URL to fetch GEO IP subnets (plain CIDR list)
 # RU ip4 example
@@ -50,7 +53,7 @@ SUBNET_URL="https://www.ipdeny.com/ipblocks/data/countries/ru.zone"
 SUBNET_LOADER="cidr-plain"
 
 # Local cached subnet list
-SUBNET_LIST_FILE="${_CONFIG_DIR:-.}/../lists/ru-subnets.txt"
+SUBNET_LIST_FILE="$_LISTS_DIR/ru-subnets.txt"
 
 # Log tag
 LOG_TAG="geo-bypass"
@@ -64,10 +67,13 @@ DOWNLOAD_RETRIES=2
 # Delay between retries in seconds
 DOWNLOAD_RETRY_DELAY=3
 
+# Cache file for last successful download interface
+LAST_IFACE_CACHE="/opt/tmp/geo-bypass-last-iface"
+
 # Outgoing interfaces to try for downloads (in order of preference).
 # "default" = system default route (no --interface).
 # Tries each interface with DOWNLOAD_RETRIES attempts before moving to next.
-DOWNLOAD_INTERFACES="default nwg* ovpn_br*"
+DOWNLOAD_INTERFACES="default nwg* ovpn* l2tp* pptp* sstp* ipsec*"
 
 # DNS resolver port for full A-record resolution (all IPs, no speed-check).
 # Empty = auto-detect (probe localhost:6153, then :6053, then system resolver).
@@ -76,10 +82,10 @@ DNS_FULL_RESOLVER_PORT=""
 
 # Optional domains list file (resolved via dig → added to ipset)
 # Leave empty or comment out to skip domain resolution
-DOMAINS_LIST_FILE="${_CONFIG_DIR:-.}/../lists/domains.txt"
+DOMAINS_LIST_FILE="$_LISTS_DIR/domains.txt"
 
 # Cache file for resolved domain IPs (auto-generated, do not edit)
-DOMAINS_CACHE_FILE="${_CONFIG_DIR:-.}/../lists/domains-resolved.txt"
+DOMAINS_CACHE_FILE="$_LISTS_DIR/domains-resolved.txt"
 
 # Domain resolution update interval in seconds (1 hour)
 # 0 = disable automatic domain updates

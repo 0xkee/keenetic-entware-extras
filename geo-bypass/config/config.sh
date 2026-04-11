@@ -52,6 +52,10 @@ SUBNET_URL="https://www.ipdeny.com/ipblocks/data/countries/ru.zone"
 # Available: cidr-plain (default), ripe-json (requires jq)
 SUBNET_LOADER="cidr-plain"
 
+# Aggregate (merge) adjacent/overlapping CIDR subnets after download
+# Reduces route/ipset entries count (default: enabled)
+SUBNET_AGGREGATE=1
+
 # Local cached subnet list
 SUBNET_LIST_FILE="$_LISTS_DIR/ru-subnets.txt"
 

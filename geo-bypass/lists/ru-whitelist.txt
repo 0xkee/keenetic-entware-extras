@@ -1,0 +1,140 @@
+# ru-whitelist.txt — Russian services known for geo-blocking
+# Curated whitelist of popular Russian domains that restrict access
+# from non-Russian IPs. Strongly recommended for reliable geo-bypass.
+#
+# Source: manually curated + community data from
+# https://github.com/hxehex/russia-mobile-internet-whitelist
+# CDN subdomains (sun*.userapi.com, NN.img.avito.st, etc.) are
+# aggregated to base domains — DNS resolution covers them.
+
+# --- Госуслуги и государственные ---
+gosuslugi.ru
+mos.ru
+nalog.ru
+pfr.gov.ru
+fss.ru
+rosreestr.gov.ru
+cbr.ru
+zakupki.gov.ru
+government.ru
+kremlin.ru
+duma.gov.ru
+digital.gov.ru
+genproc.gov.ru
+cikrf.ru
+izbirkom.ru
+gu-st.ru
+
+# --- Банки и финтех ---
+sberbank.ru
+online.sberbank.ru
+sber.ru
+tinkoff.ru
+tbank.ru
+cdn-tinkoff.ru
+vtb.ru
+alfabank.ru
+gazprombank.ru
+raiffeisen.ru
+open.ru
+sovcombank.ru
+rshb.ru
+psbank.ru
+rosbank.ru
+mkb.ru
+uralsib.ru
+
+# --- Платёжные системы ---
+mir-platform.ru
+nspk.ru
+sbp.nspk.ru
+
+# --- Стриминг и медиа ---
+kinopoisk.ru
+ivi.ru
+okko.tv
+more.tv
+premier.one
+wink.ru
+start.ru
+amediateka.ru
+rutube.ru
+rutubelist.ru
+smotrim.ru
+
+# --- Социальные сети и мессенджеры ---
+vk.com
+vk.ru
+ok.ru
+dzen.ru
+t.me
+max.ru
+userapi.com
+vk-portal.net
+okcdn.ru
+cdn-vk.ru
+
+# --- E-commerce ---
+wildberries.ru
+wb.ru
+ozon.ru
+ozone.ru
+lamoda.ru
+dns-shop.ru
+mvideo.ru
+citilink.ru
+eldorado.ru
+avito.ru
+avito.st
+lemanapro.ru
+lmru.tech
+
+# --- Телеком-операторы ---
+mts.ru
+beeline.ru
+megafon.ru
+tele2.ru
+t2.ru
+rt.ru
+
+# --- Яндекс-сервисы ---
+yandex.ru
+yandex.com
+yandex.net
+yastatic.net
+ya.ru
+music.yandex.ru
+market.yandex.ru
+taxi.yandex.ru
+lavka.yandex.ru
+eda.yandex.ru
+browser.yandex.ru
+auto.ru
+
+# --- Почтовые сервисы ---
+mail.ru
+
+# --- Новости и СМИ ---
+rambler.ru
+lenta.ru
+gazeta.ru
+rbc.ru
+kp.ru
+
+# --- Транспорт и путешествия ---
+aeroflot.ru
+rzd.ru
+s7.ru
+pobeda.aero
+tutu.ru
+
+# --- Картографические сервисы ---
+2gis.ru
+2gis.com
+
+# --- Почта и доставка ---
+pochta.ru
+
+# --- Инфраструктура (НСДИ) ---
+res-nsdi.ru
+auth-nsdi.ru

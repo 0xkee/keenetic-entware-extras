@@ -8,6 +8,7 @@ set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/common.sh"
+. "$SCRIPT_DIR/../../lib/lists.sh"
 _CONFIG_DIR="$SCRIPT_DIR/../config"
 . "$_CONFIG_DIR/config.sh"
 
@@ -73,10 +74,10 @@ load_routes_batch() {
   fi
 
   local count domain_count
-  count=$(grep -cvE '^#|^$' "$SUBNET_LIST_FILE" || true)
+  count=$(list_count "$SUBNET_LIST_FILE")
   domain_count=0
   if [ -f "${DOMAINS_CACHE_FILE:-}" ]; then
-    domain_count=$(grep -cvE '^#|^$' "$DOMAINS_CACHE_FILE" || true)
+    domain_count=$(list_count "$DOMAINS_CACHE_FILE")
   fi
   log "Loading $count subnet + $domain_count domain routes into table $ROUTE_TABLE via $TARGET_INTERFACE..."
 
@@ -86,12 +87,12 @@ load_routes_batch() {
     # Fast path: ip-full -batch (handles 13K+ routes in ~1s)
     {
       echo "route flush table $ROUTE_TABLE"
-      grep -vE '^#|^$' "$SUBNET_LIST_FILE" | while read -r subnet; do
+      list_strip < "$SUBNET_LIST_FILE" | while read -r subnet; do
         echo "route add $subnet dev $TARGET_INTERFACE table $ROUTE_TABLE"
       done
       # Domain IPs (from resolved cache) — route replace to handle overlap safely
       if [ -f "${DOMAINS_CACHE_FILE:-}" ]; then
-        grep -vE '^#|^$' "$DOMAINS_CACHE_FILE" | while read -r ip _rest; do
+        list_strip < "$DOMAINS_CACHE_FILE" | while read -r ip _rest; do
           echo "route replace $ip/32 dev $TARGET_INTERFACE table $ROUTE_TABLE"
         done
       fi
@@ -110,12 +111,12 @@ load_routes_batch() {
     ip route flush table "$ROUTE_TABLE" 2>/dev/null || true
 
     t_start=$(date +%s)
-    grep -vE '^#|^$' "$SUBNET_LIST_FILE" | while read -r subnet; do
+    list_strip < "$SUBNET_LIST_FILE" | while read -r subnet; do
       ip route add "$subnet" dev "$TARGET_INTERFACE" table "$ROUTE_TABLE" 2>/dev/null || true
     done
     # Domain IPs (from resolved cache)
     if [ -f "${DOMAINS_CACHE_FILE:-}" ]; then
-      grep -vE '^#|^$' "$DOMAINS_CACHE_FILE" | while read -r ip _rest; do
+      list_strip < "$DOMAINS_CACHE_FILE" | while read -r ip _rest; do
         ip route replace "$ip/32" dev "$TARGET_INTERFACE" table "$ROUTE_TABLE" 2>/dev/null || true
       done
     fi

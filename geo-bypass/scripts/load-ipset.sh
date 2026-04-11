@@ -7,6 +7,7 @@ set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/common.sh"
+. "$SCRIPT_DIR/../../lib/lists.sh"
 _CONFIG_DIR="$SCRIPT_DIR/../config"
 . "$_CONFIG_DIR/config.sh"
 
@@ -65,12 +66,9 @@ load_subnets() {
 
   # Build restore file: create tmp set + add entries
   echo "create ${tmp_set} hash:net" > "$_TMP_RESTORE_FILE"
-  while IFS= read -r subnet; do
-    case "$subnet" in
-      ""|\#*) continue ;;
-    esac
+  list_strip < "$SUBNET_LIST_FILE" | while IFS= read -r subnet; do
     echo "add ${tmp_set} ${subnet}"
-  done < "$SUBNET_LIST_FILE" >> "$_TMP_RESTORE_FILE"
+  done >> "$_TMP_RESTORE_FILE"
 
   local count
   count=$(($(wc -l < "$_TMP_RESTORE_FILE") - 1))
@@ -95,7 +93,9 @@ load_subnets() {
   log "Ipset $IPSET_NAME updated ($count subnets)"
 }
 
-# Add IPs from file to ipset (one IP per line)
+# Add IPs from file to ipset (one IP per line).
+# NOTE: not using list_strip pipe — ip_count must stay in current shell
+# (pipe creates subshell). Domain cache is machine-generated, no @include needed.
 load_domain_ips() {
   local src_file="$1"
   local ip_count=0

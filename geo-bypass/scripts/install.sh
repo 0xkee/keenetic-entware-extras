@@ -1,5 +1,9 @@
 #!/opt/bin/sh
 # Install geo-bypass: init script + cron jobs + NDM hook.
+#
+# NOTE: Deploy via tar may overwrite lists/domains.txt on the router.
+# Use: tar cf - lib/ geo-bypass/ --exclude='geo-bypass/lists/*.txt' | ssh ...
+# Or restore from backup after deploy.
 # shellcheck disable=SC3043  # 'local' supported by ash/busybox sh
 # shellcheck disable=SC1091  # sourced files resolved at runtime on router
 set -eu

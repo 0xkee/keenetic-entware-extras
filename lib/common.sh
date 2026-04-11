@@ -43,3 +43,15 @@ is_entware() {
 file_mtime() {
   stat -t "$1" | awk '{print $13}'
 }
+
+# Check if file is fresh (younger than max_age seconds).
+# Uses file_mtime() to get modification time.
+# Args: $1 - file path, $2 - max age in seconds
+# Returns: 0 if file exists and is younger than max_age, 1 otherwise
+is_cache_fresh() {
+  local file="$1" max_age="$2"
+  [ -f "$file" ] || return 1
+  local file_age
+  file_age=$(( $(date +%s) - $(file_mtime "$file") ))
+  [ "$file_age" -lt "$max_age" ]
+}

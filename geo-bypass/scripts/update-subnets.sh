@@ -7,18 +7,9 @@ set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/common.sh"
+. "$SCRIPT_DIR/../../lib/lists.sh"
 _CONFIG_DIR="$SCRIPT_DIR/../config"
 . "$_CONFIG_DIR/config.sh"
-
-# Check if file is fresh (younger than max_age seconds)
-# Args: $1 - file path, $2 - max age in seconds
-is_cache_fresh() {
-  local file="$1" max_age="$2"
-  [ -f "$file" ] || return 1
-  local file_age
-  file_age=$(( $(date +%s) - $(file_mtime "$file") ))
-  [ "$file_age" -lt "$max_age" ]
-}
 
 # Resolve loader script path and verify it exists
 resolve_loader() {

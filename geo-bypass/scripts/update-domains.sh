@@ -6,18 +6,9 @@ set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/common.sh"
+. "$SCRIPT_DIR/../../lib/lists.sh"
 _CONFIG_DIR="$SCRIPT_DIR/../config"
 . "$_CONFIG_DIR/config.sh"
-
-# Check if file is fresh (younger than max_age seconds)
-# Args: $1 - file path, $2 - max age in seconds
-is_cache_fresh() {
-  local file="$1" max_age="$2"
-  [ -f "$file" ] || return 1
-  local file_age
-  file_age=$(( $(date +%s) - $(file_mtime "$file") ))
-  [ "$file_age" -lt "$max_age" ]
-}
 
 # Filter out private/special IPs from stdin
 filter_private_ips() {
@@ -64,44 +55,46 @@ resolve_domains() {
     return 0
   fi
 
-  local tmp_cache domain_count ip_count private_count ip
+  local tmp_cache ip _counts
   tmp_cache="${DOMAINS_CACHE_FILE}.tmp"
-  domain_count=0
-  ip_count=0
-  private_count=0
 
   : > "$tmp_cache"
 
-  while IFS= read -r line; do
-    # Trim leading/trailing whitespace
-    line=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+  # Pipe through list_read (strips comments, trims, resolves @includes).
+  # Counters collected inside { } group and echoed to stdout at the end.
+  _counts=$(list_read "$DOMAINS_LIST_FILE" | {
+    _dc=0; _ic=0; _pc=0
+    while IFS= read -r line; do
+      _dc=$((_dc + 1))
 
-    # Skip empty lines and comments
-    case "$line" in
-      ""|\#*) continue ;;
-    esac
+      # Resolve domain via detected DNS resolver
+      # shellcheck disable=SC2086  # intentional: DNS_ARGS must word-split
+      for ip in $(dig +short "$line" $DNS_ARGS 2>/dev/null); do
+        # Skip non-IPv4 (CNAMEs, AAAA, etc.)
+        case "$ip" in
+          *[!0-9.]*) continue ;;
+        esac
 
-    domain_count=$((domain_count + 1))
+        # Skip private/special IPs
+        if ! echo "$ip" | filter_private_ips >/dev/null 2>&1; then
+          _pc=$((_pc + 1))
+          continue
+        fi
 
-    # Resolve domain via detected DNS resolver
-    # shellcheck disable=SC2086  # intentional: DNS_ARGS must word-split
-    for ip in $(dig +short "$line" $DNS_ARGS 2>/dev/null); do
-      # Skip non-IPv4 (CNAMEs, AAAA, etc.)
-      case "$ip" in
-        *[!0-9.]*) continue ;;
-      esac
-
-      # Skip private/special IPs
-      if ! echo "$ip" | filter_private_ips >/dev/null 2>&1; then
-        private_count=$((private_count + 1))
-        continue
-      fi
-
-      echo "$ip # $line" >> "$tmp_cache"
-      ipset add "$IPSET_NAME" "$ip" -exist 2>/dev/null || true
-      ip_count=$((ip_count + 1))
+        echo "$ip # $line" >> "$tmp_cache"
+        ipset add "$IPSET_NAME" "$ip" -exist 2>/dev/null || true
+        _ic=$((_ic + 1))
+      done
     done
-  done < "$DOMAINS_LIST_FILE"
+    echo "$_dc $_ic $_pc"
+  })
+
+  # Parse counters from subshell output
+  local domain_count ip_count private_count
+  domain_count="${_counts%% *}"
+  _counts="${_counts#* }"
+  ip_count="${_counts% *}"
+  private_count="${_counts#* }"
 
   # Deduplicate by IP (first field); keep first occurrence with its domain comment
   # BusyBox sort ignores -k3,3 — extract domain as sort key, then strip it

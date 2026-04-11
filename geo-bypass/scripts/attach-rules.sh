@@ -9,7 +9,7 @@ set -eu
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/common.sh"
 . "$SCRIPT_DIR/../../lib/lists.sh"
-_CONFIG_DIR="$SCRIPT_DIR/../config"
+_CONFIG_DIR="$(cd "$SCRIPT_DIR/../config" && pwd)"
 . "$_CONFIG_DIR/config.sh"
 
 # Resolved target interface (set by resolve_target_interface)
@@ -69,8 +69,8 @@ setup_ip_rules() {
 # Falls back to BusyBox ip loop if ip-full is not available.
 load_routes_batch() {
   if [ ! -f "$SUBNET_LIST_FILE" ]; then
-    log_error "Subnet list not found: $SUBNET_LIST_FILE"
-    exit 1
+    log "No subnet cache yet, skipping route loading (run update-subnets.sh)"
+    return 0
   fi
 
   local count domain_count

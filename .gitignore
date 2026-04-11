@@ -25,3 +25,6 @@ geo-bypass/lists/domains-resolved.txt
 
 # Remote host config (contains host-specific data)
 .project/target-hosts.json
+
+# Built packages
+dist/*.ipk

@@ -8,14 +8,14 @@ set -eu
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/common.sh"
 . "$SCRIPT_DIR/../../lib/lists.sh"
-_CONFIG_DIR="$SCRIPT_DIR/../config"
+_CONFIG_DIR="$(cd "$SCRIPT_DIR/../config" && pwd)"
 . "$_CONFIG_DIR/config.sh"
 
 # Temp restore file path (global for cleanup trap)
 _TMP_RESTORE_FILE=""
 
 # PID lock file (prevents concurrent runs)
-PID_FILE="/tmp/geo-bypass-apply.pid"
+PID_FILE="/opt/tmp/geo-bypass-apply.pid"
 
 # Acquire PID-based lock. Exit if another instance is running.
 acquire_lock() {
@@ -62,7 +62,7 @@ cleanup_all() {
 load_subnets() {
   local tmp_set="${IPSET_NAME}-tmp"
 
-  _TMP_RESTORE_FILE="$(mktemp /tmp/ipset-restore.XXXXXX)"
+  _TMP_RESTORE_FILE="$(mktemp /opt/tmp/ipset-restore.XXXXXX)"
 
   # Build restore file: create tmp set + add entries
   echo "create ${tmp_set} hash:net" > "$_TMP_RESTORE_FILE"

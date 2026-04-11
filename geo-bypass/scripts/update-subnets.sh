@@ -8,7 +8,7 @@ set -eu
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/common.sh"
 . "$SCRIPT_DIR/../../lib/lists.sh"
-_CONFIG_DIR="$SCRIPT_DIR/../config"
+_CONFIG_DIR="$(cd "$SCRIPT_DIR/../config" && pwd)"
 . "$_CONFIG_DIR/config.sh"
 
 # Resolve loader script path and verify it exists
@@ -100,7 +100,8 @@ try_download() {
   return 1
 }
 
-# Download subnets with multi-interface failover
+# Download subnets with multi-interface failover.
+# Caches last successful interface in LAST_IFACE_CACHE to prioritize it next run.
 download_subnets() {
   local loader
   loader=$(resolve_loader) || return 1
@@ -113,11 +114,30 @@ download_subnets() {
     return 1
   fi
 
+  # Reorder: put last successful interface first (if still in resolved list)
+  local last_iface=""
+  if [ -f "$LAST_IFACE_CACHE" ]; then
+    last_iface=$(cat "$LAST_IFACE_CACHE")
+  fi
+  if [ -n "$last_iface" ]; then
+    case " $interfaces " in
+      *" $last_iface "*)
+        local reordered="$last_iface"
+        local i
+        for i in $interfaces; do
+          [ "$i" = "$last_iface" ] || reordered="$reordered $i"
+        done
+        interfaces="$reordered"
+        ;;
+    esac
+  fi
+
   log "Download interfaces: $interfaces"
 
   local iface
   for iface in $interfaces; do
     if try_download "$loader" "$iface"; then
+      echo "$iface" > "$LAST_IFACE_CACHE"
       return 0
     fi
     log "Interface $iface exhausted, trying next..."
@@ -137,7 +157,9 @@ main() {
     download_subnets
     t_end=$(date +%s)
     log "Subnet update completed ($((t_end - t_start))s)"
+    return 0  # data updated → caller should re-activate
   fi
+  return 10   # cache fresh → no re-activation needed
 }
 
 main "$@"

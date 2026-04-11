@@ -22,7 +22,7 @@ Backup: `backups/router-1-unblock-20260407/`
 - **Cron daily**: `/opt/etc/cron.daily/routing_table_update` → symlink to `parser.sh`
 - **Cron weekly**: `/opt/etc/cron.weekly/fetch-ru-cidr.sh` → symlink to `fetch-ru-cidr.sh`
 - **Routing table**: `table 1000` with `ip rule iif br0 table 1000 priority 5`
-- **PID file**: `/tmp/parser.sh.pid` (prevents concurrent runs)
+- **PID file**: `/opt/tmp/parser.sh.pid` (prevents concurrent runs)
 
 ### Routing Architecture (current)
 - Policy routing via `ip route table 1000` (NO ipset)

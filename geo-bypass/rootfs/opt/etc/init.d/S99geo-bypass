@@ -12,15 +12,29 @@ _CONFIG_DIR="$INSTALL_DIR/config"
 # shellcheck source=/dev/null
 . "$_CONFIG_DIR/config.sh"
 
+# Background helper: refresh stale caches, re-activate if data changed
+_refresh_if_stale() {
+    local need=0
+    if "$SCRIPTS/update-subnets.sh"; then need=1; fi
+    if "$SCRIPTS/update-domains.sh"; then need=1; fi
+    if [ "$need" -eq 1 ]; then
+      "$SCRIPTS/apply-routes.sh"
+    fi
+}
+
 case "${1:-}" in
   start)
     echo "Starting geo-bypass..."
-    # Fast start: load from cache + attach rules
+    if [ ! -f "$SUBNET_LIST_FILE" ]; then
+      # Cold start: no cache — download synchronously
+      "$SCRIPTS/update-subnets.sh" --force || true
+      "$SCRIPTS/update-domains.sh" || true
+    fi
+    # Single activation pass
     "$SCRIPTS/load-ipset.sh"
     "$SCRIPTS/attach-rules.sh"
-    # Background: update if cache stale
-    "$SCRIPTS/update-subnets.sh" &
-    "$SCRIPTS/update-domains.sh" &
+    # Background: refresh stale caches + re-activate if changed
+    _refresh_if_stale &
     ;;
   stop)
     echo "Stopping geo-bypass..."
@@ -37,22 +51,23 @@ case "${1:-}" in
     ;;
   update)
     echo "Updating geo-bypass (subnets + domains)..."
-    "$SCRIPTS/update-subnets.sh" --force
-    "$SCRIPTS/update-domains.sh" --force
-    # Ensure routes reflect new subnets (update-domains reloads only on change)
-    "$SCRIPTS/attach-rules.sh"
+    "$SCRIPTS/update-subnets.sh" --force || true
+    "$SCRIPTS/update-domains.sh" --force || true
+    "$SCRIPTS/apply-routes.sh"
     echo "Update complete."
     ;;
   update-subnets)
     echo "Updating subnets..."
-    "$SCRIPTS/update-subnets.sh" --force
-    "$SCRIPTS/attach-rules.sh"
+    if "$SCRIPTS/update-subnets.sh" --force; then
+      "$SCRIPTS/apply-routes.sh"
+    fi
     echo "Subnet update complete."
     ;;
   update-domains)
     echo "Updating domains..."
-    # update-domains.sh calls attach-rules.sh internally if cache changed
-    "$SCRIPTS/update-domains.sh" --force
+    if "$SCRIPTS/update-domains.sh" --force; then
+      "$SCRIPTS/attach-rules.sh"
+    fi
     echo "Domain update complete."
     ;;
   *)

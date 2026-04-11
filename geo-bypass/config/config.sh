@@ -39,8 +39,11 @@ BATCH_FILE="/tmp/geo-routes.batch"
 
 # URL to fetch GEO IP subnets (plain CIDR list)
 # RU ip4 example
+# Source: ipdeny.com — based on RIR allocations (RIPE/ARIN/etc), more complete
+# coverage than MaxMind GeoLite2 (e.g. includes OZON 185.73.192.0/22).
 # Alternative: https://stat.ripe.net/data/country-resource-list/data.json?resource=RU (requires ripe-json loader + jq)
-SUBNET_URL="https://ipbl.herrbischoff.com/geoip/ru.netset"
+# Alternative: SUBNET_URL="https://ipbl.herrbischoff.com/geoip/ru.netset"
+SUBNET_URL="https://www.ipdeny.com/ipblocks/data/countries/ru.zone"
 
 # Loader script name in loaders/ directory (without .sh)
 # Available: cidr-plain (default), ripe-json (requires jq)
@@ -65,6 +68,11 @@ DOWNLOAD_RETRY_DELAY=3
 # "default" = system default route (no --interface).
 # Tries each interface with DOWNLOAD_RETRIES attempts before moving to next.
 DOWNLOAD_INTERFACES="default nwg* ovpn_br*"
+
+# DNS resolver port for full A-record resolution (all IPs, no speed-check).
+# Empty = auto-detect (probe localhost:6153, then :6053, then system resolver).
+# Set to specific port to skip auto-detection.
+DNS_FULL_RESOLVER_PORT=""
 
 # Optional domains list file (resolved via dig → added to ipset)
 # Leave empty or comment out to skip domain resolution

@@ -72,9 +72,13 @@ load_routes_batch() {
     exit 1
   fi
 
-  local count
+  local count domain_count
   count=$(grep -cvE '^#|^$' "$SUBNET_LIST_FILE" || true)
-  log "Loading $count routes into table $ROUTE_TABLE via $TARGET_INTERFACE..."
+  domain_count=0
+  if [ -f "${DOMAINS_CACHE_FILE:-}" ]; then
+    domain_count=$(grep -cvE '^#|^$' "$DOMAINS_CACHE_FILE" || true)
+  fi
+  log "Loading $count subnet + $domain_count domain routes into table $ROUTE_TABLE via $TARGET_INTERFACE..."
 
   local t_start t_end elapsed
 
@@ -85,6 +89,12 @@ load_routes_batch() {
       grep -vE '^#|^$' "$SUBNET_LIST_FILE" | while read -r subnet; do
         echo "route add $subnet dev $TARGET_INTERFACE table $ROUTE_TABLE"
       done
+      # Domain IPs (from resolved cache) — route replace to handle overlap safely
+      if [ -f "${DOMAINS_CACHE_FILE:-}" ]; then
+        grep -vE '^#|^$' "$DOMAINS_CACHE_FILE" | while read -r ip _rest; do
+          echo "route replace $ip/32 dev $TARGET_INTERFACE table $ROUTE_TABLE"
+        done
+      fi
     } > "$BATCH_FILE"
 
     t_start=$(date +%s)
@@ -93,7 +103,7 @@ load_routes_batch() {
     elapsed=$((t_end - t_start))
 
     rm -f "$BATCH_FILE"
-    log "Routes loaded via ip-full -batch ($count routes in ${elapsed}s)"
+    log "Routes loaded via ip-full -batch ($count subnet + $domain_count domain in ${elapsed}s)"
   else
     # Slow fallback: BusyBox ip loop
     log "ip-full not found at $IP_FULL, using BusyBox loop (slow)"
@@ -103,10 +113,16 @@ load_routes_batch() {
     grep -vE '^#|^$' "$SUBNET_LIST_FILE" | while read -r subnet; do
       ip route add "$subnet" dev "$TARGET_INTERFACE" table "$ROUTE_TABLE" 2>/dev/null || true
     done
+    # Domain IPs (from resolved cache)
+    if [ -f "${DOMAINS_CACHE_FILE:-}" ]; then
+      grep -vE '^#|^$' "$DOMAINS_CACHE_FILE" | while read -r ip _rest; do
+        ip route replace "$ip/32" dev "$TARGET_INTERFACE" table "$ROUTE_TABLE" 2>/dev/null || true
+      done
+    fi
     t_end=$(date +%s)
     elapsed=$((t_end - t_start))
 
-    log "Routes loaded via BusyBox loop ($count routes in ${elapsed}s)"
+    log "Routes loaded via BusyBox loop ($count subnet + $domain_count domain in ${elapsed}s)"
   fi
 }
 

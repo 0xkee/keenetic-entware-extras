@@ -1,0 +1,62 @@
+#!/opt/bin/sh
+# geo-bypass init script for Entware.
+# Installed to /opt/etc/init.d/S99geo-bypass by install.sh.
+# INSTALL_DIR is patched by install.sh via sed to match actual install path.
+# shellcheck disable=SC3043  # 'local' supported by ash/busybox sh
+# shellcheck disable=SC1091  # sourced files resolved at runtime on router
+set -eu
+
+INSTALL_DIR="/opt/keenetic-entware-extras/geo-bypass"
+SCRIPTS="$INSTALL_DIR/scripts"
+_CONFIG_DIR="$INSTALL_DIR/config"
+# shellcheck source=/dev/null
+. "$_CONFIG_DIR/config.sh"
+
+case "${1:-}" in
+  start)
+    echo "Starting geo-bypass..."
+    # Fast start: load from cache + attach rules
+    "$SCRIPTS/load-ipset.sh"
+    "$SCRIPTS/attach-rules.sh"
+    # Background: update if cache stale
+    "$SCRIPTS/update-subnets.sh" &
+    "$SCRIPTS/update-domains.sh" &
+    ;;
+  stop)
+    echo "Stopping geo-bypass..."
+    "$SCRIPTS/detach-rules.sh"
+    ipset destroy "$IPSET_NAME" 2>/dev/null || true
+    ;;
+  restart)
+    "$0" stop
+    sleep 1
+    "$0" start
+    ;;
+  status)
+    "$SCRIPTS/status.sh"
+    ;;
+  update)
+    echo "Updating geo-bypass (subnets + domains)..."
+    "$SCRIPTS/update-subnets.sh" --force
+    "$SCRIPTS/update-domains.sh" --force
+    # Ensure routes reflect new subnets (update-domains reloads only on change)
+    "$SCRIPTS/attach-rules.sh"
+    echo "Update complete."
+    ;;
+  update-subnets)
+    echo "Updating subnets..."
+    "$SCRIPTS/update-subnets.sh" --force
+    "$SCRIPTS/attach-rules.sh"
+    echo "Subnet update complete."
+    ;;
+  update-domains)
+    echo "Updating domains..."
+    # update-domains.sh calls attach-rules.sh internally if cache changed
+    "$SCRIPTS/update-domains.sh" --force
+    echo "Domain update complete."
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart|status|update|update-subnets|update-domains}"
+    exit 1
+    ;;
+esac

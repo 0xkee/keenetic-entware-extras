@@ -1,5 +1,0 @@
-#!/opt/bin/sh
-set -eu
-rmdir "/opt/keenetic-entware-extras/geo-bypass-data/lists/geoip" 2>/dev/null || true
-rmdir "/opt/keenetic-entware-extras/geo-bypass-data/lists" 2>/dev/null || true
-rmdir "/opt/keenetic-entware-extras/geo-bypass-data" 2>/dev/null || true

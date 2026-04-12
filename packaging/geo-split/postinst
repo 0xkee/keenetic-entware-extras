@@ -1,0 +1,28 @@
+#!/opt/bin/sh
+# postinst — runs after package files are unpacked.
+# Must be idempotent (called on both install and upgrade).
+set -eu
+
+INSTALL_DIR="/opt/keenetic-entware-extras/geo-split"
+
+# 1. Create NDM hook symlink
+NDM_DIR="/opt/etc/ndm/ifstatechanged.d"
+mkdir -p "$NDM_DIR"
+ln -sf "$INSTALL_DIR/scripts/ndm-hook.sh" "$NDM_DIR/geo-split-hook"
+
+# 2. Update cron jobs (remove old, add new — safe on upgrade)
+CRON_FILE="/opt/etc/crontab"
+if [ -f "$CRON_FILE" ]; then
+    sed -i '/geo-split/d' "$CRON_FILE"
+fi
+{
+    echo "# geo-split: periodic updates (cache freshness checked internally)"
+    echo "*/15 * * * * root /opt/etc/init.d/S99geo-split update-subnets"
+    echo "*/15 * * * * root /opt/etc/init.d/S99geo-split update-domains"
+} >> "$CRON_FILE"
+
+# 3. Restart crond to pick up changes
+[ -x /opt/etc/init.d/S10cron ] && /opt/etc/init.d/S10cron restart
+
+echo "geo-split installed. Edit config: $INSTALL_DIR/config/config.sh"
+echo "Start: /opt/etc/init.d/S99geo-split start"

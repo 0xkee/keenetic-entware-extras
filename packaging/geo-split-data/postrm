@@ -1,0 +1,5 @@
+#!/opt/bin/sh
+set -eu
+rmdir "/opt/keenetic-entware-extras/geo-split-data/lists/geoip" 2>/dev/null || true
+rmdir "/opt/keenetic-entware-extras/geo-split-data/lists" 2>/dev/null || true
+rmdir "/opt/keenetic-entware-extras/geo-split-data" 2>/dev/null || true

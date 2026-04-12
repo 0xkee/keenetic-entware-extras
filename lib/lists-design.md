@@ -122,7 +122,7 @@ list_count() {
 
 **Пример структуры:**
 ```
-geo-bypass-data/lists/
+geo-split-data/lists/
   domains.txt          # @common/banks.txt
   custom-domains.txt   # обычные домены
   common/
@@ -189,8 +189,8 @@ is_cache_fresh() {
 ### 4.0. `lib/common.sh` — добавить `is_cache_fresh()`
 
 Перенести из дублированных скриптов:
-- [`update-domains.sh:14-20`](geo-bypass/scripts/update-domains.sh:14) — удалить локальную копию
-- [`update-subnets.sh:15-21`](geo-bypass/scripts/update-subnets.sh:15) — удалить локальную копию
+- [`update-domains.sh:14-20`](geo-split/scripts/update-domains.sh:14) — удалить локальную копию
+- [`update-subnets.sh:15-21`](geo-split/scripts/update-subnets.sh:15) — удалить локальную копию
 
 ### 4.1. `update-domains.sh` — основной бенефициар
 
@@ -241,10 +241,10 @@ is_cache_fresh() {
 | Область | Причина исключения |
 |---------|--------------------|
 | **Скачивание** (curl, wget) | Это задача loader-скриптов, не обработки списков |
-| **ipset операции** (create, add, swap) | Специфика geo-bypass, не общая обработка |
-| **ip route операции** | Специфика geo-bypass routing |
+| **ipset операции** (create, add, swap) | Специфика geo-split, не общая обработка |
+| **ip route операции** | Специфика geo-split routing |
 | **DNS-резолвинг** (dig) | Специфика update-domains.sh |
-| **filter_private_ips()** | Специфика geo-bypass, используется в одном месте |
+| **filter_private_ips()** | Специфика geo-split, используется в одном месте |
 | **is_cache_fresh()** | Вынести в `lib/common.sh` (кэш ≠ списки) |
 | **Валидация CIDR/доменов** | Phase 2 (если потребуется), формат-специфичная логика |
 | **Сортировка** | `sort` — стандартная утилита, обёртка не нужна |

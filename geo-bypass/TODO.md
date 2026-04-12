@@ -13,14 +13,24 @@
 - [x] надо изучитить инет на предмет какие интерфейсы туннелей, кроме nwg,opvn бывают в кинетиках и добавить в дефолт конфига все
 - [x] сделать строгую(!) агрегацию соседних подсетей после скачивания geo базы, добавить опцию в конфиг - по умолчанию вкл. после добавления доменов
 - [x] **Разделить на 2 пакета: `geo-bypass` + `geo-bypass-data`** — в `-data` включены списки доменов (`geo-bypass-data/lists/`) + агрегированные geo-ip подсети из ipdeny.com (`lists/geoip/ru.zone`), скачиваются при билде; `geo-bypass` зависит от `geo-bypass-data`
-- [ ] убрать все упоминания/использования ipset (мы же их не используем?) из кода и актуальных доков
+- [x] убрать все упоминания/использования ipset (мы же их не используем?) из кода и актуальных доков
 - [ ] ошибка в кеше subnets (после добавления агрегации cidr видимо регенериться каждый раз subnets), надо поправить, т.к. препятствует нормальной работе кеша subnets
   Subnets:     cache 8m old (max 7d 0h) ✓
   Domains:     180 in cache, 8m old (max 1h 0m) ✓
+- [ ] добавить поддержку нескольких iface в ISP_INTERFACE
+- [ ] переменовать ifaces in conf/code to ...IN/OUT... или from/to или src/dest (как самое понятное обычному пользователю?)
+- [ ] переименовать в geo-split, порпавить все описания в док/коде как split общего случая, с примерами о VPN & ru zone
 
 ---
 
 ## Выполнено
+
+### Удаление ipset dead code (2026-04-12)
+
+- [x] **load-ipset.sh удалён** — весь файл (130 строк) dead code: ipset загружался, но не использовался ни одним iptables-правилом
+- [x] **Убраны ссылки из 8 файлов** — apply-routes.sh, update-domains.sh, config.sh, S99geo-bypass, status.sh, ndm-hook.sh, packaging/control, packaging/prerm
+- [x] **Убрана зависимость** — `ipset` удалён из `Depends:` в packaging/geo-bypass/control
+- [x] **Маршрутизация** — работает как прежде через `ip rule` + `ip route table 1000` (attach-rules.sh)
 
 ### OZON geo-fix (2026-04-11)
 
@@ -55,7 +65,7 @@
 
 - [x] **`lib/lists.sh`** — 4 функции: `list_read` (@include, strip, trim), `list_strip` (pipe-фильтр), `list_dedup` (pipe-фильтр), `list_count` (подсчёт значащих строк)
 - [x] **`is_cache_fresh()` → `lib/common.sh`** — перенесена из дублированных update-subnets.sh / update-domains.sh
-- [x] **Миграция 5 скриптов** — update-domains.sh, update-subnets.sh, load-ipset.sh, attach-rules.sh, cidr-plain.sh
+- [x] **Миграция 5 скриптов** — update-domains.sh, update-subnets.sh, ~~load-ipset.sh~~ (удалён), attach-rules.sh, cidr-plain.sh
 - [x] **Shellcheck** — все файлы проходят `shellcheck -x -s sh` без ошибок
 - [x] **Тестирование** — деплой + restart на router-1 и router-2, PASS на обоих
 - [x] **Design doc** — `docs/lists-lib-design.md`

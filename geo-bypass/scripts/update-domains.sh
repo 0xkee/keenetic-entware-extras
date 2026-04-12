@@ -1,5 +1,5 @@
 #!/opt/bin/sh
-# Resolve domains from list via dig and cache resulting IPs into ipset.
+# Resolve domains from list via dig and cache resulting IPs.
 # shellcheck disable=SC3043  # 'local' supported by ash/busybox sh
 # shellcheck disable=SC1091  # sourced files resolved at runtime on router
 set -eu
@@ -45,10 +45,9 @@ detect_dns_resolver() {
   log "Using system DNS resolver"
 }
 
-# Resolve all domains and update cache + ipset
+# Resolve all domains and update cache
 resolve_domains() {
   require_cmd dig
-  require_cmd ipset
 
   if [ ! -f "$DOMAINS_LIST_FILE" ]; then
     log "No domains list file: $DOMAINS_LIST_FILE"
@@ -82,7 +81,6 @@ resolve_domains() {
         fi
 
         echo "$ip # $line" >> "$tmp_cache"
-        ipset add "$IPSET_NAME" "$ip" -exist 2>/dev/null || true
         _ic=$((_ic + 1))
       done
     done

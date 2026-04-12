@@ -16,4 +16,3 @@ fi
 
 # 4. Cleanup runtime data
 rm -f /opt/tmp/geo-routes.batch
-ipset destroy geo-bypass 2>/dev/null || true

@@ -16,7 +16,7 @@ CONFIG="$HOOK_DIR/../config/config.sh"
 
 # Extract only needed variables from config
 # (faster than full source — only simple vars, no path computation)
-eval "$(grep -E '^(ROUTE_MODE|ISP_INTERFACE|VPN_INTERFACE|IPSET_NAME|ROUTE_TABLE|RULE_PRIORITY|LAN_INTERFACES)=' "$CONFIG")"
+eval "$(grep -E '^(ROUTE_MODE|ISP_INTERFACE|VPN_INTERFACE|ROUTE_TABLE|RULE_PRIORITY|LAN_INTERFACES)=' "$CONFIG")"
 
 # NDM hook filter
 [ "${1:-}" != "hook" ] && exit 0

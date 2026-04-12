@@ -45,25 +45,6 @@ show_mode() {
   fi
 }
 
-# Show ipset existence and entry count
-show_ipset() {
-  local count mem
-  if ipset list "$IPSET_NAME" -t >/dev/null 2>&1; then
-    # Try "Number of entries" header first, fallback to counting members
-    count=$(ipset list "$IPSET_NAME" -t 2>/dev/null | awk '/Number of entries/ {print $NF}')
-    if [ -z "$count" ]; then
-      count=$(ipset list "$IPSET_NAME" 2>/dev/null | grep -c '/')
-    fi
-    mem=$(ipset list "$IPSET_NAME" -t 2>/dev/null | awk '/Size in memory/ {print $NF}')
-    if [ -n "$mem" ]; then
-      mem=" / $(( mem / 1024 ))KB"
-    fi
-    echo "  Ipset:       $IPSET_NAME (${count:-0} entries${mem}) ✓"
-  else
-    echo "  Ipset:       $IPSET_NAME ✗ (not loaded)"; STATUS_OK=1
-  fi
-}
-
 # Show ip rule iif status for each LAN interface
 show_ip_rule() {
   local iface rules_output
@@ -214,7 +195,6 @@ show_domain_sources() {
 # --- main ---
 echo "geo-bypass status:"
 show_mode
-show_ipset
 show_ip_rule
 show_routes
 echo

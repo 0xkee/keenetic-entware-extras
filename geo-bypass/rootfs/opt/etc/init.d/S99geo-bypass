@@ -31,7 +31,6 @@ case "${1:-}" in
       "$SCRIPTS/update-domains.sh" || true
     fi
     # Single activation pass
-    "$SCRIPTS/load-ipset.sh"
     "$SCRIPTS/attach-rules.sh"
     # Background: refresh stale caches + re-activate if changed
     _refresh_if_stale &
@@ -39,7 +38,6 @@ case "${1:-}" in
   stop)
     echo "Stopping geo-bypass..."
     "$SCRIPTS/detach-rules.sh"
-    ipset destroy "$IPSET_NAME" 2>/dev/null || true
     ;;
   restart)
     "$0" stop

@@ -20,9 +20,6 @@ ISP_INTERFACE=""
 # VPN interface — used in vpn mode
 VPN_INTERFACE="nwg0"
 
-# ipset name for GEO subnets
-IPSET_NAME="geo-bypass"
-
 # Custom routing table number
 ROUTE_TABLE="1000"
 
@@ -53,7 +50,7 @@ SUBNET_URL="https://www.ipdeny.com/ipblocks/data/countries/ru.zone"
 SUBNET_LOADER="cidr-plain"
 
 # Aggregate (merge) adjacent/overlapping CIDR subnets after download
-# Reduces route/ipset entries count (default: enabled)
+# Reduces route entries count (default: enabled)
 SUBNET_AGGREGATE=1
 
 # Local cached subnet list
@@ -84,7 +81,7 @@ DOWNLOAD_INTERFACES="default nwg* ovpn* l2tp* pptp* sstp* ipsec*"
 # Set to specific port to skip auto-detection.
 DNS_FULL_RESOLVER_PORT=""
 
-# Optional domains list file (resolved via dig → added to ipset)
+# Optional domains list file (resolved via dig → cached for routing)
 # Leave empty or comment out to skip domain resolution
 DOMAINS_LIST_FILE="$_LISTS_DIR/domains.txt"
 

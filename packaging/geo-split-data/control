@@ -1,0 +1,10 @@
+Package: geo-split-data
+Version: 0.1.0
+Architecture: all
+Maintainer: ald
+Depends: keenetic-entware-extras
+Description: GeoIP subnet data and domain lists for geo-split.
+ Pre-built country IP subnets (ipdeny.com) and curated domain lists.
+ Fallback data for geo-split cold start and offline operation.
+Section: net
+Priority: optional

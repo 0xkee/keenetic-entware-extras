@@ -10,12 +10,12 @@ keenetic-entware-extras/
 ├── lib/                  # переиспользуемые функции
 │   └── common.sh
 ├── config/               # шаблоны конфигов
-├── geo-bypass/           # подпроект: маршрутизация .ru мимо VPN
+├── geo-split/           # подпроект: split routing — GeoIP/домены через разные интерфейсы
 │   ├── scripts/
 │   ├── config/
 │   ├── lists/
 │   └── README.md
-├── smartdns/             # подпроект: DNS-сервер с группами ru/default
+├── smartdns-ru/             # подпроект: кастомный конфиг SmartDNS для RU zone DNS split
 │   ├── scripts/
 │   ├── config/
 │   └── README.md
@@ -26,13 +26,13 @@ keenetic-entware-extras/
 
 ## Подпроекты
 
-### [geo-bypass](geo-bypass/README.md)
+### [geo-split](geo-split/README.md)
 
-Прямая маршрутизация .ru доменов (и других российских ресурсов) в обход VPN.
+Split routing для Keenetic: маршрутизация трафика по GeoIP-подсетям и спискам доменов через разные сетевые интерфейсы (ISP/VPN). Поддерживает режимы bypass, vpn, auto.
 
-### [smartdns](smartdns/README.md)
+### [smartdns-ru](smartdns-ru/README.md)
 
-DNS-сервер с разделением запросов по доменным группам (`.ru` → Yandex/AdGuard, остальное → Cloudflare/Google).
+Кастомный конфиг SmartDNS для разделения DNS-запросов по зонам: `.ru`/`.рф`/`.su` → Yandex/AdGuard (DoT), остальное → Cloudflare/Google (DoT/DoH).
 
 ## Требования
 
@@ -54,5 +54,5 @@ scp -r scripts/ lib/ root@192.168.1.1:/opt/keenetic-entware-extras/
 shellcheck -x -s bash scripts/*.sh
 
 # Проверить конкретный файл
-shellcheck -x -s bash geo-bypass/scripts/update-domains.sh
+shellcheck -x -s bash geo-split/scripts/update-domains.sh
 ```

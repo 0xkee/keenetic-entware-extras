@@ -1,8 +1,8 @@
 Package: geo-bypass
-Version: 0.2.0
+Version: 0.3.0
 Architecture: all
 Maintainer: ald
-Depends: keenetic-entware-extras, ip-full, ipset, curl, bind-dig
+Depends: keenetic-entware-extras, geo-bypass-data, ip-full, ipset, curl, bind-dig
 Recommends: jq
 Description: Selective GEO IP routing for Keenetic routers (route-based, NDM-compatible).
  Routes country IP subnets (CIDR) via ISP directly or through VPN tunnel.

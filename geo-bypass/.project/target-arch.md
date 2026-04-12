@@ -101,8 +101,8 @@ geo-bypass/
 /opt/keenetic-entware-extras/lib/common.sh                 # shared library
 /opt/keenetic-entware-extras/geo-bypass/config/config.sh   # config
 /opt/keenetic-entware-extras/geo-bypass/scripts/*.sh       # scripts
-/opt/keenetic-entware-extras/geo-bypass/lists/             # cached CIDR/domain lists
 /opt/keenetic-entware-extras/geo-bypass/loaders/           # subnet loaders
+/opt/keenetic-entware-extras/geo-bypass-data/lists/        # domain lists + geoip zones
 /opt/etc/init.d/S99geo-bypass                              # init script (system path)
 /opt/etc/ndm/ifstatechanged.d/geo-bypass-hook              # NDM hook (system path)
 /opt/etc/crontab                                           # cron entries (system path)

@@ -4,8 +4,8 @@
 # shellcheck disable=SC2034  # all variables are used by sourcing scripts
 # NOTE: _CONFIG_DIR must be set by the sourcing script before sourcing this file
 
-# Derived path to lists directory (strips /config, appends /lists)
-_LISTS_DIR="${_CONFIG_DIR%/*}/lists"
+# Derived path to lists directory (geo-bypass-data subproject)
+_LISTS_DIR="${_CONFIG_DIR%/*/*}/geo-bypass-data/lists"
 
 # Routing mode: bypass | vpn | auto
 #   bypass — GEO traffic goes directly via ISP, bypassing VPN

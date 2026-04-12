@@ -20,8 +20,9 @@ secrets/
 *.log
 
 # Generated lists (fetched subnets, resolved domain IPs)
-geo-bypass/lists/ru-subnets.txt
-geo-bypass/lists/domains-resolved.txt
+geo-bypass-data/lists/ru-subnets.txt
+geo-bypass-data/lists/domains-resolved.txt
+geo-bypass-data/lists/geoip/*.zone
 
 # Remote host config (contains host-specific data)
 .project/target-hosts.json

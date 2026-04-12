@@ -12,7 +12,11 @@
 - [ ] **GitHub Releases** — CI/CD для автоматической сборки и публикации .ipk при тегах (потом)
 - [x] надо изучитить инет на предмет какие интерфейсы туннелей, кроме nwg,opvn бывают в кинетиках и добавить в дефолт конфига все
 - [x] сделать строгую(!) агрегацию соседних подсетей после скачивания geo базы, добавить опцию в конфиг - по умолчанию вкл. после добавления доменов
-- [ ] **Разделить на 2 пакета: `geo-bypass` + `geo-bypass-data`** — в `-data` включить списки доменов (`lists/`) + скачанные всех стран geo-ip подсети из источника (ipdeny и т.п.), обновлять при билде раз в месяц; `geo-bypass` зависит от `geo-bypass-data`
+- [x] **Разделить на 2 пакета: `geo-bypass` + `geo-bypass-data`** — в `-data` включены списки доменов (`geo-bypass-data/lists/`) + агрегированные geo-ip подсети из ipdeny.com (`lists/geoip/ru.zone`), скачиваются при билде; `geo-bypass` зависит от `geo-bypass-data`
+- [ ] убрать все упоминания/использования ipset (мы же их не используем?) из кода и актуальных доков
+- [ ] ошибка в кеше subnets (после добавления агрегации cidr видимо регенериться каждый раз subnets), надо поправить, т.к. препятствует нормальной работе кеша subnets
+  Subnets:     cache 8m old (max 7d 0h) ✓
+  Domains:     180 in cache, 8m old (max 1h 0m) ✓
 
 ---
 
@@ -76,13 +80,13 @@
 - [x] **update-скрипты → чистые fetcher-ы** — `update-subnets.sh` и `update-domains.sh` больше не вызывают активацию (apply-routes/attach-rules). Exit code: 0 = данные обновлены, 10 = кэш свежий.
 - [x] **Единый оркестратор** — `S99geo-bypass`: `_refresh_if_stale()` helper, cold/warm start split, `update-subnets)`/`update-domains)` команды с условной активацией
 - [x] **Cron через S99** — `postinst`: `*/15 * * * * root /opt/etc/init.d/S99geo-bypass update-subnets`
-- [x] **Нормализация путей** — `_LISTS_DIR` в `config.sh` через parameter expansion `${_CONFIG_DIR%/*}/lists`; `_CONFIG_DIR` резолвится через `cd && pwd` в 6 скриптах
+- [x] **Нормализация путей** — `_LISTS_DIR` в `config.sh` через parameter expansion `${_CONFIG_DIR%/*/*}/geo-bypass-data/lists`; `_CONFIG_DIR` резолвится через `cd && pwd` в 6 скриптах
 - [x] **status.sh** — 7 новых метрик: cron jobs, NDM hook, version, domain sources, секционная группировка
 - [x] **Деплой** — оба роутера (router-2 + router-1) обновлены, status ✓
 
 ### ru-whitelist (2026-04-11)
 
-- [x] **`geo-bypass/lists/ru-whitelist.txt`** — 104 домена в 14 категориях (госуслуги, банки, стриминг, e-commerce, телеком, Яндекс и др.)
+- [x] **`geo-bypass-data/lists/ru-whitelist.txt`** — 104 домена в 14 категориях (госуслуги, банки, стриминг, e-commerce, телеком, Яндекс и др.)
 - [x] **Подключение** — `domains.txt` включает `@ru-whitelist.txt` по умолчанию, `list_read` корректно резолвит @include
 - [x] **Деплой** — оба роутера (router-1 + router-2), `update-domains.sh --force` → 175/172 unique IP
 - [x] **Верификация** — `status.sh` → all healthy; host-route `rkn.gov.ru` в table 1000 через `lte_br1` ✓

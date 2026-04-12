@@ -122,7 +122,7 @@ list_count() {
 
 **Пример структуры:**
 ```
-geo-bypass/lists/
+geo-bypass-data/lists/
   domains.txt          # @common/banks.txt
   custom-domains.txt   # обычные домены
   common/

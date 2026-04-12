@@ -69,7 +69,8 @@ interface down → detach-rules.sh (ip rule del + route flush)  <1 сек
 | `loaders/cidr-plain.sh` | Загрузчик: plain CIDR (одна подсеть на строку) |
 | `loaders/ripe-json.sh` | Загрузчик: RIPE JSON API (требует jq) |
 | `config/config.sh` | Конфигурация (режим, интерфейсы, URL, интервалы) |
-| `lists/domains.txt` | Пользовательский список доменов |
+
+Данные (домен-листы, geoip-зоны) вынесены в отдельный подпроект [`geo-bypass-data/`](../geo-bypass-data/).
 
 ## Настройка
 
@@ -166,11 +167,11 @@ curl -sSf "$1" | grep -E '^[0-9]+\.'
 
 ## DNS-резолвинг доменов
 
-Отдельный скрипт `update-domains.sh` резолвит домены из `lists/domains.txt` и добавляет IP в ipset.
+Отдельный скрипт `update-domains.sh` резолвит домены из `geo-bypass-data/lists/domains.txt` и добавляет IP в ipset.
 
 ### Настройка
 
-1. Добавьте домены в `lists/domains.txt` (по одному на строку):
+1. Добавьте домены в [`geo-bypass-data/lists/domains.txt`](../geo-bypass-data/lists/domains.txt) (по одному на строку):
 
 ```
 gosuslugi.ru
@@ -181,7 +182,7 @@ mos.ru
 2. Убедитесь что в `config/config.sh` указан путь к файлу:
 
 ```sh
-DOMAINS_LIST_FILE="${_CONFIG_DIR:-.}/../lists/domains.txt"
+DOMAINS_LIST_FILE="$_LISTS_DIR/domains.txt"
 ```
 
 3. Настройте интервал обновления (по умолчанию 1 час):
@@ -197,7 +198,7 @@ DOMAINS_UPDATE_INTERVAL=3600
 - Каждый домен резолвится через `dig +short <domain> @localhost`
 - Приватные IP (10.x, 192.168.x, 172.16-31.x, 127.x) отфильтровываются
 - Resolved IP добавляются в ipset (`ipset add -exist`)
-- Результат кэшируется в `lists/domains-resolved.txt`
+- Результат кэшируется в `geo-bypass-data/lists/domains-resolved.txt`
 - Флаг `--force` принудительно обновляет кэш
 
 ### Требования
@@ -262,13 +263,23 @@ Hook устанавливается автоматически при запус
 ```
 geo-bypass status:
   Mode:        auto
-  Interface:   ppp0 (auto-detected)
-  Ipset:       geo-bypass (14523 entries) ✓
+  Interface:   ppp0 (active in table 1000)
+  Ipset:       geo-bypass (8588 entries / 205KB) ✓ (obsoleted)
   IP rule:     iif br0 → table 1000 ✓
-  Routes:      13424 in table 1000 ✓
-  Subnets:     cache 2d 5h old (max 7d) ✓
-  Domains:     12 in cache, 45m old (max 1h) ✓
+  Routes:      8768 in table 1000 ✓
+
+  Subnets:     cache 8m old (max 7d 0h) ✓
+  Domains:     180 in cache, 8m old (max 1h 0m) ✓
+  Dom sources: 1 domain(s) configured
+
+  Cron:        2 job(s) ✓
+  NDM hook:    /opt/etc/ndm/ifstatechanged.d/geo-bypass-hook ✓
+  DL iface:    default (cached)
+  DNS:         localhost:6153 (SmartDNS no-speed-check)
+  Background:  idle
+
   Loader:      cidr-plain
+  Version:     0.2.0
 ```
 
 **Exit code:** `0` — всё в порядке, `1` — есть проблемы (✗ в выводе).
@@ -280,6 +291,7 @@ geo-bypass status:
 ```sh
 # 1. Скопировать на роутер
 scp -r geo-bypass/ root@192.168.1.1:/opt/keenetic-entware-extras/geo-bypass/
+scp -r geo-bypass-data/ root@192.168.1.1:/opt/keenetic-entware-extras/geo-bypass-data/
 
 # 2. Запустить установку
 ssh root@192.168.1.1 '/opt/keenetic-entware-extras/geo-bypass/scripts/install.sh'
@@ -317,4 +329,4 @@ opkg install bind-dig
 opkg install jq
 ```
 
-- [SmartDNS](../smartdns/) — DNS-сервер для резолвинга доменов (если используется `lists/domains.txt`)
+- [SmartDNS](../smartdns/) — DNS-сервер для резолвинга доменов (если используется [`geo-bypass-data/lists/domains.txt`](../geo-bypass-data/lists/domains.txt))

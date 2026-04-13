@@ -1,81 +1,121 @@
 #!/opt/bin/sh
-# lib/ip.sh - IP/CIDR manipulation library (aggregation, conversion)
+# lib/ip.sh - IP/CIDR library (aggregation, interface detection, route table fill)
 # Source: . ./lib/ip.sh
 # shellcheck disable=SC3043  # 'local' supported by ash/busybox sh
 set -eu
 
-# Parse CIDR lines to numeric ranges.
-# stdin: CIDR lines; stdout: "start end" decimal per line.
-# Invalid lines silently skipped.
-_cidr_to_ranges() {
-  awk '
-    /^[[:space:]]*($|#)/ { next }
-    {
-      sub(/#.*/, "")
-      gsub(/[[:space:]]/, "")
-      if ($0 == "") next
-
-      n = split($0, parts, "/")
-      if (n != 2) next
-      prefix = int(parts[2])
-      if (prefix < 0 || prefix > 32) next
-
-      m = split(parts[1], o, ".")
-      if (m != 4) next
-      for (i = 1; i <= 4; i++)
-        if (o[i] < 0 || o[i] > 255) next
-
-      ip = o[1]*16777216 + o[2]*65536 + o[3]*256 + o[4]
-
-      ms = 1
-      for (i = 0; i < 32 - prefix; i++) ms *= 2
-
-      start = ip - (ip % ms)
-      print start, start + ms - 1
-    }
-  '
-}
-
-# Merge sorted ranges, emit minimal CIDRs.
-# stdin: sorted "start end" lines; stdout: CIDR lines.
-# Uses precomputed pow2[] table - saves ~33% time vs loop computation.
-_merge_and_emit_cidrs() {
-  awk '
-    BEGIN { p2[0] = 1; for (i = 1; i <= 32; i++) p2[i] = p2[i-1] * 2 }
-
-    function emit(s, e,    ab, sb, k, a, b, c, d, tmp) {
-      while (s <= e) {
-        if (s == 0) { ab = 32 }
-        else { ab = 0; tmp = s; while (tmp % 2 == 0) { ab++; tmp /= 2 } }
-
-        sb = 0
-        while (sb < 32 && p2[sb + 1] <= e - s + 1) sb++
-
-        k = (ab < sb) ? ab : sb
-
-        a = int(s / 16777216) % 256
-        b = int(s / 65536) % 256
-        c = int(s / 256) % 256
-        d = int(s) % 256
-        printf "%d.%d.%d.%d/%d\n", a, b, c, d, 32 - k
-
-        s = s + p2[k]
-      }
-    }
-
-    NR == 1 { ms = $1; me = $2; next }
-    {
-      if ($1 <= me + 1) { if ($2 > me) me = $2 }
-      else { emit(ms, me); ms = $1; me = $2 }
-    }
-    END { if (NR > 0) emit(ms, me) }
-  '
-}
-
 # Pipe filter: aggregate (merge overlapping/adjacent) CIDR subnets.
-# Strict: only exact merges, no supernetting.
-# stdin: CIDR lines (one per line, comments/blanks skipped)
+# Uses ISC aggregate (opkg install aggregate). IPv4 only.
+# Future: fork aggregate6 for IPv6 support.
+# stdin: CIDR lines (one per line)
 # stdout: minimal set of CIDRs covering the same IP space
 list_aggregate_cidrs() {
-  _cidr_to_ranges | sort -n | _merge_and_emit_cidrs
+  aggregate 2>/dev/null
+}
+
+# Detect best DNS resolver port for full A-record resolution.
+# Probes SmartDNS no-speed-check (6153), then main (6053), then system.
+# Uses DNS_FULL_RESOLVER_PORT if set in config.
+# Outputs: "PORT LABEL" (e.g. "6153 SmartDNS no-speed-check") or "0 system resolver"
+detect_dns_port() {
+  if [ -n "${DNS_FULL_RESOLVER_PORT:-}" ]; then
+    echo "$DNS_FULL_RESOLVER_PORT configured"
+    return
+  fi
+  if dig +short +time=1 +tries=1 localhost @localhost -p 6153 >/dev/null 2>&1; then
+    echo "6153 SmartDNS no-speed-check"
+    return
+  fi
+  if dig +short +time=1 +tries=1 localhost @localhost -p 6053 >/dev/null 2>&1; then
+    echo "6053 SmartDNS"
+    return
+  fi
+  echo "0 system resolver"
+}
+
+# Detect outgoing interface from default route.
+# Excludes LAN bridges (br*) — those are NOT outgoing interfaces.
+detect_out_iface() {
+  ip route show default | sed -n 's/.*dev \([^ ]*\).*/\1/p' | grep -v '^br' | head -1
+}
+
+# Resolve target outgoing interface from ROUTE_OUT config.
+# ROUTE_OUT=auto|"" → auto-detect via detect_out_iface().
+# ROUTE_OUT=<name> → use directly.
+# stdout: interface name
+# Returns: 0 = OK, 1 = no interface found
+resolve_target_interface() {
+  local iface
+  if [ "${ROUTE_OUT:-auto}" = "auto" ] || [ -z "${ROUTE_OUT:-}" ]; then
+    iface="$(detect_out_iface)"
+  else
+    iface="$ROUTE_OUT"
+  fi
+  if [ -z "$iface" ]; then
+    return 1
+  fi
+  echo "$iface"
+}
+
+# Flush and fill a routing table from a list file via ip-full -batch.
+# Falls back to BusyBox ip loop if ip-full is not available.
+# Args: $1 - table number, $2 - list file path, $3 - target device
+#        $4 - mode: "cidr" (default, each line is a CIDR) or "host" (first field + /32)
+# Requires: IP_FULL from config.sh; list_strip, list_count from lib/lists.sh; log from lib/common.sh
+# Optional: BATCH_FILE (base path, default /opt/tmp/geo-routes); .${table}.batch is appended
+fill_routes_batch() {
+  local table="$1" file="$2" dev="$3" mode="${4:-cidr}"
+  local batch_file="${BATCH_FILE:-/opt/tmp/geo-routes}.${table}.batch"
+
+  if [ ! -f "$file" ]; then
+    log "fill_routes_batch: no file $file, skipping table $table"
+    return 0
+  fi
+
+  local count
+  count=$(list_count "$file")
+  log "Loading $count routes into table $table via $dev (mode=$mode)..."
+
+  local t_start t_end elapsed
+
+  if [ -x "${IP_FULL:-/opt/sbin/ip}" ]; then
+    {
+      echo "route flush table $table"
+      if [ "$mode" = "host" ]; then
+        list_strip < "$file" | while read -r ip _rest; do
+          echo "route add $ip/32 dev $dev table $table"
+        done
+      else
+        list_strip < "$file" | while read -r cidr; do
+          echo "route add $cidr dev $dev table $table"
+        done
+      fi
+    } > "$batch_file"
+
+    t_start=$(date +%s)
+    "${IP_FULL:-/opt/sbin/ip}" -batch "$batch_file"
+    t_end=$(date +%s)
+    elapsed=$((t_end - t_start))
+
+    rm -f "$batch_file"
+    log "Routes loaded via ip-full -batch (table $table: $count entries in ${elapsed}s)"
+  else
+    log "ip-full not found, using BusyBox loop (slow)"
+    ip route flush table "$table" 2>/dev/null || true
+
+    t_start=$(date +%s)
+    if [ "$mode" = "host" ]; then
+      list_strip < "$file" | while read -r ip _rest; do
+        ip route add "$ip/32" dev "$dev" table "$table" 2>/dev/null || true
+      done
+    else
+      list_strip < "$file" | while read -r cidr; do
+        ip route add "$cidr" dev "$dev" table "$table" 2>/dev/null || true
+      done
+    fi
+    t_end=$(date +%s)
+    elapsed=$((t_end - t_start))
+
+    log "Routes loaded via BusyBox loop (table $table: $count entries in ${elapsed}s)"
+  fi
 }

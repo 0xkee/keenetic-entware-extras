@@ -8,35 +8,30 @@
 # Derived path to lists directory (geo-split-data subproject)
 _LISTS_DIR="${_CONFIG_DIR%/*/*}/geo-split-data/lists"
 
-# Routing mode: bypass | vpn | auto
-#   bypass — GEO traffic goes directly via ISP, bypassing VPN
-#   vpn    — GEO traffic is routed through VPN tunnel
-#   auto   — auto-detect ISP interface, route GEO traffic via ISP (same as bypass + auto-detect)
-ROUTE_MODE="auto"
+# Target outgoing interface for matched GEO traffic
+# "auto" or empty = detect ISP automatically from default route
+# Explicit: "lte_br1" (ISP), "nwg0" (VPN), "ppp0", etc.
+ROUTE_OUT="auto"
 
-# ISP (direct) interface — used in bypass/auto modes
-# Empty = auto-detect via `ip route show default`
-ISP_INTERFACE=""
-
-# VPN interface — used in vpn mode
-VPN_INTERFACE="nwg0"
-
-# Custom routing table number
-ROUTE_TABLE="1000"
-
-# IP rule priority (lower = higher priority)
-RULE_PRIORITY="50"
-
-# LAN interfaces for ip rule iif (space-separated).
-# Each interface gets its own ip rule → custom route table.
+# Source LAN/tunnel interfaces for ip rule iif (space-separated)
+# Each interface gets its own ip rule → custom route table
 # Keenetic bridges: br0 = Home LAN, br1 = Guest network
-LAN_INTERFACES="br0"
+ROUTE_IN="br0"
+
+# Domain routing table (custom /32 host routes — higher priority, checked first)
+DOMAIN_ROUTE_TABLE="1000"
+DOMAIN_RULE_PRIORITY="50"
+
+# Subnet routing table (GeoIP CIDRs — lower priority, checked after domains)
+SUBNET_ROUTE_TABLE="1001"
+SUBNET_RULE_PRIORITY="51"
 
 # ip-full binary path (Entware package ip-full, supports -batch)
 IP_FULL="/opt/sbin/ip"
 
-# Temporary batch file for ip-full -batch route loading
-BATCH_FILE="/opt/tmp/geo-routes.batch"
+# Base path for temporary batch files (ip-full -batch route loading)
+# fill_routes_batch() appends .${table}.batch to avoid race conditions
+BATCH_FILE="/opt/tmp/geo-routes"
 
 # URL to fetch GEO IP subnets (plain CIDR list)
 # RU ip4 example

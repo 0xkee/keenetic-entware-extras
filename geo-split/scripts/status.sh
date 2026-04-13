@@ -8,6 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/common.sh"
 _CONFIG_DIR="$(cd "$SCRIPT_DIR/../config" && pwd)"
 . "$_CONFIG_DIR/config.sh"
+. "$SCRIPT_DIR/../../lib/ip.sh"
 
 STATUS_OK=0
 
@@ -24,48 +25,65 @@ format_age() {
   fi
 }
 
-# Detect ISP interface from default route
-detect_isp_interface() {
-  ip route show default | sed -n 's/.*dev \([^ ]*\).*/\1/p' | grep -v '^br' | head -1
-}
-
-# Show routing mode and active interface(s) from route table
+# Show routing config and active interface(s) from route tables
 show_mode() {
-  echo "  Mode:        $ROUTE_MODE"
+  # Route in: configured LAN sources
+  echo "  Route in:    $ROUTE_IN"
 
-  # Show active interface from real routes in table (ground truth)
+  # Route out: configured target
+  if [ "${ROUTE_OUT:-auto}" = "auto" ] || [ -z "${ROUTE_OUT:-}" ]; then
+    echo "  Route out:   auto (detect ISP)"
+  else
+    echo "  Route out:   $ROUTE_OUT"
+  fi
+
+  # Active out: ground truth from both route tables
   local active_ifaces
-  active_ifaces=$(ip route show table "$ROUTE_TABLE" 2>/dev/null \
-    | sed -n 's/.*dev \([^ ]*\).*/\1/p' | sort -u | tr '\n' ' ' | sed 's/ $//')
+  active_ifaces=$( {
+    ip route show table "$DOMAIN_ROUTE_TABLE" 2>/dev/null
+    ip route show table "$SUBNET_ROUTE_TABLE" 2>/dev/null
+  } | sed -n 's/.*dev \([^ ]*\).*/\1/p' | sort -u | tr '\n' ' ' | sed 's/ $//')
 
   if [ -n "$active_ifaces" ]; then
-    echo "  Interface:   $active_ifaces (active in table $ROUTE_TABLE)"
+    echo "  Active out:  $active_ifaces (tables $DOMAIN_ROUTE_TABLE,$SUBNET_ROUTE_TABLE)"
   else
-    echo "  Interface:   — detached"
+    echo "  Active out:  — detached"
   fi
 }
 
-# Show ip rule iif status for each LAN interface
+# Show ip rule iif status for each ROUTE_IN interface (both tables)
 show_ip_rule() {
   local iface rules_output
   rules_output=$(ip rule show)
-  for iface in $LAN_INTERFACES; do
-    if echo "$rules_output" | grep -qE "iif $iface.*lookup $ROUTE_TABLE"; then
-      echo "  IP rule:     iif $iface → table $ROUTE_TABLE ✓"
+  for iface in $ROUTE_IN; do
+    if echo "$rules_output" | grep -qE "iif $iface.*lookup $DOMAIN_ROUTE_TABLE"; then
+      echo "  IP rule:     iif $iface → table $DOMAIN_ROUTE_TABLE (domains) ✓"
     else
-      echo "  IP rule:     iif $iface → table $ROUTE_TABLE ✗"; STATUS_OK=1
+      echo "  IP rule:     iif $iface → table $DOMAIN_ROUTE_TABLE (domains) ✗"; STATUS_OK=1
+    fi
+    if echo "$rules_output" | grep -qE "iif $iface.*lookup $SUBNET_ROUTE_TABLE"; then
+      echo "  IP rule:     iif $iface → table $SUBNET_ROUTE_TABLE (subnets) ✓"
+    else
+      echo "  IP rule:     iif $iface → table $SUBNET_ROUTE_TABLE (subnets) ✗"; STATUS_OK=1
     fi
   done
 }
 
-# Show route table entry count
+# Show route table entry counts (per table)
 show_routes() {
   local count
-  count=$(ip route show table "$ROUTE_TABLE" 2>/dev/null | wc -l)
+  count=$(ip route show table "$DOMAIN_ROUTE_TABLE" 2>/dev/null | wc -l)
   if [ "$count" -gt 0 ]; then
-    echo "  Routes:      $count in table $ROUTE_TABLE ✓"
+    echo "  Domains:     $count routes in table $DOMAIN_ROUTE_TABLE ✓"
   else
-    echo "  Routes:      0 in table $ROUTE_TABLE ✗"; STATUS_OK=1
+    echo "  Domains:     0 routes in table $DOMAIN_ROUTE_TABLE ✗"; STATUS_OK=1
+  fi
+
+  count=$(ip route show table "$SUBNET_ROUTE_TABLE" 2>/dev/null | wc -l)
+  if [ "$count" -gt 0 ]; then
+    echo "  Subnets:     $count routes in table $SUBNET_ROUTE_TABLE ✓"
+  else
+    echo "  Subnets:     0 routes in table $SUBNET_ROUTE_TABLE ✗"; STATUS_OK=1
   fi
 }
 
@@ -117,16 +135,18 @@ show_download_iface() {
   fi
 }
 
-# Show DNS resolver used for domain resolution (re-probes live)
+# Show DNS resolver used for domain resolution (re-probes live).
+# Uses detect_dns_port() from lib/ip.sh.
 show_dns_resolver() {
-  if [ -n "${DNS_FULL_RESOLVER_PORT:-}" ]; then
-    echo "  DNS:         localhost:$DNS_FULL_RESOLVER_PORT (configured)"
-  elif dig +short +time=1 +tries=1 localhost @localhost -p 6153 >/dev/null 2>&1; then
-    echo "  DNS:         localhost:6153 (SmartDNS no-speed-check)"
-  elif dig +short +time=1 +tries=1 localhost @localhost -p 6053 >/dev/null 2>&1; then
-    echo "  DNS:         localhost:6053 (SmartDNS)"
-  else
+  local result port label
+  result=$(detect_dns_port)
+  port="${result%% *}"
+  label="${result#* }"
+
+  if [ "$port" = "0" ]; then
     echo "  DNS:         system resolver"
+  else
+    echo "  DNS:         localhost:$port ($label)"
   fi
 }
 
@@ -169,11 +189,11 @@ show_version() {
   fi
 }
 
-# Show background update processes (if any _refresh_if_stale or update scripts are running)
+# Show background update processes (if any update scripts are running)
 show_background() {
   local pids
   # shellcheck disable=SC2009
-  pids=$(ps 2>/dev/null | grep -E 'update-(subnets|domains)\.sh|_refresh_if_stale' | grep -v grep | awk '{print $1}' | tr '\n' ' ')
+  pids=$(ps 2>/dev/null | grep -E 'update-(subnets|domains)\.sh' | grep -v grep | awk '{print $1}' | tr '\n' ' ')
   if [ -n "$pids" ]; then
     echo "  Background:  update running (PIDs: ${pids})"
   else

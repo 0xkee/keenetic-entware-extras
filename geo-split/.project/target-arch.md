@@ -59,24 +59,26 @@ Backup: `backups/router-1-unblock-20260407/`
 
 ### Routing Tables
 - Keenetic fwmark-based: tables 4096–4115, 16384–16401 (DO NOT use fwmark — conflicts with NDM)
-- Table `1000` reserved for geo-split/unblock (route-based: `ip rule iif br0 table 1000`)
+- Tables `1000` (domains) + `1001` (subnets) reserved for geo-split (route-based: `ip rule iif br0 table 1000/1001`)
 
 ## Target Architecture (geo-split/)
 
-### Routing Modes
+### Routing (ROUTE_OUT / ROUTE_IN)
 
-geo-split supports 3 routing modes via `ROUTE_MODE` in `config/config.sh`:
+geo-split uses two config variables instead of multiple mode/interface combos:
 
-| Mode | Target Interface | Description |
-|------|-----------------|-------------|
-| `bypass` | `ISP_INTERFACE` (or auto-detect) | GEO traffic goes directly via ISP, bypassing VPN |
-| `vpn` | `VPN_INTERFACE` | GEO traffic is routed through VPN tunnel |
-| `auto` | auto-detect via `ip route show default` | Same as bypass with automatic ISP interface detection |
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `ROUTE_OUT` | Target outgoing interface for matched GEO traffic | `"auto"` |
+| `ROUTE_IN` | Source LAN interfaces for `ip rule iif` | `"br0"` |
 
-**Interface resolution logic** (`resolve_target_interface()` in `apply-routes.sh`):
-- `bypass`: uses `ISP_INTERFACE` if set, otherwise auto-detects via default route
-- `vpn`: uses `VPN_INTERFACE` directly
-- `auto`: always auto-detects ISP interface from `ip route show default`
+**ROUTE_OUT semantics:**
+- `"auto"` or empty → auto-detect ISP interface from `ip route show default`
+- Explicit name (e.g. `"lte_br1"`, `"nwg0"`, `"ppp0"`) → use directly
+
+**Interface resolution logic** (`resolve_target_interface()` in `attach-rules.sh`):
+- `ROUTE_OUT=auto` or empty: calls `detect_isp_interface()` (parses default route)
+- `ROUTE_OUT=<name>`: uses the value directly as target interface
 
 ### Project Structure
 ```
@@ -85,13 +87,16 @@ geo-split/
 │   ├── target-arch.md       # this file
 │   └── target-code.md       # code standards
 ├── config/
-│   └── config.sh            # ROUTE_MODE, interfaces, ipset, URLs
+│   └── config.sh            # ROUTE_OUT, ROUTE_IN, URLs
 ├── lists/
 │   └── *.cidr               # CIDR lists (downloaded)
 ├── scripts/
-│   ├── apply-routes.sh      # resolve interface + ipset + ip rule
-│   ├── update-domains.sh    # download/update CIDR lists
-│   └── install.sh           # install hooks, cron, symlinks
+│   ├── attach-rules.sh      # ip rules only (connect LAN to tables)
+│   ├── detach-rules.sh      # remove ip rules + flush route tables
+│   ├── ndm-hook.sh          # NDM interface up/down hook
+│   ├── status.sh            # diagnostic status
+│   ├── update-domains.sh    # resolve DNS + fill table 1000 (domains)
+│   └── update-subnets.sh    # download GeoIP + fill table 1001 (subnets)
 └── README.md
 ```
 

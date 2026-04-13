@@ -1,42 +1,28 @@
 #!/opt/bin/sh
-# geo-bypass init script for Entware.
-# Installed to /opt/etc/init.d/S99geo-bypass by install.sh.
+# geo-split init script for Entware.
+# Installed to /opt/etc/init.d/S99geo-split by install.sh.
 # INSTALL_DIR is patched by install.sh via sed to match actual install path.
 # shellcheck disable=SC3043  # 'local' supported by ash/busybox sh
 # shellcheck disable=SC1091  # sourced files resolved at runtime on router
 set -eu
 
-INSTALL_DIR="/opt/keenetic-entware-extras/geo-bypass"
+INSTALL_DIR="/opt/keenetic-entware-extras/geo-split"
 SCRIPTS="$INSTALL_DIR/scripts"
 _CONFIG_DIR="$INSTALL_DIR/config"
 # shellcheck source=/dev/null
 . "$_CONFIG_DIR/config.sh"
 
-# Background helper: refresh stale caches, re-activate if data changed
-_refresh_if_stale() {
-    local need=0
-    if "$SCRIPTS/update-subnets.sh"; then need=1; fi
-    if "$SCRIPTS/update-domains.sh"; then need=1; fi
-    if [ "$need" -eq 1 ]; then
-      "$SCRIPTS/apply-routes.sh"
-    fi
-}
-
 case "${1:-}" in
   start)
-    echo "Starting geo-bypass..."
-    if [ ! -f "$SUBNET_LIST_FILE" ]; then
-      # Cold start: no cache — download synchronously
-      "$SCRIPTS/update-subnets.sh" --force || true
-      "$SCRIPTS/update-domains.sh" || true
-    fi
-    # Single activation pass
+    echo "Starting geo-split..."
+    # Cold start: run sequentially to avoid temp-file conflicts on low-RAM routers
+    "$SCRIPTS/update-subnets.sh"
+    "$SCRIPTS/update-domains.sh"
+    # Connect LAN to tables
     "$SCRIPTS/attach-rules.sh"
-    # Background: refresh stale caches + re-activate if changed
-    _refresh_if_stale &
     ;;
   stop)
-    echo "Stopping geo-bypass..."
+    echo "Stopping geo-split..."
     "$SCRIPTS/detach-rules.sh"
     ;;
   restart)
@@ -47,29 +33,31 @@ case "${1:-}" in
   status)
     "$SCRIPTS/status.sh"
     ;;
+  refresh)
+    # Cron: loaders check freshness + fill tables if stale. No ip rules.
+    "$SCRIPTS/update-subnets.sh" &
+    "$SCRIPTS/update-domains.sh" &
+    wait
+    ;;
   update)
-    echo "Updating geo-bypass (subnets + domains)..."
-    "$SCRIPTS/update-subnets.sh" --force || true
-    "$SCRIPTS/update-domains.sh" --force || true
-    "$SCRIPTS/apply-routes.sh"
+    echo "Updating geo-split (subnets + domains)..."
+    "$SCRIPTS/update-subnets.sh" --force &
+    "$SCRIPTS/update-domains.sh" --force &
+    wait
     echo "Update complete."
     ;;
   update-subnets)
     echo "Updating subnets..."
-    if "$SCRIPTS/update-subnets.sh" --force; then
-      "$SCRIPTS/apply-routes.sh"
-    fi
+    "$SCRIPTS/update-subnets.sh" --force
     echo "Subnet update complete."
     ;;
   update-domains)
     echo "Updating domains..."
-    if "$SCRIPTS/update-domains.sh" --force; then
-      "$SCRIPTS/attach-rules.sh"
-    fi
+    "$SCRIPTS/update-domains.sh" --force
     echo "Domain update complete."
     ;;
   *)
-    echo "Usage: $0 {start|stop|restart|status|update|update-subnets|update-domains}"
+    echo "Usage: $0 {start|stop|restart|status|refresh|update|update-subnets|update-domains}"
     exit 1
     ;;
 esac

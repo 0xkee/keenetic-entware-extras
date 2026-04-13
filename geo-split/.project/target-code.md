@@ -21,9 +21,9 @@ Inherits all rules from root [`.project/target-code.md`](../../.project/target-c
 - `dig @localhost` resolves through SmartDNS on port 6053
 
 ### Routing Specifics
-- `ipset` hash:net — stores GEO CIDRs, loaded via `ipset restore` + atomic `swap`
-- `ip rule add iif br0 table 1000 priority 100` — LAN traffic uses custom route table
-- Per-subnet routes in table 1000 via `ip-full -batch` (~13K routes in ~1s)
+- `ip rule add iif br0 table 1000 priority 50` — domains table
+- `ip rule add iif br0 table 1001 priority 51` — subnets table
+- Per-subnet routes in table 1001 + domain /32 routes in table 1000 via `ip-full -batch`
 - Fallback: BusyBox `ip route add` loop if `ip-full` not installed
 
 ### Loader Pipe Convention

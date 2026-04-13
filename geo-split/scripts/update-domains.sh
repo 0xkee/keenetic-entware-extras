@@ -1,5 +1,5 @@
 #!/opt/bin/sh
-# Resolve domains from list via dig and cache resulting IPs.
+# Resolve domains from list via dig, cache IPs, and fill routing table.
 # shellcheck disable=SC3043  # 'local' supported by ash/busybox sh
 # shellcheck disable=SC1091  # sourced files resolved at runtime on router
 set -eu
@@ -7,6 +7,7 @@ set -eu
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/common.sh"
 . "$SCRIPT_DIR/../../lib/lists.sh"
+. "$SCRIPT_DIR/../../lib/ip.sh"
 _CONFIG_DIR="$(cd "$SCRIPT_DIR/../config" && pwd)"
 . "$_CONFIG_DIR/config.sh"
 
@@ -17,32 +18,21 @@ filter_private_ips() {
     -e '^(0\.|127\.|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.|255\.255\.255\.255)'
 }
 
-# Detect best DNS resolver for full A-record resolution
+# Detect best DNS resolver for full A-record resolution.
+# Sets DNS_ARGS for dig commands. Uses detect_dns_port() from lib/ip.sh.
 detect_dns_resolver() {
-  # Explicit override from config
-  if [ -n "${DNS_FULL_RESOLVER_PORT:-}" ]; then
-    DNS_ARGS="@localhost -p $DNS_FULL_RESOLVER_PORT"
-    log "Using configured DNS resolver: localhost:$DNS_FULL_RESOLVER_PORT"
-    return
-  fi
+  local result port label
+  result=$(detect_dns_port)
+  port="${result%% *}"
+  label="${result#* }"
 
-  # Auto-detect: probe SmartDNS no-speed-check port (6153)
-  if dig +short +time=1 +tries=1 localhost @localhost -p 6153 >/dev/null 2>&1; then
-    DNS_ARGS="@localhost -p 6153"
-    log "Auto-detected DNS resolver: localhost:6153 (SmartDNS no-speed-check)"
-    return
+  if [ "$port" = "0" ]; then
+    DNS_ARGS=""
+    log "Using system DNS resolver"
+  else
+    DNS_ARGS="@localhost -p $port"
+    log "Using DNS resolver: localhost:$port ($label)"
   fi
-
-  # Fallback: probe SmartDNS main port (6053)
-  if dig +short +time=1 +tries=1 localhost @localhost -p 6053 >/dev/null 2>&1; then
-    DNS_ARGS="@localhost -p 6053"
-    log "Auto-detected DNS resolver: localhost:6053 (SmartDNS)"
-    return
-  fi
-
-  # Last resort: system resolver
-  DNS_ARGS=""
-  log "Using system DNS resolver"
 }
 
 # Resolve all domains and update cache
@@ -103,10 +93,27 @@ resolve_domains() {
   log "Resolved $domain_count domains: $unique_count unique IPs ($ip_count total, $private_count private skipped)"
 }
 
+# Fill domain routing table from cached resolved IPs
+_fill_domain_table() {
+  local dev
+  dev=$(resolve_target_interface) || {
+    log "No target interface, domain table fill deferred"
+    return 0
+  }
+  log "Route out: $dev"
+  fill_routes_batch "$DOMAIN_ROUTE_TABLE" "$DOMAINS_CACHE_FILE" "$dev" host
+}
+
 # --- main ---
 main() {
-  local force="${1:-}"
+  local arg="${1:-}"
   local update_interval="${DOMAINS_UPDATE_INTERVAL:-3600}"
+
+  # --refill: fill table from existing cache (no resolve, for NDM hook UP)
+  if [ "$arg" = "--refill" ]; then
+    _fill_domain_table
+    return 0
+  fi
 
   # 0 = domain updates disabled
   if [ "$update_interval" = "0" ]; then
@@ -114,33 +121,20 @@ main() {
     return 10
   fi
 
-  if [ "$force" = "--force" ] || ! is_cache_fresh "$DOMAINS_CACHE_FILE" "$update_interval"; then
-    local t_start t_end old_cache
-    old_cache="${DOMAINS_CACHE_FILE}.old"
-
-    # Save old cache for comparison
-    if [ -f "$DOMAINS_CACHE_FILE" ]; then
-      cp "$DOMAINS_CACHE_FILE" "$old_cache"
-    fi
-
+  if [ "$arg" = "--force" ] || ! is_cache_fresh "$DOMAINS_CACHE_FILE" "$update_interval"; then
+    local t_start t_end
     t_start=$(date +%s)
     detect_dns_resolver
     resolve_domains
     t_end=$(date +%s)
     log "Domain update completed ($((t_end - t_start))s)"
-
-    if [ ! -f "$old_cache" ] || ! cmp -s "$old_cache" "$DOMAINS_CACHE_FILE"; then
-      log "Domain cache changed"
-      rm -f "$old_cache"
-      return 0  # data changed → caller should re-activate
-    else
-      log "Domain cache unchanged"
-      rm -f "$old_cache"
-      return 10  # no changes → no re-activation needed
-    fi
+    _fill_domain_table
+    return 0  # resolved + table filled
   fi
+  # Cache fresh — still fill the table (may be empty after restart)
+  _fill_domain_table
   log "Domain cache is fresh, skipping update"
-  return 10   # cache fresh → no re-activation needed
+  return 0
 }
 
 main "$@"

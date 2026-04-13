@@ -1,7 +1,8 @@
 #!/opt/bin/sh
 # NDM ifstatechanged hook for geo-split.
-# Reacts to VPN/ISP interface up/down events.
+# Reacts to target interface up/down events.
 # Installed as symlink: /opt/etc/ndm/ifstatechanged.d/geo-split-hook
+# shellcheck disable=SC3043  # 'local' supported by ash/busybox sh
 # shellcheck disable=SC1091  # sourced files resolved at runtime on router
 set -eu
 
@@ -16,22 +17,19 @@ CONFIG="$HOOK_DIR/../config/config.sh"
 
 # Extract only needed variables from config
 # (faster than full source — only simple vars, no path computation)
-eval "$(grep -E '^(ROUTE_MODE|ISP_INTERFACE|VPN_INTERFACE|ROUTE_TABLE|RULE_PRIORITY|LAN_INTERFACES)=' "$CONFIG")"
+eval "$(grep -E '^(ROUTE_OUT|DOMAIN_ROUTE_TABLE|DOMAIN_RULE_PRIORITY|SUBNET_ROUTE_TABLE|SUBNET_RULE_PRIORITY|ROUTE_IN)=' "$CONFIG")"
 
 # NDM hook filter
 [ "${1:-}" != "hook" ] && exit 0
 
 # Determine which interface to listen for
 TARGET_IFACE=""
-case "$ROUTE_MODE" in
-  bypass|auto)
-    TARGET_IFACE="${ISP_INTERFACE:-}"
-    ;;
-  vpn)
-    TARGET_IFACE="$VPN_INTERFACE"
+case "${ROUTE_OUT:-auto}" in
+  auto|"")
+    TARGET_IFACE=""   # auto mode: match interface with default route
     ;;
   *)
-    exit 0
+    TARGET_IFACE="$ROUTE_OUT"
     ;;
 esac
 
@@ -46,13 +44,22 @@ case "${connected:-}-${link:-}-${up:-}" in
     if [ -z "$TARGET_IFACE" ]; then
       ip route show default | grep -q "dev ${system_name:-}" || exit 0
     fi
-    logger -t "$LOG_TAG" "Interface ${system_name:-} up, attaching rules"
-    "$HOOK_DIR/attach-rules.sh" &
+    logger -t "$LOG_TAG" "Interface ${system_name:-} up, filling tables + attaching rules"
+    {
+      sleep 2  # debounce: wait for interface to stabilize
+      "$HOOK_DIR/update-subnets.sh" --refill &
+      "$HOOK_DIR/update-domains.sh" --refill &
+      wait
+      "$HOOK_DIR/attach-rules.sh"
+    } &
     ;;
   no-down-*)
-    # In auto mode (empty TARGET_IFACE), only react if our route table uses this interface
+    # In auto mode (empty TARGET_IFACE), only react if our tables use this interface
     if [ -z "$TARGET_IFACE" ]; then
-      ip route show table "$ROUTE_TABLE" 2>/dev/null | grep -q "dev ${system_name:-}" || exit 0
+      has_routes=0
+      ip route show table "$SUBNET_ROUTE_TABLE" 2>/dev/null | grep -q "dev ${system_name:-}" && has_routes=1
+      ip route show table "$DOMAIN_ROUTE_TABLE" 2>/dev/null | grep -q "dev ${system_name:-}" && has_routes=1
+      [ "$has_routes" -eq 1 ] || exit 0
     fi
     logger -t "$LOG_TAG" "Interface ${system_name:-} down, detaching rules"
     "$HOOK_DIR/detach-rules.sh"

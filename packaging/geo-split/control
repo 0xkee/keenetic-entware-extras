@@ -1,12 +1,12 @@
 Package: geo-split
-Version: 0.4.0
+Version: 0.7.0
 Architecture: all
 Maintainer: ald
-Depends: keenetic-entware-extras, geo-split-data, ip-full, curl, bind-dig
+Depends: keenetic-entware-extras, geo-split-data, ip-full, curl, bind-dig, aggregate
 Recommends: jq
 Description: Split routing by GeoIP subnets and domain lists for Keenetic/Entware.
  Route traffic through different network interfaces based on country IP zones
- and curated domain lists. Supports bypass, vpn, and auto modes.
+ and curated domain lists. Configurable via ROUTE_OUT (target interface) and ROUTE_IN (LAN sources).
  Uses ip rule + ip route (no iptables fwmark) for Keenetic NDM compatibility.
 Section: net
 Priority: optional

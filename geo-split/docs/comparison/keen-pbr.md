@@ -97,8 +97,10 @@ flowchart LR
 ### geo-split: route-based (без fwmark)
 
 ```
-ip rule add iif br0 table 1000 priority 50
-ip route add 185.73.192.0/22 dev lte_br1 table 1000   # ×13K routes
+ip rule add iif br0 table 1000 priority 50   # domains
+ip rule add iif br0 table 1001 priority 51   # subnets
+ip route add 8.8.8.8/32 dev lte_br1 table 1000        # domain route
+ip route add 185.73.192.0/22 dev lte_br1 table 1001   # ×11K subnet routes
 ```
 
 **Механизм**: Per-subnet маршруты в custom table. Весь LAN-трафик (iif br0) проверяется по table 1000. Если destination попадает в маршрут — идёт через target interface. Если нет — проходит дальше по default route.
@@ -170,11 +172,10 @@ sysctl -w net.netfilter.nf_conntrack_fastnat=0
 ### geo-split: shell variables
 
 ```sh
-ROUTE_MODE="auto"           # bypass | vpn | auto
-ISP_INTERFACE=""            # auto-detect
-VPN_INTERFACE="nwg0"
-IPSET_NAME="geo-split"
-ROUTE_TABLE="1000"
+ROUTE_OUT="auto"            # "auto" | explicit interface name
+ROUTE_IN="br0"             # LAN interfaces for ip rule iif
+DOMAIN_ROUTE_TABLE="1000"
+SUBNET_ROUTE_TABLE="1001"
 SUBNET_URL="https://www.ipdeny.com/ipblocks/data/countries/ru.zone"
 SUBNET_LOADER="cidr-plain"
 DOMAINS_LIST_FILE="$_LISTS_DIR/domains.txt"

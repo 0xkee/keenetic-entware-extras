@@ -10,18 +10,20 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 _CONFIG_DIR="$(cd "$SCRIPT_DIR/../config" && pwd)"
 . "$_CONFIG_DIR/config.sh"
 
-# Remove ip rules and flush route table
+# Remove ip rules and flush route tables
 main() {
   # Remove iif rules for all configured LAN interfaces
   local iface
-  for iface in $LAN_INTERFACES; do
-    ip rule del iif "$iface" table "$ROUTE_TABLE" 2>/dev/null || true
+  for iface in $ROUTE_IN; do
+    ip rule del iif "$iface" table "$DOMAIN_ROUTE_TABLE" 2>/dev/null || true
+    ip rule del iif "$iface" table "$SUBNET_ROUTE_TABLE" 2>/dev/null || true
   done
 
-  # Flush all routes in the custom table
-  ip route flush table "$ROUTE_TABLE" 2>/dev/null || true
+  # Flush all routes in custom tables
+  ip route flush table "$DOMAIN_ROUTE_TABLE" 2>/dev/null || true
+  ip route flush table "$SUBNET_ROUTE_TABLE" 2>/dev/null || true
 
-  log "Rules detached (table $ROUTE_TABLE flushed, iif: $LAN_INTERFACES)"
+  log "Rules detached (tables $DOMAIN_ROUTE_TABLE,$SUBNET_ROUTE_TABLE flushed, iif: $ROUTE_IN)"
 }
 
 main

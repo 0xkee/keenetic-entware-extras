@@ -1,5 +1,5 @@
 #!/opt/bin/sh
-# Fetch and update GEO IP subnet list for selective routing.
+# Fetch GEO IP subnet list and fill routing table.
 # Supports multi-interface failover: tries each configured interface.
 # shellcheck disable=SC3043  # 'local' supported by ash/busybox sh
 # shellcheck disable=SC1091  # sourced files resolved at runtime on router
@@ -157,19 +157,39 @@ download_subnets() {
   return 1
 }
 
+# Fill subnet routing table from cached list
+_fill_subnet_table() {
+  local dev
+  dev=$(resolve_target_interface) || {
+    log "No target interface, subnet table fill deferred"
+    return 0
+  }
+  log "Route out: $dev"
+  fill_routes_batch "$SUBNET_ROUTE_TABLE" "$SUBNET_LIST_FILE" "$dev"
+}
+
 # --- main ---
 main() {
-  local force="${1:-}"
+  local arg="${1:-}"
 
-  if [ "$force" = "--force" ] || ! is_cache_fresh "$SUBNET_LIST_FILE" "$MAX_CACHE_AGE"; then
+  # --refill: fill table from existing cache (no download, for NDM hook UP)
+  if [ "$arg" = "--refill" ]; then
+    _fill_subnet_table
+    return 0
+  fi
+
+  if [ "$arg" = "--force" ] || ! is_cache_fresh "$SUBNET_LIST_FILE" "$MAX_CACHE_AGE"; then
     local t_start t_end
     t_start=$(date +%s)
     download_subnets
     t_end=$(date +%s)
     log "Subnet update completed ($((t_end - t_start))s)"
-    return 0  # data updated → caller should re-activate
+    _fill_subnet_table
+    return 0  # data updated + table filled
   fi
-  return 10   # cache fresh → no re-activation needed
+  # Cache fresh — still fill the table (may be empty after restart)
+  _fill_subnet_table
+  return 0
 }
 
 main "$@"

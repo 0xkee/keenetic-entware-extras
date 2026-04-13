@@ -16,9 +16,8 @@ if [ -f "$CRON_FILE" ]; then
     sed -i '/geo-split/d' "$CRON_FILE"
 fi
 {
-    echo "# geo-split: periodic updates (cache freshness checked internally)"
-    echo "*/15 * * * * root /opt/etc/init.d/S99geo-split update-subnets"
-    echo "*/15 * * * * root /opt/etc/init.d/S99geo-split update-domains"
+    echo "# geo-split: periodic refresh (checks cache freshness, reloads if stale)"
+    echo "*/15 * * * * root /opt/etc/init.d/S99geo-split refresh"
 } >> "$CRON_FILE"
 
 # 3. Restart crond to pick up changes

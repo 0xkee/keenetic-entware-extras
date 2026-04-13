@@ -1,10 +1,11 @@
 Package: keenetic-entware-extras
-Version: 0.2.0
+Version: 0.3.1
 Architecture: all
 Maintainer: ald
 Description: Shared shell libraries for keenetic-entware-extras packages.
  Provides common.sh (logging, validation), lists.sh (list processing with
- @include support, deduplication), and ip.sh (CIDR aggregation).
+ @include support, deduplication), and ip.sh (CIDR aggregation, ISP interface
+ detection, DNS resolver auto-detection).
  Base package for geo-split and others.
 Section: lib
 Priority: optional

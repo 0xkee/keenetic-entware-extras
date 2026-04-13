@@ -12,6 +12,10 @@ GEOIP_DIR="$SCRIPT_DIR/../lists/geoip"
 # shellcheck source=../../lib/ip.sh disable=SC1091
 . "$PROJECT_ROOT/lib/ip.sh"
 
+# shellcheck source=../../lib/common.sh disable=SC1091
+. "$PROJECT_ROOT/lib/common.sh"
+require_cmd aggregate
+
 # Countries to fetch (ISO 3166-1 alpha-2, lowercase)
 COUNTRIES=(ru)
 

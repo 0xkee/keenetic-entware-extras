@@ -7,13 +7,18 @@ Split routing для Keenetic/Entware — маршрутизация трафи�
 - 🔒 **Selected → VPN:** определённые подсети/домены маршрутизируются в VPN-туннель
 - 🌍 **GeoIP split:** автоматическое разделение трафика по гео-принадлежности IP
 
-## Режимы работы
+## Маршрутизация (ROUTE_OUT / ROUTE_IN)
 
-| Режим | Описание | Целевой интерфейс |
-|-------|----------|-------------------|
-| `bypass` | GEO-трафик идёт напрямую через ISP, минуя VPN | `ISP_INTERFACE` (или auto-detect) |
-| `vpn` | GEO-трафик направляется в VPN-туннель | `VPN_INTERFACE` |
-| `auto` | Автоопределение ISP-интерфейса, GEO-трафик через ISP | `ip route show default` |
+Два ключевых параметра управляют маршрутизацией:
+
+| Параметр | Описание | По умолчанию |
+|----------|----------|--------------|
+| `ROUTE_OUT` | Куда направлять GEO-трафик (выходной интерфейс) | `"auto"` |
+| `ROUTE_IN` | Откуда берётся трафик (LAN-интерфейсы для `ip rule iif`) | `"br0"` |
+
+**Семантика `ROUTE_OUT`:**
+- `"auto"` или пустая строка → автоопределение ISP через `ip route show default`
+- Явное имя интерфейса (`"lte_br1"`, `"nwg0"`, `"ppp0"`) → использовать напрямую
 
 ## Архитектура
 
@@ -25,9 +30,10 @@ Split routing для Keenetic/Entware — маршрутизация трафи�
 
 Вместо `iptables mangle MARK` (который конфликтует с Keenetic NDM per-device routing) используется **route-based** подход:
 
-1. `ip rule add iif br0 table 1000` — весь LAN-трафик попадает в таблицу 1000
-2. Per-subnet маршруты в таблице 1000 — трафик к GEO-подсетям идёт через целевой интерфейс
-3. Трафик, не попавший ни в один маршрут таблицы 1000, проходит по обычному маршруту
+1. `ip rule add iif br0 table 1000 priority 50` — domain routes (custom /32)
+2. `ip rule add iif br0 table 1001 priority 51` — subnet routes (GeoIP CIDRs)
+3. Загрузчики fill-ят таблицы: domains → table 1000, subnets → table 1001
+4. Трафик, не попавший ни в один маршрут, проходит по обычному маршруту
 
 Подробнее о несовместимости fwmark: [docs/keenetic-fwmark-analysis.md](../docs/keenetic-fwmark-analysis.md)
 
@@ -61,7 +67,6 @@ interface down → detach-rules.sh (ip rule del + route flush)  <1 сек
 
 | Файл | Назначение |
 |------|-----------|
-| `scripts/apply-routes.sh` | Оркестратор: load-ipset + attach-rules |
 | `scripts/attach-rules.sh` | Подключить ip rule iif br0 + per-subnet маршруты (~1 сек) |
 | `scripts/detach-rules.sh` | Отключить маршрутные правила |
 | `scripts/load-ipset.sh` | Загрузить кэш-файлы (subnets + domains) в ipset |
@@ -82,45 +87,35 @@ interface down → detach-rules.sh (ip rule del + route flush)  <1 сек
 Отредактируйте `config/config.sh`:
 
 ```sh
-# Режим маршрутизации: bypass | vpn | auto
-ROUTE_MODE="auto"
+# Куда маршрутить GEO-трафик (выходной интерфейс)
+# "auto" = определить ISP автоматически из default route
+# Явно: "lte_br1", "nwg0", "ppp0" и т.д.
+ROUTE_OUT="auto"
 
-# ISP-интерфейс (для режимов bypass/auto)
-# Пустое значение = автоопределение через ip route show default
-ISP_INTERFACE=""
-
-# VPN-интерфейс (для режима vpn)
-VPN_INTERFACE="nwg0"
-
-# Имя ipset
-IPSET_NAME="geo-split"
-
-# Таблица маршрутизации
-ROUTE_TABLE="1000"
-
-# LAN-интерфейсы (через пробел)
+# Откуда берётся трафик (LAN-интерфейсы, через пробел)
 # br0 = домашняя сеть, br1 = гостевая
-LAN_INTERFACES="br0"
+ROUTE_IN="br0"
+
+# Таблицы маршрутизации (domains first, subnets second)
+DOMAIN_ROUTE_TABLE="1000"     # /32 host routes
+SUBNET_ROUTE_TABLE="1001"     # GeoIP CIDRs
 ```
 
 ### Примеры конфигурации
 
-**bypass — GEO-трафик через конкретный ISP-интерфейс:**
+**Bypass ISP — GEO-трафик через конкретный ISP-интерфейс:**
 ```sh
-ROUTE_MODE="bypass"
-ISP_INTERFACE="lte_br0"
+ROUTE_OUT="lte_br0"
 ```
 
-**vpn — GEO-трафик через WireGuard:**
+**VPN — GEO-трафик через WireGuard:**
 ```sh
-ROUTE_MODE="vpn"
-VPN_INTERFACE="nwg0"
+ROUTE_OUT="nwg0"
 ```
 
-**auto — автоопределение ISP (рекомендуется):**
+**Auto — автоопределение ISP (рекомендуется):**
 ```sh
-ROUTE_MODE="auto"
-ISP_INTERFACE=""
+ROUTE_OUT="auto"
 ```
 
 ### Параметры кэширования
@@ -234,11 +229,10 @@ Hook вызывает только `attach-rules.sh` / `detach-rules.sh` — м�
 
 ### Какой интерфейс слушает
 
-| Режим | Целевой интерфейс |
-|-------|--------------------|
-| `bypass` / `auto` + `ISP_INTERFACE` задан | Только указанный ISP-интерфейс |
-| `bypass` / `auto` + `ISP_INTERFACE` пуст | Интерфейс с default route (up) / интерфейс из route table (down) |
-| `vpn` | `VPN_INTERFACE` |
+| `ROUTE_OUT` | Целевой интерфейс |
+|-------------|--------------------|
+| `"auto"` (или пусто) | Интерфейс с default route (up) / интерфейс из route table (down) |
+| Явное имя | Только указанный интерфейс |
 
 ### Failover (multi-WAN)
 
@@ -267,17 +261,19 @@ Hook устанавливается автоматически при запус
 
 ```
 geo-split status:
-  Mode:        auto
-  Interface:   ppp0 (active in table 1000)
-  Ipset:       geo-split (8588 entries / 205KB) ✓ (obsoleted)
-  IP rule:     iif br0 → table 1000 ✓
-  Routes:      8768 in table 1000 ✓
+  Route in:    br0
+  Route out:   auto (detect ISP)
+  Active out:  ppp0 (tables 1000,1001)
+  IP rule:     iif br0 → table 1000 (domains) ✓
+  IP rule:     iif br0 → table 1001 (subnets) ✓
+  Domains:     175 routes in table 1000 ✓
+  Subnets:     8768 routes in table 1001 ✓
 
   Subnets:     cache 8m old (max 7d 0h) ✓
   Domains:     180 in cache, 8m old (max 1h 0m) ✓
   Dom sources: 1 domain(s) configured
 
-  Cron:        2 job(s) ✓
+  Cron:        1 job(s) ✓
   NDM hook:    /opt/etc/ndm/ifstatechanged.d/geo-split-hook ✓
   DL iface:    default (cached)
   DNS:         localhost:6153 (SmartDNS no-speed-check)

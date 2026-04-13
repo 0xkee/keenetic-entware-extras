@@ -14,16 +14,37 @@
 - [x] сделать строгую(!) агрегацию соседних подсетей после скачивания geo базы, добавить опцию в конфиг - по умолчанию вкл. после добавления доменов
 - [x] **Разделить на 2 пакета: `geo-split` + `geo-split-data`** — в `-data` включены списки доменов (`geo-split-data/lists/`) + агрегированные geo-ip подсети из ipdeny.com (`lists/geoip/ru.zone`), скачиваются при билде; `geo-split` зависит от `geo-split-data`
 - [x] убрать все упоминания/использования ipset (мы же их не используем?) из кода и актуальных доков
-- [ ] ошибка в кеше subnets (после добавления агрегации cidr видимо регенериться каждый раз subnets), надо поправить, т.к. препятствует нормальной работе кеша subnets
-  Subnets:     cache 8m old (max 7d 0h) ✓
-  Domains:     180 in cache, 8m old (max 1h 0m) ✓
-- [ ] добавить поддержку нескольких iface в ISP_INTERFACE
-- [ ] переменовать ifaces in conf/code to ...IN/OUT... или from/to или src/dest (как самое понятное обычному пользователю?)
+- [x] ~~ошибка в кеше subnets~~ — фикс: cron вызывает `refresh` (проверяет кеш), а не `update-subnets --force`
+- [x] ~~добавить поддержку нескольких iface в LAN_INTERFACE~~ — ROUTE_IN поддерживает space-separated интерфейсы
+- [x] ~~переименовать ifaces in conf/code to IN/OUT~~ — ROUTE_OUT (целевой) + ROUTE_IN (LAN-источники)
 - [x] переименовать в geo-split, поправить все описания в док/коде как split общего случая, с примерами о VPN & ru zone
-- [ ] refactor apply-routes нужен? и вообще проверка и рекомендации по refactro arch
+- [x] refactor apply-routes нужен? и вообще проверка и рекомендации по refactor arch
+- [x] **Разделение route tables + async reload** — план: [tables-separation-plan.md](docs/tables-separation-plan.md)
+- [ ] выбрать лицензию kee, с учетом используемых зависимостей/данных
 ---
 
 ## Выполнено
+
+### Разделение route tables + async reload (2026-04-12)
+
+- [x] **config.sh** — `DOMAIN_ROUTE_TABLE="1000"` prio 50, `SUBNET_ROUTE_TABLE="1001"` prio 51 (переименованы из ROUTE_TABLE/RULE_PRIORITY)
+- [x] **lib/ip.sh** — `resolve_target_interface()`, `fill_routes_batch()` (flush+batch load), `detect_out_iface()` (переименован из detect_isp_interface)
+- [x] **update-subnets.sh** — download + `fill_routes_batch $SUBNET_ROUTE_TABLE`, поддержка `--refill` (NDM hook)
+- [x] **update-domains.sh** — resolve + `fill_routes_batch $DOMAIN_ROUTE_TABLE ... host`, поддержка `--refill`
+- [x] **detach-rules.sh** — del rules + flush обеих таблиц
+- [x] **attach-rules.sh** — полная перезапись → только `ip rule add/del` для обеих таблиц (убраны lib/lists.sh, lib/ip.sh, load_routes_batch)
+- [x] **S99geo-split** — async loaders (`& wait`), убран `_refresh_if_stale()`, загрузчики сами fill-ят таблицы
+- [x] **ndm-hook.sh** — UP: sleep 2 debounce + refill обеих таблиц + attach (background). DOWN: проверка обеих таблиц + detach
+- [x] **status.sh** — per-table ip rules display, per-table route counts, active out из обеих таблиц
+- [x] **shellcheck** — все файлы проходят `shellcheck -x -s sh` без ошибок
+
+### Архитектурный cleanup (2026-04-12)
+
+- [x] **apply-routes.sh удалён** — мёртвый indirection (16 строк, после удаления ipset единственный вызов — attach-rules.sh)
+- [x] **S99geo-split переименован** — 5× `geo-bypass` → `geo-split` (включая INSTALL_DIR path)
+- [x] **detect_isp_interface() → lib/ip.sh** — устранено дублирование (attach-rules.sh + status.sh)
+- [x] **detect_dns_port() → lib/ip.sh** — устранено дублирование DNS auto-detect (update-domains.sh + status.sh)
+- [x] **Документы обновлены** — target-arch.md, README.md, opkg-packaging-plan.md, workspace config
 
 ### Удаление ipset dead code (2026-04-12)
 

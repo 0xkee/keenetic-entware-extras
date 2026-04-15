@@ -1,5 +1,5 @@
 Package: geo-split
-Version: 0.7.0
+Version: 0.8.0
 Architecture: all
 Maintainer: ald
 Depends: keenetic-entware-extras, geo-split-data, ip-full, curl, bind-dig, aggregate

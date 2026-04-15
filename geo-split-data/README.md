@@ -11,6 +11,16 @@ GeoIP subnet data and domain lists for [geo-split](../geo-split/).
 | `lists/geoip/*.zone` | Pre-built country IP subnets from [ipdeny.com](https://www.ipdeny.com) |
 | `scripts/fetch-zones.sh` | Download & aggregate zone files (build-time script) |
 
+## Установка
+
+```sh
+opkg install /tmp/geo-split-data_0.3.0_all.ipk
+```
+
+> **conffiles:** Файлы `lists/domains.txt` и `lists/ru-whitelist.txt` объявлены как conffiles —
+> при `opkg upgrade` пользовательские изменения **не перезатираются**.
+> opkg сохранит вашу версию и создаст `.ipk`-версию рядом с суффиксом `.opkg-new`.
+
 ## Deploy path
 
 ```
@@ -19,13 +29,22 @@ GeoIP subnet data and domain lists for [geo-split](../geo-split/).
     domains.txt
     ru-whitelist.txt
     geoip/
-      ru.zone          ← aggregated CIDRs
+      ru.zone          ← Russia
+      by.zone          ← Belarus
+      kz.zone          ← Kazakhstan
+      am.zone          ← Armenia
+      kg.zone          ← Kyrgyzstan
 ```
 
 ## Zone files
 
 Zone files are fetched from ipdeny.com during package build (`scripts/fetch-zones.sh`).
-CIDRs are aggregated (merged overlapping/adjacent) to reduce ipset/route count.
+CIDRs are aggregated (merged overlapping/adjacent) to reduce route count.
+
+Included zones (EAEU countries): `ru`, `by`, `kz`, `am`, `kg`.
+
+By default, geo-split uses `ru.zone`. To use a different zone, change `SUBNET_URL`
+or `SUBNET_LIST_FILE` in `geo-split/config/config.sh`.
 
 ### Manual fetch
 
@@ -46,5 +65,6 @@ Zone fetching is integrated into `scripts/build-ipk.sh`:
 ## Package info
 
 - **Package:** `geo-split-data`
+- **Version:** 0.3.0
 - **Depends:** `keenetic-entware-extras`
 - **Architecture:** all

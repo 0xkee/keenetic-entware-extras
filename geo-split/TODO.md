@@ -20,10 +20,25 @@
 - [x] переименовать в geo-split, поправить все описания в док/коде как split общего случая, с примерами о VPN & ru zone
 - [x] refactor apply-routes нужен? и вообще проверка и рекомендации по refactor arch
 - [x] **Разделение route tables + async reload** — план: [tables-separation-plan.md](docs/tables-separation-plan.md)
-- [ ] выбрать лицензию kee, с учетом используемых зависимостей/данных
+- [x] выбрать лицензию kee, с учетом используемых зависимостей/данных — MIT (LICENSE в корне)
+- [ ] надо изучить, удаляются ли старые домены из роутинга, ещё вопрос как лучше и надоли добавить опцию в конфиг
 ---
 
 ## Выполнено
+
+### Подготовка к публикации на форуме (2026-04-13)
+
+- [x] **Лицензия MIT** — файл `LICENSE` (Copyright (c) 2026 KEE Team)
+- [x] **README обновлены** — корневой, geo-split, geo-split-data: убраны bash/ipset/scp, добавлен opkg install, актуальные flows/параметры
+- [x] **README в .ipk** — `build-ipk.sh` включает README.md в каждый пакет
+- [x] **Тестирование** — сборка 3 пакетов, деплой на router-1, conffiles upgrade ✓, dependency warning ✓
+- [x] **Черновик поста** — `docs/forum-post-draft.md`
+
+### Зоны ЕАЭС в geo-split-data (2026-04-15)
+
+- [x] **fetch-zones.sh** — `COUNTRIES=(ru by kz am kg)` (Россия, Беларусь, Казахстан, Армения, Кыргызстан)
+- [x] **geo-split-data v0.3.0** — bump версии, README обновлён с EAEU зонами
+- [x] **Зоны скачаны** — ru: 8588, by: 102, kz: 579, am: 183, kg: 109 агрегированных CIDRs
 
 ### Разделение route tables + async reload (2026-04-12)
 

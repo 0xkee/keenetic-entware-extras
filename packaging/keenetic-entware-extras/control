@@ -1,5 +1,5 @@
 Package: keenetic-entware-extras
-Version: 0.3.1
+Version: 0.4.0
 Architecture: all
 Maintainer: ald
 Description: Shared shell libraries for keenetic-entware-extras packages.

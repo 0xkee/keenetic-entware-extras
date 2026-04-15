@@ -1,28 +1,31 @@
-# Keenetic Entware Scripts
+# Keenetic Entware Extras
 
-Shell-скрипты для Keenetic роутера с Entware.
+Shell-скрипты и `.ipk` пакеты для Keenetic-роутеров с Entware.
+Включает подпроекты: **geo-split** (split routing по GeoIP/доменам), **smartdns-ru** (DNS split).
 
-## Структура
+## Пакеты
 
+| Пакет | Версия | Описание |
+|-------|--------|----------|
+| `keenetic-entware-extras` | 0.3.1 | Базовый пакет — shared libraries: `lib/common.sh`, `lib/ip.sh`, `lib/lists.sh` |
+| `geo-split` | 0.7.0 | Split routing по GeoIP + доменам. Зависит от `keenetic-entware-extras` |
+| `geo-split-data` | 0.1.0 | Данные: списки доменов, GeoIP-зоны, whitelist. Conffiles — сохраняются при upgrade |
+
+## Установка через opkg
+
+Основной способ установки для пользователей.
+
+```sh
+# Скопировать .ipk файлы на роутер
+scp *.ipk root@<router-ip>:/tmp/
+
+# Установить (порядок важен — сначала base, потом data, потом geo-split)
+opkg install /tmp/keenetic-entware-extras_0.3.1_all.ipk
+opkg install /tmp/geo-split-data_0.1.0_all.ipk
+opkg install /tmp/geo-split_0.7.0_all.ipk
 ```
-keenetic-entware-extras/
-├── scripts/              # общие скрипты
-├── lib/                  # переиспользуемые функции
-│   └── common.sh
-├── config/               # шаблоны конфигов
-├── geo-split/           # подпроект: split routing — GeoIP/домены через разные интерфейсы
-│   ├── scripts/
-│   ├── config/
-│   ├── lists/
-│   └── README.md
-├── smartdns-ru/             # подпроект: кастомный конфиг SmartDNS для RU zone DNS split
-│   ├── scripts/
-│   ├── config/
-│   └── README.md
-├── .project/             # targets для Roo
-├── .roo/                 # конфигурация Roo
-└── .vscode/              # конфигурация VSCode
-```
+
+Зависимости (`ip-full`, `curl`, `bind-dig`, `aggregate`) устанавливаются автоматически через opkg.
 
 ## Подпроекты
 
@@ -32,27 +35,60 @@ Split routing для Keenetic: маршрутизация трафика по Ge
 
 ### [smartdns-ru](smartdns-ru/README.md)
 
-Кастомный конфиг SmartDNS для разделения DNS-запросов по зонам: `.ru`/`.рф`/`.su` → Yandex/AdGuard (DoT), остальное → Cloudflare/Google (DoT/DoH).
+DNS split — разделение DNS-запросов по зонам (`.ru`/`.рф`/`.su` → Yandex/AdGuard, остальное → Cloudflare/Google). В разработке, не пакетируется.
+
+## Структура проекта
+
+```
+keenetic-entware-extras/
+├── lib/                  # shared libraries
+│   ├── common.sh         # logging, error handling
+│   ├── ip.sh             # IP/interface utilities
+│   └── lists.sh          # list processing (@include, dedup)
+├── geo-split/            # split routing подпроект
+│   ├── scripts/          # attach, detach, update, status, ndm-hook
+│   ├── config/           # config.sh
+│   ├── loaders/          # CIDR загрузчики (plain, RIPE JSON)
+│   ├── rootfs/           # init.d/S99geo-split
+│   └── docs/             # архитектура, сравнения
+├── geo-split-data/       # данные (списки, GeoIP-зоны)
+│   ├── lists/            # domains.txt, ru-whitelist.txt
+│   └── scripts/          # fetch-zones.sh
+├── smartdns-ru/          # DNS split (WIP, не пакетируется)
+├── packaging/            # .ipk метаданные
+│   ├── keenetic-entware-extras/
+│   ├── geo-split/
+│   └── geo-split-data/
+├── scripts/              # build-ipk.sh
+├── docs/                 # документация
+└── LICENSE               # MIT
+```
 
 ## Требования
 
 - Keenetic с установленным Entware
-- `bash` (`opkg install bash`)
-- `curl` (`opkg install curl`)
-- `smartdns` (`opkg install smartdns`)
-
-## Деплой на роутер
-
-```bash
-scp -r scripts/ lib/ root@192.168.1.1:/opt/keenetic-entware-extras/
-```
+- Зависимости устанавливаются автоматически через opkg:
+  - `ip-full` — iproute2 для policy routing
+  - `curl` — загрузка GeoIP-данных
+  - `bind-dig` — DNS-резолвинг доменов
+  - `aggregate` — агрегация CIDR-подсетей
 
 ## Разработка
 
-```bash
-# Проверка скриптов shellcheck
-shellcheck -x -s bash scripts/*.sh
+Для контрибьюторов и разработчиков.
 
-# Проверить конкретный файл
-shellcheck -x -s bash geo-split/scripts/update-domains.sh
+```sh
+# Линтинг
+shellcheck -x -s sh scripts/*.sh
+shellcheck -x -s sh geo-split/scripts/*.sh
+
+# Деплой для разработки (роутеры без sftp-server)
+scp -O -r lib/ geo-split/ root@<router-ip>:/opt/keenetic-entware-extras/
+
+# Сборка всех .ipk пакетов
+./scripts/build-ipk.sh all
 ```
+
+## Лицензия
+
+[MIT](LICENSE)

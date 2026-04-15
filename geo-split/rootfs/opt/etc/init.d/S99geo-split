@@ -20,10 +20,14 @@ case "${1:-}" in
     "$SCRIPTS/update-domains.sh"
     # Connect LAN to tables
     "$SCRIPTS/attach-rules.sh"
+    # Write PID file (mtime used for uptime tracking)
+    mkdir -p "$(dirname "$PIDFILE")"
+    echo $$ > "$PIDFILE"
     ;;
   stop)
     echo "Stopping geo-split..."
     "$SCRIPTS/detach-rules.sh"
+    rm -f "$PIDFILE"
     ;;
   restart)
     "$0" stop

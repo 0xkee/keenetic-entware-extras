@@ -17,7 +17,8 @@ GEOIP_DIR="$SCRIPT_DIR/../lists/geoip"
 require_cmd aggregate
 
 # Countries to fetch (ISO 3166-1 alpha-2, lowercase)
-COUNTRIES=(ru)
+# EAEU (Eurasian Economic Union): RU, BY, KZ, AM, KG
+COUNTRIES=(ru by kz am kg)
 
 # ipdeny.com base URL
 IPDENY_BASE="https://www.ipdeny.com/ipblocks/data/countries"

@@ -87,3 +87,6 @@ DOMAINS_CACHE_FILE="$_LISTS_DIR/domains-resolved.txt"
 # Domain resolution update interval in seconds (1 hour)
 # 0 = disable automatic domain updates
 DOMAINS_UPDATE_INTERVAL=3600
+
+# PID file (written on start, removed on stop; mtime used for uptime)
+PIDFILE="/opt/var/run/geo-split.pid"

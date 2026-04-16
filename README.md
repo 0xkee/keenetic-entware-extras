@@ -10,6 +10,7 @@ Shell-скрипты и `.ipk` пакеты для Keenetic-роутеров с 
 | `keenetic-entware-extras` | 0.3.1 | Базовый пакет — shared libraries: `lib/common.sh`, `lib/ip.sh`, `lib/lists.sh` |
 | `geo-split` | 0.7.0 | Split routing по GeoIP + доменам. Зависит от `keenetic-entware-extras` |
 | `geo-split-data` | 0.1.0 | Данные: списки доменов, GeoIP-зоны, whitelist. Conffiles — сохраняются при upgrade |
+| `smartdns-ru` | 0.1.2 | Split DNS: .ru/.рф → российские DNS, остальное → Google/Cloudflare DoH. Зависит от `smartdns`, `ca-certificates` |
 
 ## Установка через opkg
 
@@ -35,7 +36,7 @@ Split routing для Keenetic: маршрутизация трафика по Ge
 
 ### [smartdns-ru](smartdns-ru/README.md)
 
-DNS split — разделение DNS-запросов по зонам (`.ru`/`.рф`/`.su` → Yandex/AdGuard, остальное → Cloudflare/Google). В разработке, не пакетируется.
+Split DNS для российского интернета: `.ru`/`.рф`/`.su` → Yandex/AdGuard DoT, всё остальное → Google/Cloudflare DoH. Deployed, v0.1.2.
 
 ## Структура проекта
 
@@ -54,11 +55,14 @@ keenetic-entware-extras/
 ├── geo-split-data/       # данные (списки, GeoIP-зоны)
 │   ├── lists/            # domains.txt, ru-whitelist.txt
 │   └── scripts/          # fetch-zones.sh
-├── smartdns-ru/          # DNS split (WIP, не пакетируется)
+├── smartdns-ru/          # DNS split (v0.1.2)
+│   ├── config/           # smartdns.conf
+│   ├── scripts/          # status.sh
 ├── packaging/            # .ipk метаданные
 │   ├── keenetic-entware-extras/
 │   ├── geo-split/
-│   └── geo-split-data/
+│   ├── geo-split-data/
+│   └── smartdns-ru/
 ├── scripts/              # build-ipk.sh
 ├── docs/                 # документация
 └── LICENSE               # MIT

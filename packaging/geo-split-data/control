@@ -1,5 +1,5 @@
 Package: geo-split-data
-Version: 0.3.0
+Version: 0.3.1
 Architecture: all
 Maintainer: ald
 Depends: keenetic-entware-extras

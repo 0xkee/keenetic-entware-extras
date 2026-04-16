@@ -12,7 +12,7 @@ Split routing для Keenetic/Entware — маршрутизация трафи�
 Основной способ — через opkg:
 
 ```sh
-opkg install geo-split_0.7.0_all.ipk
+opkg install geo-split_0.8.2_all.ipk
 ```
 
 Зависимости (`keenetic-entware-extras`, `geo-split-data`, `ip-full`, `curl`, `bind-dig`, `aggregate`) устанавливаются автоматически.
@@ -244,7 +244,7 @@ geo-split status:
     DNS:         localhost:6153 (SmartDNS no-speed-check)
     Background:  idle
     Loader:      cidr-plain
-    Version:     0.8.0
+    Version:     0.8.2
 ```
 
 **Exit code:** `0` — всё в порядке, `1` — есть проблемы (✗ в выводе).

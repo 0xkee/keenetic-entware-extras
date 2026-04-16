@@ -94,7 +94,9 @@ list_dedup() {
   awk '!seen[$0]++'
 }
 
-# Count meaningful lines (non-empty, non-comment) without @include processing.
+# list_count <file>
+# Counts non-comment/non-empty lines in <file> WITHOUT expanding @include
+# directives. For recursive count use list_count_expanded().
 # Args: $1 - file path
 # stdout: number of meaningful lines
 # Returns: 0 on success, 1 if file not found
@@ -102,4 +104,13 @@ list_count() {
   [ -f "$1" ] || { log_error "list_count: file not found: $1"; return 1; }
   _cnt=$(grep -cvE '^[[:space:]]*(#|$)' "$1" 2>/dev/null) || _cnt=0
   echo "$_cnt"
+}
+
+# list_count_expanded <file>
+# Count domain/value entries recursively expanding @include directives.
+# Prints count to stdout.
+list_count_expanded() {
+  [ -n "${1:-}" ] || { echo 0; return 0; }
+  [ -f "$1" ] || { echo 0; return 0; }
+  list_read "$1" 2>/dev/null | wc -l | tr -d ' '
 }

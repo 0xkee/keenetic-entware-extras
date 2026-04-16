@@ -1,7 +1,7 @@
 Package: geo-split
-Version: 0.8.0
+Version: 0.8.1
 Architecture: all
-Maintainer: ald
+Maintainer: 0xkee
 Depends: keenetic-entware-extras, geo-split-data, ip-full, curl, bind-dig, aggregate
 Recommends: jq
 Description: Split routing by GeoIP subnets and domain lists for Keenetic/Entware.

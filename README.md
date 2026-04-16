@@ -81,15 +81,17 @@ keenetic-entware-extras/
 
 Для контрибьюторов и разработчиков.
 
+**Полная процедура деплоя** (spike/full режимы, state control, rollback, troubleshooting): [`.project/deploy-workflow.md`](.project/deploy-workflow.md).
+
 ```sh
 # Линтинг
 shellcheck -x -s sh scripts/*.sh
 shellcheck -x -s sh geo-split/scripts/*.sh
 
-# Деплой для разработки (роутеры без sftp-server)
+# Spike deploy (быстрая итерация, роутеры без sftp-server)
 scp -O -r lib/ geo-split/ root@<router-ip>:/opt/keenetic-entware-extras/
 
-# Сборка всех .ipk пакетов
+# Full deploy: сборка всех .ipk пакетов
 ./scripts/build-ipk.sh all
 ```
 

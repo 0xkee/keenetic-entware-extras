@@ -6,6 +6,7 @@ set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/common.sh"
+. "$SCRIPT_DIR/../../lib/lists.sh"
 _CONFIG_DIR="$(cd "$SCRIPT_DIR/../config" && pwd)"
 . "$_CONFIG_DIR/config.sh"
 . "$SCRIPT_DIR/../../lib/ip.sh"
@@ -135,7 +136,7 @@ show_domains() {
 show_domain_sources() {
   if [ -f "$DOMAINS_LIST_FILE" ]; then
     local src_count
-    src_count=$(grep -cEv '^[[:space:]]*(#|$)' "$DOMAINS_LIST_FILE" 2>/dev/null) || src_count=0
+    src_count=$(list_count_expanded "$DOMAINS_LIST_FILE") || src_count=0
     echo "  Domain sources: $src_count domain(s) configured"
   else
     echo "  Domain sources: — (no list file)"

@@ -1,0 +1,12 @@
+#!/opt/bin/sh
+# postrm — runs after package files are removed.
+# Cleans up runtime files and empty directories.
+set -eu
+
+# Remove runtime files
+rm -f /opt/var/run/smartdns.pid
+rm -f /opt/var/cache/smartdns.cache
+
+# Remove empty directories left by opkg
+rmdir "/opt/keenetic-entware-extras/smartdns-ru/scripts" 2>/dev/null || true
+rmdir "/opt/keenetic-entware-extras/smartdns-ru" 2>/dev/null || true

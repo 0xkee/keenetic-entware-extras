@@ -15,8 +15,8 @@ SmartDNS binds to `0.0.0.0:6053` and Keenetic forwards queries to it.
 
 | Group | Upstreams | Protocol | Purpose |
 |-------|-----------|----------|---------|
-| `ru` | Yandex (77.88.8.8/1), AdGuard (94.140.14.14/15) | DoT + UDP | Russian domains (.ru, .рф, .su) |
-| `default` | Cloudflare (1.1.1.1, 1.0.0.1), Google (8.8.8.8, 8.8.4.4) | DoT + DoH + UDP | Everything else |
+| `ru` | Yandex (77.88.8.8/1), AdGuard (94.140.14.140/141) | DoT + UDP | Russian domains (.ru, .рф, .su) |
+| `default` | Google (8.8.8.8/4.4), Cloudflare (1.1.1.1, 1.0.0.1) | UDP + DoH | Everything else |
 
 ### DNS Routing Rules
 - `.ru` → group `ru`
@@ -26,6 +26,12 @@ SmartDNS binds to `0.0.0.0:6053` and Keenetic forwards queries to it.
 
 ### IPv6
 - `force-AAAA-SOA yes` — AAAA records disabled (IPv4 only)
+
+### Init Script: Stock S38smartdns
+
+Uses the stock init script from the `smartdns` Entware package (`/opt/etc/init.d/S38smartdns`).
+No custom init — the stock `rc.func`-based script provides `start/stop/restart/check`.
+Diagnostics via standalone `scripts/status.sh`.
 
 ## Integration with Keenetic
 
@@ -47,20 +53,32 @@ smartdns-ru/
 │   ├── target-arch.md       # this file
 │   └── target-code.md       # code standards
 ├── config/
-│   └── smartdns.conf        # SmartDNS configuration
+│   └── smartdns.conf        # SmartDNS configuration (source → /opt/etc/smartdns/)
 ├── scripts/
-│   ├── install.sh           # install package, config, init script
-│   └── uninstall.sh         # stop, remove custom init, restore defaults
+│   └── status.sh            # diagnostic status (standalone)
+├── docs/
+│   ├── current-state-assessment.md
+│   ├── dns-landscape-research.md
+│   └── improvement-plan.md
 └── README.md
+
+packaging/smartdns-ru/
+├── control                  # package metadata (Version, Depends)
+├── conffiles                # protected config paths
+├── postinst                 # create cache dir, restart smartdns
+├── prerm                    # stop smartdns
+└── postrm                   # cleanup runtime files
 ```
 
 ## Deploy Layout on Router
 
 ```
-/opt/etc/smartdns/smartdns.conf       # configuration (deployed by install.sh)
-/opt/etc/init.d/S60smartdns           # custom init script (created by install.sh)
-/opt/etc/init.d/S38smartdns           # default init (disabled, chmod -x)
-/opt/sbin/smartdns                    # binary (installed via opkg)
-/opt/var/run/smartdns.pid             # PID file (runtime)
-/opt/var/log/smartdns.log             # log file (runtime)
+/opt/etc/smartdns/smartdns.conf                              # configuration (conffiles-protected)
+/opt/etc/init.d/S38smartdns                                  # stock init (from smartdns package)
+/opt/keenetic-entware-extras/smartdns-ru/scripts/status.sh   # diagnostic script
+/opt/keenetic-entware-extras/smartdns-ru/README.md           # readme
+/opt/keenetic-entware-extras/smartdns-ru/LICENSE              # license
+/opt/sbin/smartdns                                            # binary (from smartdns package)
+/opt/var/run/smartdns.pid                                     # PID file (runtime)
+/opt/var/cache/smartdns.cache                                 # persistent cache (runtime)
 ```

@@ -5,7 +5,7 @@
 > Новая реализация: `list_aggregate_cidrs() { aggregate 2>/dev/null; }` — одна строка вместо 75.
 > Корректность: 11286→8588 CIDR, 45,056,320 IP. Скорость: 1.64s вместо 2s.
 > IPv6: планируется форк `aggregate6` в будущем.
-> Подробности: [aggregate-migration-plan.md](aggregate-migration-plan.md)
+> Подробности: [aggregate-migration-plan.md](../../../docs/archive/aggregate-migration-plan.md)
 
 ## 1. Цель
 

@@ -7,7 +7,7 @@ Shell-скрипты и `.ipk` пакеты для Keenetic-роутеров с 
 
 | Пакет | Версия | Описание |
 |-------|--------|----------|
-| `keenetic-entware-extras` | 0.4.1 | Базовый пакет — shared libraries: `lib/common.sh`, `lib/ip.sh`, `lib/lists.sh` |
+| `keenetic-entware-extras` | 0.5.0 | Базовый пакет — shared libraries (`lib/common.sh`, `lib/ip.sh`, `lib/lists.sh`) + CLI `kee-status` (агрегированная диагностика всех пакетов) |
 | `geo-split` | 0.8.2 | Split routing по GeoIP + доменам. Зависит от `keenetic-entware-extras` |
 | `geo-split-data` | 0.3.2 | Данные: списки доменов, GeoIP-зоны, whitelist. Conffiles — сохраняются при upgrade |
 | `smartdns-ru` | 0.1.2 | Split DNS: .ru/.рф → российские DNS, остальное → Google/Cloudflare DoH. Зависит от `smartdns`, `ca-certificates` |
@@ -22,12 +22,29 @@ Shell-скрипты и `.ipk` пакеты для Keenetic-роутеров с 
 scp *.ipk root@<router-ip>:/tmp/
 
 # Установить (порядок важен — сначала base, потом data, потом geo-split)
-opkg install /tmp/keenetic-entware-extras_0.4.1_all.ipk
+opkg install /tmp/keenetic-entware-extras_0.5.0_all.ipk
 opkg install /tmp/geo-split-data_0.3.2_all.ipk
 opkg install /tmp/geo-split_0.8.2_all.ipk
 ```
 
 Зависимости (`ip-full`, `curl`, `bind-dig`, `aggregate`) устанавливаются автоматически через opkg.
+
+## Диагностика
+
+После установки пакета `keenetic-entware-extras` доступна команда
+[`kee-status`](scripts/kee-status.sh:1) — агрегированный статус всех
+подпакетов. Запускает `scripts/status.sh` каждого установленного пакета
+(без стриминга), показывает одну строку на пакет (`Alive` / `FAIL`), а
+под упавшими — только строки с `✗`, сгруппированные по подсекциям
+(`Service:`, `Rules:`, `DNS Tests:` и т.д.).
+
+```sh
+kee-status                # цветной вывод в TTY
+kee-status --no-color     # plain text для логов / ndmc
+NO_COLOR=1 kee-status     # то же через env
+```
+
+Exit code: `0` если все `Alive`, `1` если есть `FAIL`.
 
 ## Подпроекты
 
@@ -73,7 +90,7 @@ keenetic-entware-extras/
 │   ├── geo-split-data/
 │   ├── smartdns-ru/
 │   └── smartdns-redirect/
-├── scripts/              # build-ipk.sh
+├── scripts/              # build-ipk.sh, kee-status.sh (aggregated status CLI)
 ├── docs/                 # документация
 └── LICENSE               # MIT
 ```

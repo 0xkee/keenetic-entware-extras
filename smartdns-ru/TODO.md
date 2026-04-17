@@ -52,7 +52,8 @@
 
 ### Улучшения (backlog)
 
-- [ ] DNS DNAT redirect: `iptables PREROUTING` br0:53 → SmartDNS:6053 (обход ndnproxy)
+- [x] ~~DNS DNAT redirect: `iptables PREROUTING` br0:53 → SmartDNS:6053 (обход ndnproxy)~~ — реализовано в отдельном пакете [`smartdns-redirect`](../smartdns-redirect/) v0.1.1 (deployed на router-1, latency ~130ms → <80ms)
+- [x] ~~Мониторинг: cron watchdog для перезапуска SmartDNS при падении~~ — реализовано в [`smartdns-redirect/scripts/watchdog.sh`](../smartdns-redirect/scripts/watchdog.sh) (через `WATCHDOG_SERVICE="S38smartdns"`)
 - [ ] Интеграция SmartDNS `ipset` directive с geo-split (вместо `dig` в `update-domains.sh`)
-- [ ] Мониторинг: cron watchdog для перезапуска SmartDNS при падении
 - [ ] Деплой на второй роутер (router-2)
+- [ ] `bind-tcp 127.0.0.1:6053` в `smartdns.conf` — SmartDNS сейчас слушает только UDP, TCP-редирект в `smartdns-redirect` безвреден но бесполезен (EDNS0 fallback на больших ответах)

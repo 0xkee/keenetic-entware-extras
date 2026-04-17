@@ -25,6 +25,8 @@
 - [ ] проверить S99 на предмет, можно ли загружать списки паралельно или как лучше (и систематизировать, если используются в нескольких местах)
 - [x] проверит статус (Domain sources: 1 domain(s) configured) , похоже не считаются домены в @include
 - [x] надо изучить и дописать в доки по установке, какие пакеты должны быть поставлены на кинетик
+- [ ] возможно злой баг: таблицы презаполняются при смене состояния любого интерейса (а нам вероятно надо только IN ifaces из конфига?)
+- [ ] **postinst: автоматический restart после upgrade** — сейчас при `opkg install` upgrade цикл prerm→postinst выполняет detach-rules + flush tables, но сервис не стартует автоматически (выводит подсказку `Start: /opt/etc/init.d/S99geo-split start`). После Full Deploy на router-1 2026-04-17 обнаружилось: geo-split остался в `not running`, routes 0/0 — пришлось запускать вручную. Сделать idempotent restart в [`packaging/geo-split/postinst`](../packaging/geo-split/postinst:1) при upgrade, сохранив текущее поведение для first-install. См. [`.project/deploy-workflow.md §4.6`](../.project/deploy-workflow.md:173) (требование идемпотентности).
 ---
 
 ## Выполнено

@@ -1,0 +1,18 @@
+#!/opt/bin/sh
+# postinst — runs after package files are unpacked.
+# Must be idempotent (called on both install and upgrade).
+set -eu
+
+KEE_STATUS="/opt/keenetic-entware-extras/scripts/kee-status.sh"
+SYMLINK="/opt/bin/kee-status"
+
+# Ensure the aggregated status script is executable (tar normally keeps mode,
+# but be defensive: postinst must never leave a non-runnable entry point).
+if [ -f "$KEE_STATUS" ]; then
+  chmod +x "$KEE_STATUS"
+  # Create / refresh the short command name (idempotent).
+  ln -sf "$KEE_STATUS" "$SYMLINK"
+fi
+
+echo "keenetic-entware-extras installed."
+echo "Run:  kee-status   (aggregated status of all installed packages)"

@@ -1,0 +1,16 @@
+#!/opt/bin/sh
+# postrm — runs after package files are removed.
+# Cleans up the /opt/bin/ shortcut and any empty directories opkg leaves behind.
+set -eu
+
+SYMLINK="/opt/bin/kee-status"
+
+# Drop the short command (only when it is actually a symlink created by us).
+if [ -L "$SYMLINK" ]; then
+  rm -f "$SYMLINK"
+fi
+
+# Remove empty directories opkg does not clean up on its own.
+rmdir "/opt/keenetic-entware-extras/scripts" 2>/dev/null || true
+rmdir "/opt/keenetic-entware-extras/lib"     2>/dev/null || true
+rmdir "/opt/keenetic-entware-extras"         2>/dev/null || true

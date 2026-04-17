@@ -13,22 +13,6 @@ _CONFIG_DIR="$(cd "$SCRIPT_DIR/../config" && pwd)"
 
 STATUS_OK=0
 
-# Format seconds as human-readable age.
-# Examples: "2d 5h 30m", "1h 15m 3s", "8m 42s", "5s"
-format_age() {
-  local seconds="$1"
-  local days hours mins secs result=""
-  days=$((seconds / 86400))
-  hours=$(( (seconds % 86400) / 3600 ))
-  mins=$(( (seconds % 3600) / 60 ))
-  secs=$((seconds % 60))
-  [ "$days" -gt 0 ] && result="${days}d ${hours}h ${mins}m"
-  [ -z "$result" ] && [ "$hours" -gt 0 ] && result="${hours}h ${mins}m ${secs}s"
-  [ -z "$result" ] && [ "$mins" -gt 0 ] && result="${mins}m ${secs}s"
-  [ -z "$result" ] && result="${secs}s"
-  echo "$result"
-}
-
 # Show routing config and active interface(s) from route tables
 show_mode() {
   echo "  Mode:"
@@ -200,7 +184,7 @@ show_ndm_hook() {
 # Show installed package version
 show_version() {
   local ver
-  ver=$(opkg info geo-split 2>/dev/null | sed -n 's/^Version: //p')
+  ver=$(installed_pkg_version geo-split)
   if [ -n "$ver" ]; then
     echo "    Version:     $ver"
   else

@@ -1,0 +1,44 @@
+#!/opt/bin/sh
+# smartdns-redirect init script for Entware.
+# Installed to /opt/etc/init.d/S39smartdns-redirect.
+# S39 = runs AFTER S38smartdns (upstream DNS must be ready first).
+# shellcheck disable=SC3043  # 'local' supported by ash/busybox sh
+# shellcheck disable=SC1091  # sourced files resolved at runtime on router
+set -eu
+
+INSTALL_DIR="/opt/keenetic-entware-extras/smartdns-redirect"
+SCRIPTS="$INSTALL_DIR/scripts"
+_CONFIG_DIR="$INSTALL_DIR/config"
+. "$_CONFIG_DIR/smartdns-redirect.conf"
+
+case "${1:-}" in
+  start)
+    echo "Starting smartdns-redirect..."
+    "$SCRIPTS/dns-redirect.sh" start
+    mkdir -p "$(dirname "$PIDFILE")"
+    echo $$ > "$PIDFILE"
+    ;;
+  stop)
+    echo "Stopping smartdns-redirect..."
+    "$SCRIPTS/dns-redirect.sh" stop
+    rm -f "$PIDFILE"
+    ;;
+  reload)
+    echo "Reloading smartdns-redirect..."
+    "$SCRIPTS/dns-redirect.sh" reload
+    mkdir -p "$(dirname "$PIDFILE")"
+    echo $$ > "$PIDFILE"
+    ;;
+  restart)
+    "$0" stop
+    sleep 1
+    "$0" start
+    ;;
+  status)
+    "$SCRIPTS/status.sh"
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart|reload|status}"
+    exit 1
+    ;;
+esac

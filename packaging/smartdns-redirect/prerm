@@ -1,0 +1,20 @@
+#!/opt/bin/sh
+# prerm — runs before package files are removed.
+set -eu
+
+# 1. Stop service (removes iptables rules)
+if [ -x /opt/etc/init.d/S39smartdns-redirect ]; then
+    /opt/etc/init.d/S39smartdns-redirect stop 2>/dev/null || true
+fi
+
+# 2. Remove NDM netfilter hook symlink
+rm -f /opt/etc/ndm/netfilter.d/smartdns-redirect-hook
+
+# 3. Remove cron jobs
+CRON_FILE="/opt/etc/crontab"
+if [ -f "$CRON_FILE" ]; then
+    sed -i '/smartdns-redirect/d' "$CRON_FILE"
+fi
+
+# 4. Restart crond
+[ -x /opt/etc/init.d/S10cron ] && /opt/etc/init.d/S10cron restart

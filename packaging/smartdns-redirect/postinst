@@ -1,0 +1,34 @@
+#!/opt/bin/sh
+# postinst — runs after package files are unpacked.
+# Must be idempotent (called on both install and upgrade).
+set -eu
+
+INSTALL_DIR="/opt/keenetic-entware-extras/smartdns-redirect"
+
+# 1. Create NDM netfilter hook symlink
+NDM_DIR="/opt/etc/ndm/netfilter.d"
+mkdir -p "$NDM_DIR"
+ln -sf "$INSTALL_DIR/scripts/netfilter-hook.sh" "$NDM_DIR/smartdns-redirect-hook"
+
+# 2. Update cron jobs (remove old, add new — safe on upgrade)
+CRON_FILE="/opt/etc/crontab"
+if [ -f "$CRON_FILE" ]; then
+    sed -i '/smartdns-redirect/d' "$CRON_FILE"
+fi
+{
+    echo "# smartdns-redirect: watchdog (rule presence + upstream DNS responsiveness)"
+    echo "*/5 * * * * root $INSTALL_DIR/scripts/watchdog.sh >/dev/null 2>&1"
+} >> "$CRON_FILE"
+
+# 3. Restart crond to pick up changes
+[ -x /opt/etc/init.d/S10cron ] && /opt/etc/init.d/S10cron restart
+
+# 4. Start service (|| true: don't fail install if upstream DNS not ready)
+if [ -x /opt/etc/init.d/S39smartdns-redirect ]; then
+    /opt/etc/init.d/S39smartdns-redirect start || true
+fi
+
+echo "smartdns-redirect installed."
+echo "  Config:  $INSTALL_DIR/config/smartdns-redirect.conf"
+echo "  Status:  /opt/etc/init.d/S39smartdns-redirect status"
+echo "  Logs:    logread | grep smartdns-redirect"

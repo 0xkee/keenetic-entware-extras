@@ -1,7 +1,7 @@
 # Keenetic Entware Extras
 
 Shell-скрипты и `.ipk` пакеты для Keenetic-роутеров с Entware.
-Включает подпроекты: **geo-split** (split routing по GeoIP/доменам), **smartdns-ru** (DNS split).
+Включает подпроекты: **geo-split** (split routing по GeoIP/доменам), **smartdns-ru** (DNS split), **smartdns-redirect** (DNAT LAN :53 → local DNS).
 
 ## Пакеты
 
@@ -11,6 +11,7 @@ Shell-скрипты и `.ipk` пакеты для Keenetic-роутеров с 
 | `geo-split` | 0.8.2 | Split routing по GeoIP + доменам. Зависит от `keenetic-entware-extras` |
 | `geo-split-data` | 0.3.2 | Данные: списки доменов, GeoIP-зоны, whitelist. Conffiles — сохраняются при upgrade |
 | `smartdns-ru` | 0.1.2 | Split DNS: .ru/.рф → российские DNS, остальное → Google/Cloudflare DoH. Зависит от `smartdns`, `ca-certificates` |
+| `smartdns-redirect` | 0.1.1 | Universal DNS DNAT: перехват LAN `:53` → local DNS (SmartDNS/AGH/Unbound). Latency ~130ms → <80ms. Зависит от `iptables` |
 
 ## Установка через opkg
 
@@ -38,6 +39,10 @@ Split routing для Keenetic: маршрутизация трафика по Ge
 
 Split DNS для российского интернета: `.ru`/`.рф`/`.su` → Yandex/AdGuard DoT, всё остальное → Google/Cloudflare DoH. Deployed, v0.1.2.
 
+### [smartdns-redirect](smartdns-redirect/README.md)
+
+Universal DNS DNAT: `iptables PREROUTING REDIRECT` для LAN-клиентов (`br0`) — обход Keenetic ndnproxy, прямое резолвление через локальный DNS (SmartDNS/AdGuard Home/Unbound/dnsmasq). Persistence через NDM `netfilter.d` hook, watchdog по cron. Измеренный выигрыш latency: `~130ms → <80ms`. Deployed, v0.1.1.
+
 ## Структура проекта
 
 ```
@@ -58,11 +63,16 @@ keenetic-entware-extras/
 ├── smartdns-ru/          # DNS split (v0.1.2)
 │   ├── config/           # smartdns.conf
 │   ├── scripts/          # status.sh
+├── smartdns-redirect/    # DNS DNAT для LAN (v0.1.1)
+│   ├── config/           # smartdns-redirect.conf (conffile)
+│   ├── scripts/          # dns-redirect, watchdog, status, netfilter-hook
+│   └── rootfs/           # init.d/S39smartdns-redirect
 ├── packaging/            # .ipk метаданные
 │   ├── keenetic-entware-extras/
 │   ├── geo-split/
 │   ├── geo-split-data/
-│   └── smartdns-ru/
+│   ├── smartdns-ru/
+│   └── smartdns-redirect/
 ├── scripts/              # build-ipk.sh
 ├── docs/                 # документация
 └── LICENSE               # MIT

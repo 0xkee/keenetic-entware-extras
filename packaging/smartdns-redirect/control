@@ -1,0 +1,14 @@
+Package: smartdns-redirect
+Version: 0.1.1
+Architecture: all
+Maintainer: 0xkee
+Depends: keenetic-entware-extras, iptables
+Recommends: smartdns
+Description: Universal DNS DNAT for Keenetic/Entware — redirect LAN :53 to local DNS.
+ Intercepts LAN DNS traffic (br0 by default) and redirects to a local DNS
+ resolver (SmartDNS :6053 by default; configurable for AGH, Unbound, dnsmasq).
+ Keenetic ndnproxy remains intact for the router itself. Latency improvement:
+ ~130ms to <80ms measured. NDM-aware: survives iptables flush via
+ netfilter.d hook. Compatible with smartdns-ru and geo-split.
+Section: net
+Priority: optional

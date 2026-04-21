@@ -17,6 +17,13 @@ STATUS_OK=0
 show_mode() {
   echo "  Mode:"
 
+  # Geo zone from SUBNET_URL
+  local _geo_zone=""
+  if [ -n "${SUBNET_URL:-}" ]; then
+    _geo_zone=$(basename "$SUBNET_URL" .zone | tr 'a-z' 'A-Z')
+  fi
+  echo "    Geo zone:    ${_geo_zone:-unknown}"
+
   # Route in: configured LAN sources
   echo "    Route in:    $ROUTE_IN"
 
@@ -60,20 +67,33 @@ show_ip_rules() {
   done
 }
 
-# Show route table entry counts (per table)
+# Show route table entry counts and fill freshness (per table)
 show_routes() {
   echo "  Routes:"
-  local count
+  local count stamp age_label
+
   count=$(ip route show table "$DOMAIN_ROUTE_TABLE" 2>/dev/null | wc -l)
+  stamp="/opt/var/run/geo-split-table-${DOMAIN_ROUTE_TABLE}.filled"
   if [ "$count" -gt 0 ]; then
-    echo "    Domains:     $count routes in table $DOMAIN_ROUTE_TABLE ✓"
+    if [ -f "$stamp" ]; then
+      age_label="$(format_age "$(( $(date +%s) - $(file_mtime "$stamp") ))")"
+      echo "    Domains:     $count routes in table $DOMAIN_ROUTE_TABLE, filled ${age_label} ago ✓"
+    else
+      echo "    Domains:     $count routes in table $DOMAIN_ROUTE_TABLE ✓"
+    fi
   else
     echo "    Domains:     0 routes in table $DOMAIN_ROUTE_TABLE ✗"; STATUS_OK=1
   fi
 
   count=$(ip route show table "$SUBNET_ROUTE_TABLE" 2>/dev/null | wc -l)
+  stamp="/opt/var/run/geo-split-table-${SUBNET_ROUTE_TABLE}.filled"
   if [ "$count" -gt 0 ]; then
-    echo "    Subnets:     $count routes in table $SUBNET_ROUTE_TABLE ✓"
+    if [ -f "$stamp" ]; then
+      age_label="$(format_age "$(( $(date +%s) - $(file_mtime "$stamp") ))")"
+      echo "    Subnets:     $count routes in table $SUBNET_ROUTE_TABLE, filled ${age_label} ago ✓"
+    else
+      echo "    Subnets:     $count routes in table $SUBNET_ROUTE_TABLE ✓"
+    fi
   else
     echo "    Subnets:     0 routes in table $SUBNET_ROUTE_TABLE ✗"; STATUS_OK=1
   fi
@@ -216,7 +236,80 @@ show_uptime() {
   fi
 }
 
+# Collect structured data and emit JSON for webui.
+json_output() {
+  local running="false" uptime_val="" version_val=""
+  local domain_routes=0 subnet_routes=0 active_out="" domain_cache=0
+  local geo_zone=""
+
+  # Running: PIDFILE exists = service is attached
+  if [ -f "$PIDFILE" ]; then
+    running="true"
+    local age
+    age=$(( $(date +%s) - $(file_mtime "$PIDFILE") ))
+    uptime_val="$(format_age "$age")"
+  fi
+
+  # Route counts
+  domain_routes=$(ip route show table "$DOMAIN_ROUTE_TABLE" 2>/dev/null | wc -l)
+  subnet_routes=$(ip route show table "$SUBNET_ROUTE_TABLE" 2>/dev/null | wc -l)
+
+  # Active output interfaces
+  active_out=$( {
+    ip route show table "$DOMAIN_ROUTE_TABLE" 2>/dev/null
+    ip route show table "$SUBNET_ROUTE_TABLE" 2>/dev/null
+  } | sed -n 's/.*dev \([^ ]*\).*/\1/p' | sort -u | tr '\n' ' ' | sed 's/ $//')
+
+  # Domain cache count
+  if [ -n "${DOMAINS_CACHE_FILE:-}" ] && [ -f "$DOMAINS_CACHE_FILE" ]; then
+    domain_cache=$(wc -l < "$DOMAINS_CACHE_FILE")
+  fi
+
+  # Geo zone from SUBNET_URL (e.g. ".../ru.zone" → "RU")
+  if [ -n "${SUBNET_URL:-}" ]; then
+    geo_zone=$(basename "$SUBNET_URL" .zone | tr 'a-z' 'A-Z')
+  fi
+
+  # Version
+  version_val=$(installed_pkg_version geo-split)
+
+  # Run all checks silently to set STATUS_OK
+  show_ip_rules >/dev/null 2>&1 || true
+  show_routes >/dev/null 2>&1 || true
+  show_subnets >/dev/null 2>&1 || true
+  show_domains >/dev/null 2>&1 || true
+
+  printf '{'
+  json_kv_bool "running" "$([ "$running" = "true" ] && echo 0 || echo 1)"
+  printf ','
+  json_kv "uptime" "$uptime_val"
+  printf ','
+  json_kv_bool "ok" "$STATUS_OK"
+  printf ',"details":{'
+  json_kv "geo_zone" "${geo_zone:-unknown}"
+  printf ','
+  json_kv "route_in" "$ROUTE_IN"
+  printf ','
+  json_kv "route_out" "${ROUTE_OUT:-auto}"
+  printf ','
+  json_kv "active_out" "${active_out:-detached}"
+  printf ','
+  json_kv_num "domain_routes" "$domain_routes"
+  printf ','
+  json_kv_num "subnet_routes" "$subnet_routes"
+  printf ','
+  json_kv_num "domain_cache" "$domain_cache"
+  printf ','
+  json_kv "version" "${version_val:-unknown}"
+  printf '}}\n'
+}
+
 # --- main ---
+if [ "${1:-}" = "--json" ]; then
+  json_output
+  exit "$STATUS_OK"
+fi
+
 echo "geo-split status:"
 show_mode
 echo

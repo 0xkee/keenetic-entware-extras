@@ -17,7 +17,10 @@ STATUS_OK=0
 show_mode() {
   echo "  Mode:"
   echo "    Config:      $CONFIG_FILE"
-  echo "    Upstream:    127.0.0.1:$UPSTREAM_PORT"
+  local _uname
+  _uname=$(netstat -tlnup 2>/dev/null | grep ":${UPSTREAM_PORT} " | head -1 \
+    | sed -n 's|.*/\([^ ]*\)$|\1|p') || true
+  echo "    Upstream:    127.0.0.1:$UPSTREAM_PORT (${_uname:-unknown})"
   if [ -n "$INTERFACES" ]; then
     echo "    Interfaces:  $INTERFACES"
   else
@@ -142,7 +145,68 @@ show_version() {
   fi
 }
 
+# Collect structured data and emit JSON for webui.
+json_output() {
+  local running="false" uptime_val="" version_val=""
+  local upstream_ok="false" upstream_name=""
+
+  # Running: PIDFILE exists = service is attached
+  if [ -f "$PIDFILE" ]; then
+    running="true"
+    local age
+    age=$(( $(date +%s) - $(file_mtime "$PIDFILE") ))
+    uptime_val="$(format_age "$age")"
+  fi
+
+  # Upstream listening?
+  local listening=""
+  if command -v netstat >/dev/null 2>&1; then
+    listening=$(netstat -lnu 2>/dev/null | awk '{print $4}' \
+      | grep -E "(^|:)${UPSTREAM_PORT}\$" | head -1)
+  elif command -v ss >/dev/null 2>&1; then
+    listening=$(ss -lnu 2>/dev/null | awk '{print $5}' \
+      | grep -E "(^|:)${UPSTREAM_PORT}\$" | head -1)
+  fi
+  [ -n "$listening" ] && upstream_ok="true"
+
+  # Detect upstream DNS name by process on UPSTREAM_PORT
+  upstream_name=$(netstat -tlnup 2>/dev/null | grep ":${UPSTREAM_PORT} " | head -1 \
+    | sed -n 's|.*/\([^ ]*\)$|\1|p') || true
+  [ -z "$upstream_name" ] && upstream_name="unknown"
+
+  # Version
+  version_val=$(installed_pkg_version smartdns-redirect)
+
+  printf '{'
+  json_kv_bool "running" "$([ "$running" = "true" ] && echo 0 || echo 1)"
+  printf ','
+  json_kv "uptime" "$uptime_val"
+  printf ','
+  json_kv_bool "ok" "$STATUS_OK"
+  printf ',"details":{'
+  json_kv "upstream" "127.0.0.1:${UPSTREAM_PORT}"
+  printf ','
+  json_kv "upstream_name" "$upstream_name"
+  printf ','
+  json_kv "interfaces" "$INTERFACES"
+  printf ','
+  json_kv "ipv6" "$ENABLE_IPV6"
+  printf ','
+  json_kv_bool "upstream_listening" "$([ "$upstream_ok" = "true" ] && echo 0 || echo 1)"
+  printf ','
+  json_kv "version" "${version_val:-unknown}"
+  printf '}}\n'
+}
+
 # --- main ---
+if [ "${1:-}" = "--json" ]; then
+  # Run checks silently to set STATUS_OK
+  show_rules >/dev/null 2>&1 || true
+  show_upstream >/dev/null 2>&1 || true
+  json_output
+  exit "$STATUS_OK"
+fi
+
 echo "smartdns-redirect status:"
 show_mode
 echo

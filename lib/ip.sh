@@ -35,8 +35,10 @@ detect_dns_port() {
 
 # Detect outgoing interface from default route.
 # Excludes LAN bridges (br*) — those are NOT outgoing interfaces.
+# NOTE: "ip route show default" on iproute2-entware returns ALL main table routes,
+# not just default. Using "ip route | grep ^default" for exact match.
 detect_out_iface() {
-  ip route show default | sed -n 's/.*dev \([^ ]*\).*/\1/p' | grep -v '^br' | head -1
+  ip route | grep "^default" | sed -n 's/.*dev \([^ ]*\).*/\1/p' | grep -v '^br' | head -1
 }
 
 # Resolve target outgoing interface from ROUTE_OUT config.
@@ -59,6 +61,8 @@ resolve_target_interface() {
 
 # Flush and fill a routing table from a list file via ip-full -batch.
 # Falls back to BusyBox ip loop if ip-full is not available.
+# Touches stamp file /opt/var/run/geo-split-table-${table}.filled on success
+# (mtime used by status.sh for table freshness display).
 # Args: $1 - table number, $2 - list file path, $3 - target device
 #        $4 - mode: "cidr" (default, each line is a CIDR) or "host" (first field + /32)
 # Requires: IP_FULL from config.sh; list_strip, list_count from lib/lists.sh; log from lib/common.sh
@@ -98,6 +102,7 @@ fill_routes_batch() {
     elapsed=$((t_end - t_start))
 
     rm -f "$batch_file"
+    touch "/opt/var/run/geo-split-table-${table}.filled"
     log "Routes loaded via ip-full -batch (table $table: $count entries in ${elapsed}s)"
   else
     log "ip-full not found, using BusyBox loop (slow)"
@@ -116,6 +121,7 @@ fill_routes_batch() {
     t_end=$(date +%s)
     elapsed=$((t_end - t_start))
 
+    touch "/opt/var/run/geo-split-table-${table}.filled"
     log "Routes loaded via BusyBox loop (table $table: $count entries in ${elapsed}s)"
   fi
 }

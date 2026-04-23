@@ -74,9 +74,65 @@ format_age() {
   echo "$result"
 }
 
+# Format kilobytes as human-readable size with adaptive unit (KB/MB/GB).
+# Uses best-fit unit: <1024 → "X KB", <1M → "X.X MB", else → "X.X GB".
+# Args: $1 - size in kilobytes
+# stdout: formatted string, e.g. "432 KB", "11.1 MB", "1.2 GB"
+format_size_kb() {
+  local kb="$1"
+  awk "BEGIN{
+    if ($kb < 1024) printf \"%d KB\", $kb
+    else if ($kb < 1048576) printf \"%.1f MB\", $kb/1024
+    else printf \"%.1f GB\", $kb/1048576
+  }"
+}
+
 # Read installed package version via opkg.
 # Args: $1 - package name
 # stdout: version string, or empty if not installed
 installed_pkg_version() {
   opkg info "$1" 2>/dev/null | sed -n 's/^Version: //p'
+}
+
+# Escape a string for safe JSON value embedding (no surrounding quotes).
+# Handles: backslash, double-quote, newline, tab.
+# POSIX-compatible via awk.
+# Args: $1 - string to escape
+# stdout: escaped string
+json_escape_val() {
+  printf '%s' "$1" | awk '
+    BEGIN { ORS="" }
+    {
+      gsub(/\\/, "\\\\")
+      gsub(/"/, "\\\"")
+      gsub(/\t/, "\\t")
+      if (NR > 1) printf "\\n"
+      printf "%s", $0
+    }
+  '
+}
+
+# Emit a JSON key-value pair: "key":"value" (value is escaped).
+# Args: $1 - key, $2 - value
+# stdout: "key":"escaped_value"
+json_kv() {
+  printf '"%s":"%s"' "$1" "$(json_escape_val "$2")"
+}
+
+# Emit a JSON key with numeric value: "key":number
+# Args: $1 - key, $2 - numeric value
+# stdout: "key":number
+json_kv_num() {
+  printf '"%s":%s' "$1" "${2:-0}"
+}
+
+# Emit a JSON key with boolean value: "key":true/false
+# Args: $1 - key, $2 - 0 for true, non-0 for false
+# stdout: "key":true or "key":false
+json_kv_bool() {
+  if [ "${2:-1}" = "0" ]; then
+    printf '"%s":true' "$1"
+  else
+    printf '"%s":false' "$1"
+  fi
 }

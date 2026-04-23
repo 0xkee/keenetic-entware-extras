@@ -7,8 +7,8 @@ Shell-скрипты и `.ipk` пакеты для Keenetic-роутеров с 
 
 | Пакет | Версия | Описание |
 |-------|--------|----------|
-| `keenetic-entware-extras` | 0.5.0 | Базовый пакет — shared libraries (`lib/common.sh`, `lib/ip.sh`, `lib/lists.sh`) + CLI `kee-status` (агрегированная диагностика всех пакетов) |
-| `geo-split` | 0.8.2 | Split routing по GeoIP + доменам. Зависит от `keenetic-entware-extras` |
+| `keenetic-entware-extras` | 0.5.2 | Базовый пакет — shared libraries (`lib/common.sh`, `lib/ip.sh`, `lib/lists.sh`) + CLI `kee-status` (агрегированная диагностика всех пакетов) |
+| `geo-split` | 0.8.5 | Split routing по GeoIP + доменам. Зависит от `keenetic-entware-extras` |
 | `geo-split-data` | 0.3.2 | Данные: списки доменов, GeoIP-зоны, whitelist. Conffiles — сохраняются при upgrade |
 | `smartdns-ru` | 0.1.2 | Split DNS: .ru/.рф → российские DNS, остальное → Google/Cloudflare DoH. Зависит от `smartdns`, `ca-certificates` |
 | `smartdns-redirect` | 0.1.1 | Universal DNS DNAT: перехват LAN `:53` → local DNS (SmartDNS/AGH/Unbound). Latency ~130ms → <80ms. Зависит от `iptables` |
@@ -22,9 +22,9 @@ Shell-скрипты и `.ipk` пакеты для Keenetic-роутеров с 
 scp *.ipk root@<router-ip>:/tmp/
 
 # Установить (порядок важен — сначала base, потом data, потом geo-split)
-opkg install /tmp/keenetic-entware-extras_0.5.0_all.ipk
+opkg install /tmp/keenetic-entware-extras_0.5.2_all.ipk
 opkg install /tmp/geo-split-data_0.3.2_all.ipk
-opkg install /tmp/geo-split_0.8.2_all.ipk
+opkg install /tmp/geo-split_0.8.5_all.ipk
 ```
 
 Зависимости (`ip-full`, `curl`, `bind-dig`, `aggregate`) устанавливаются автоматически через opkg.

@@ -216,7 +216,7 @@ show_version() {
 show_background() {
   local pids
   # shellcheck disable=SC2009
-  pids=$(ps 2>/dev/null | grep -E 'update-(subnets|domains)\.sh' | grep -v grep | awk '{print $1}' | tr '\n' ' ')
+  pids=$(ps w 2>/dev/null | grep -E 'update-(subnets|domains)\.sh' | grep -v grep | awk '{print $1}' | tr '\n' ' ')
   if [ -n "$pids" ]; then
     echo "    Background:  update running (PIDs: ${pids})"
   else
@@ -238,7 +238,7 @@ show_uptime() {
 
 # Collect structured data and emit JSON for webui.
 json_output() {
-  local running="false" uptime_val="" version_val=""
+  local running="false" version_val=""
   local domain_routes=0 subnet_routes=0 active_out="" domain_cache=0
   local geo_zone=""
 
@@ -247,7 +247,7 @@ json_output() {
     running="true"
     local age
     age=$(( $(date +%s) - $(file_mtime "$PIDFILE") ))
-    uptime_val="$(format_age "$age")"
+    uptime_seconds_val="$age"
   fi
 
   # Route counts
@@ -273,6 +273,74 @@ json_output() {
   # Version
   version_val=$(installed_pkg_version geo-split)
 
+  # IP rules: newline-separated, "!" prefix marks failed lines (for red in UI)
+  # e.g. "br0: #1000 domains\nbr0: #1001 subnets" or "!br0: #1000 domains"
+  local rules_detail="" _iface _rules_out _pfx
+  _rules_out=$(ip rule show 2>/dev/null) || _rules_out=""
+  for _iface in $ROUTE_IN; do
+    _pfx=""
+    echo "$_rules_out" | grep -qE "iif $_iface.*lookup $DOMAIN_ROUTE_TABLE" || _pfx="!"
+    rules_detail="${rules_detail:+${rules_detail}
+}${_pfx}${_iface}: #${DOMAIN_ROUTE_TABLE} domains"
+    _pfx=""
+    echo "$_rules_out" | grep -qE "iif $_iface.*lookup $SUBNET_ROUTE_TABLE" || _pfx="!"
+    rules_detail="${rules_detail}
+${_pfx}${_iface}: #${SUBNET_ROUTE_TABLE} subnets"
+  done
+
+  # Subnet cache freshness (seconds)
+  local subnet_freshness_seconds=0
+  if [ -f "$SUBNET_LIST_FILE" ]; then
+    subnet_freshness_seconds=$(( $(date +%s) - $(file_mtime "$SUBNET_LIST_FILE") ))
+  fi
+
+  # Domain cache freshness (seconds)
+  local domain_freshness_seconds=0
+  if [ -n "${DOMAINS_CACHE_FILE:-}" ] && [ -f "$DOMAINS_CACHE_FILE" ]; then
+    domain_freshness_seconds=$(( $(date +%s) - $(file_mtime "$DOMAINS_CACHE_FILE") ))
+  fi
+
+  # Domain sources count (expanded with @includes)
+  local domain_sources=0
+  if [ -n "${DOMAINS_LIST_FILE:-}" ] && [ -f "$DOMAINS_LIST_FILE" ]; then
+    domain_sources=$(list_count_expanded "$DOMAINS_LIST_FILE") || domain_sources=0
+  fi
+
+  # Cron check: any geo-split jobs in crontab
+  local cron_ok_val=1
+  if [ -f "/opt/etc/crontab" ]; then
+    grep -q '^[^#]*geo-split' /opt/etc/crontab 2>/dev/null && cron_ok_val=0
+  fi
+
+  # NDM hook presence
+  local ndm_hook_ok_val=1
+  [ -f "/opt/etc/ndm/ifstatechanged.d/geo-split-hook" ] && ndm_hook_ok_val=0
+
+  # Last download interface
+  local dl_iface=""
+  if [ -f "$LAST_IFACE_CACHE" ]; then
+    dl_iface=$(cat "$LAST_IFACE_CACHE")
+  fi
+
+  # DNS resolver detection
+  local dns_resolver="system resolver"
+  if command -v dig >/dev/null 2>&1; then
+    local dns_result dns_port dns_label
+    dns_result=$(detect_dns_port)
+    dns_port="${dns_result%% *}"
+    dns_label="${dns_result#* }"
+    if [ "$dns_port" != "0" ]; then
+      dns_resolver="localhost:${dns_port} (${dns_label})"
+    fi
+  fi
+
+  # Background update processes
+  local bg_status="idle"
+  # shellcheck disable=SC2009
+  if ps w 2>/dev/null | grep -E 'update-(subnets|domains)\.sh' | grep -qv grep; then
+    bg_status="running"
+  fi
+
   # Run all checks silently to set STATUS_OK
   show_ip_rules >/dev/null 2>&1 || true
   show_routes >/dev/null 2>&1 || true
@@ -282,23 +350,46 @@ json_output() {
   printf '{'
   json_kv_bool "running" "$([ "$running" = "true" ] && echo 0 || echo 1)"
   printf ','
-  json_kv "uptime" "$uptime_val"
-  printf ','
   json_kv_bool "ok" "$STATUS_OK"
   printf ',"details":{'
   json_kv "geo_zone" "${geo_zone:-unknown}"
   printf ','
+  json_kv "zone_loader" "${SUBNET_LOADER}${dl_iface:+ via $dl_iface}"
+  printf ','
+  json_kv_bool "cron" "$cron_ok_val"
+  printf ','
   json_kv "route_in" "$ROUTE_IN"
   printf ','
-  json_kv "route_out" "${ROUTE_OUT:-auto}"
+  # Combine route_out + active_out: "lte_br1 (auto)" when auto-resolved
+  if [ "${ROUTE_OUT:-auto}" = "auto" ] && [ -n "$active_out" ] && [ "$active_out" != "detached" ]; then
+    json_kv "route_out" "${active_out} (auto)"
+  else
+    json_kv "route_out" "${active_out:-detached}"
+  fi
   printf ','
-  json_kv "active_out" "${active_out:-detached}"
+  json_kv_bool "ndm_hook" "$ndm_hook_ok_val"
   printf ','
-  json_kv_num "domain_routes" "$domain_routes"
+  json_kv_num "subnets" "$subnet_routes"
   printf ','
-  json_kv_num "subnet_routes" "$subnet_routes"
+  json_kv_num "domains" "$domain_routes"
+  printf ','
+  json_kv "rules" "$rules_detail"
+  printf ','
+  json_kv_num "subnet_freshness" "$subnet_freshness_seconds"
+  printf ','
+  json_kv_num "domain_freshness" "$domain_freshness_seconds"
+  printf ','
+  json_kv "_s1" ""
+  printf ','
+  json_kv_num "domain_sources" "$domain_sources"
   printf ','
   json_kv_num "domain_cache" "$domain_cache"
+  printf ','
+  json_kv "dns_resolver" "$dns_resolver"
+  printf ','
+  json_kv "background" "$bg_status"
+  printf ','
+  json_kv_num "uptime" "${uptime_seconds_val:-0}"
   printf ','
   json_kv "version" "${version_val:-unknown}"
   printf '}}\n'

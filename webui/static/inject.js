@@ -9,15 +9,20 @@
         { id: 'geo-split',          label: 'Geo Split',    url: '/custom/#geo-split' },
         { id: 'smartdns',           label: 'SmartDNS',     url: '/custom/#smartdns' },
         { id: 'smartdns-redirect',  label: 'DNS Redirect', url: '/custom/#smartdns-redirect' },
+        { id: 'webui',              label: 'WebUI',        url: '/custom/#webui' },
     ];
 
     var SERVICE_APIS = [
         { id: 'geo-split',         label: 'Geo-Split',    desc: 'Policy-based geographic split routing',     url: '/custom/#geo-split',         api: '/api/geo-split/status' },
         { id: 'smartdns',          label: 'SmartDNS',     desc: 'DNS resolver with geographic routing rules', url: '/custom/#smartdns',           api: '/api/smartdns/status' },
         { id: 'smartdns-redirect', label: 'DNS Redirect', desc: 'Transparent DNS redirect for local networks', url: '/custom/#smartdns-redirect',  api: '/api/smartdns-redirect/status' },
+        { id: 'webui',             label: 'WebUI',        desc: 'Entware Extras web dashboard',               url: '/custom/#webui',              api: '/api/webui/status' },
     ];
 
     var DASH_POLL_INTERVAL = 30000;
+    var DETAILS_SKIP_KEYS = { uptime: 1, version: 1, pid: 1, background: 1 };
+    /** Detail keys whose numeric values are seconds — formatted via formatUptimeStock() and live-ticked. */
+    var TIMER_KEYS = { subnet_freshness: 1, domain_freshness: 1 };
 
     var injected = false;
     var dashboardInjected = false;
@@ -25,6 +30,11 @@
     var activeItem = null;
     var insertingIframe = false;
     var dashboardTimer = null;
+    var geoFastPollTimer = null;
+    var GEO_FAST_POLL = 1000;  // 1s when background update is running
+    var uptimeBaselines = {};  // { 'geo-split': { seconds: 12345, timestamp: Date.now() }, ... }
+    var freshnessBaselines = {};  // { 'subnet_freshness': {seconds, timestamp}, 'domain_freshness': ... }
+    var uptimeTickTimer = null;
 
     // ── Inject dashboard card CSS ────────────────────────────────────────────
 
@@ -67,7 +77,7 @@
                 'position:relative;padding:0 24px 16px 24px;}' +
             /* Service rows — stock layout: toggle | info block */
             '.ew-dash-row{display:flex;align-items:flex-start;gap:16px;padding:14px 0;}' +
-            '.ew-dash-row+.ew-dash-row{border-top:1px solid var(--stroke,#4d545f);}' +
+            '.ew-dash-row+.ew-dash-row,.ew-details+.ew-dash-row{border-top:1px solid var(--stroke,#4d545f);}' +
             '.ew-dash-info{flex:1;min-width:0;}' +
             '.ew-dash-title{font-size:16px;font-weight:500;color:var(--primary-text,#c2c2c2);' +
                 'cursor:pointer;line-height:1.3;}' +
@@ -75,7 +85,7 @@
             '.ew-dash-desc{color:var(--text-gray,#949b9f);font-size:13px;margin-top:2px;}' +
             '.ew-dash-meta{color:var(--text-gray,#949b9f);font-size:12px;margin-top:2px;' +
                 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}' +
-            /* Toggle switch (cosmetic — no backend yet) */
+            /* Toggle switch — connected to start/stop API */
             '.ew-toggle{position:relative;width:36px;height:20px;flex-shrink:0;margin-top:2px;}' +
             '.ew-toggle input{opacity:0;width:0;height:0;position:absolute;}' +
             '.ew-toggle__bar{position:absolute;top:0;left:0;right:0;bottom:0;' +
@@ -88,6 +98,7 @@
                 'background:var(--primary-color-disabled,#2e3d57);}' +
             '.ew-toggle input:checked+.ew-toggle__bar::after{' +
                 'transform:translateX(16px);background:var(--primary-color,#0086cb);}' +
+            '.ew-toggle input:disabled+.ew-toggle__bar{opacity:0.5;cursor:not-allowed;}' +
             /* Status chip — stock-like with background */
             '.ew-chip{display:inline-flex;align-items:center;gap:6px;' +
                 'padding:4px 12px;border-radius:12px;font-size:12px;font-weight:500;' +
@@ -118,16 +129,32 @@
                 'border-color:#03825a;' +
                 'background:rgba(105,201,155,.15);}' +
             '.ew-expand-btn svg{width:16px;height:16px;stroke:currentColor;fill:none;}' +
-            /* Expandable details — stock wan-info-property pattern */
-            '.ew-details{display:none;padding:12px 0 4px 52px;' +
-                'column-count:3;column-gap:24px;}' +
-            '.ew-details--open{display:block;}' +
-            '.ew-detail-item{break-inside:avoid;margin-bottom:12px;overflow-wrap:anywhere;}' +
+            /* Expandable details — CSS Grid for left-to-right order */
+            '.ew-details{display:none;padding:16px 0;}' +
+                '.ew-details--open{display:grid;grid-template-columns:repeat(3,1fr);gap:16px 24px;}' +
+            '.ew-detail-item{overflow-wrap:anywhere;}' +
             '.ew-detail-label{color:var(--text-gray,#949b9f);font-size:14px;' +
-                'line-height:22px;padding-right:24px;}' +
+                'line-height:22px;}' +
             '.ew-detail-value{color:var(--primary-text,#c2c2c2);font-size:14px;' +
-                'line-height:22px;min-height:16px;display:flex;' +
-                'flex-direction:row;align-items:flex-start;}';
+                'line-height:22px;min-height:16px;}' +
+            /* Update button inline (stock Keenetic style) */
+            '.ew-update-btn{' +
+                'position:relative;background:none;border:none;cursor:pointer;' +
+                'color:var(--text-gray,#949b9f);font-size:16px;' +
+                'padding:0 2px;margin-left:4px;vertical-align:middle;' +
+                'line-height:1;opacity:0.7;transition:color .15s,opacity .15s;}' +
+            '.ew-update-btn:hover{color:var(--primary-text,#c2c2c2);opacity:1;}' +
+            '.ew-update-btn:disabled{opacity:0.3;cursor:not-allowed;}' +
+            '.ew-update-btn--spinning svg{animation:ew-spin 1s linear infinite;}' +
+            '@keyframes ew-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}' +
+            /* Tooltip (stock Keenetic variables) */
+            '.ew-update-btn[data-tooltip]:hover::after{' +
+                'content:attr(data-tooltip);position:absolute;' +
+                'bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);' +
+                'background:var(--tooltip-background,#2a3444);' +
+                'color:var(--tooltip-text,#fff);font-size:12px;' +
+                'padding:4px 8px;border-radius:4px;white-space:nowrap;' +
+                'pointer-events:none;z-index:1000;}';
         document.head.appendChild(style);
     }
 
@@ -328,7 +355,7 @@
         row.className = 'ew-dash-row';
         row.id = 'ew-dash-' + svc.id;
 
-        // Toggle switch (cosmetic, no backend)
+        // Toggle switch — connected to start/stop API
         var toggle = document.createElement('label');
         toggle.className = 'ew-toggle';
         var cb = document.createElement('input');
@@ -339,6 +366,30 @@
         bar.className = 'ew-toggle__bar';
         toggle.appendChild(cb);
         toggle.appendChild(bar);
+
+        // Wire toggle to POST /api/{service}/start|stop (skip webui — can't stop own server)
+        if (svc.id !== 'webui') {
+            cb.addEventListener('change', function() {
+                var action = cb.checked ? 'start' : 'stop';
+                cb.disabled = true;
+                bar.style.opacity = '0.5';
+                fetch('/api/' + svc.id + '/' + action, { method: 'POST' })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        cb.disabled = false;
+                        bar.style.opacity = '';
+                        if (!data.ok) cb.checked = !cb.checked;
+                        setTimeout(fetchDashboardStatuses, 500);
+                    })
+                    .catch(function() {
+                        cb.disabled = false;
+                        bar.style.opacity = '';
+                        cb.checked = !cb.checked;
+                    });
+            });
+        } else {
+            cb.disabled = true;  // webui toggle always locked
+        }
 
         // Info block: title + description + status chip
         var info = document.createElement('div');
@@ -358,7 +409,7 @@
 
         var chip = document.createElement('div');
         chip.className = 'ew-chip ew-chip--stopped';
-        chip.innerHTML = '<span class="ew-chip__dot"></span> \u2014';
+        chip.innerHTML = '<span class="ew-chip__dot"></span> LOADING\u2026';
 
         info.appendChild(title);
         info.appendChild(desc);
@@ -475,8 +526,85 @@
         grid.appendChild(card);
         dashboardInjected = true;
 
+        // Event delegation for update buttons (geo-split subnet/domain refresh)
+        card.addEventListener('click', function(e) {
+            var btn = e.target.closest('.ew-update-btn');
+            if (!btn || btn.disabled) return;
+            var actionUrl = btn.getAttribute('data-action');
+            btn.classList.add('ew-update-btn--spinning');
+            btn.disabled = true;
+            fetch(actionUrl, { method: 'POST' })
+                .then(function(r) { return r.json(); })
+                .then(function() {
+                    // Started in background. Fast polling picks up background=running
+                    startGeoFastPolling();
+                })
+                .catch(function() {
+                    btn.classList.remove('ew-update-btn--spinning');
+                    btn.disabled = false;
+                });
+        });
+
         fetchDashboardStatuses();
         dashboardTimer = setInterval(fetchDashboardStatuses, DASH_POLL_INTERVAL);
+        startUptimeTicker();
+    }
+
+    /**
+     * Format seconds as stock Keenetic uptime: "N DAYS HH:MM:SS" or "HH:MM:SS"
+     * @param {number} totalSeconds
+     * @returns {string}
+     */
+    function formatUptimeStock(totalSeconds) {
+        var days = Math.floor(totalSeconds / 86400);
+        var hours = Math.floor((totalSeconds % 86400) / 3600);
+        var mins = Math.floor((totalSeconds % 3600) / 60);
+        var secs = Math.floor(totalSeconds % 60);
+        var hms = ('0' + hours).slice(-2) + ':' +
+                  ('0' + mins).slice(-2) + ':' +
+                  ('0' + secs).slice(-2);
+        if (days > 0) {
+            return days + (days === 1 ? ' DAY ' : ' DAYS ') + hms;
+        }
+        return hms;
+    }
+
+    /** Start 1s ticker that updates all running chips with live uptime + freshness. */
+    function startUptimeTicker() {
+        if (uptimeTickTimer) return;
+        uptimeTickTimer = setInterval(function() {
+            var now = Date.now();
+            // Update uptime chips
+            for (var id in uptimeBaselines) {
+                var bl = uptimeBaselines[id];
+                var elapsed = Math.floor((now - bl.timestamp) / 1000);
+                var currentSeconds = bl.seconds + elapsed;
+                var row = document.getElementById('ew-dash-' + id);
+                if (!row) continue;
+                var chip = row.querySelector('.ew-chip');
+                if (!chip || !chip.classList.contains('ew-chip--running')) continue;
+                chip.innerHTML = '<span class="ew-chip__dot"></span> RUNNING ' + formatUptimeStock(currentSeconds);
+            }
+            // Update freshness counters
+            for (var fkey in freshnessBaselines) {
+                var fbl = freshnessBaselines[fkey];
+                var fcurrent = fbl.seconds + Math.floor((now - fbl.timestamp) / 1000);
+                var fEl = document.querySelector('[data-freshness-key="' + fkey + '"]');
+                if (fEl) {
+                    fEl.textContent = formatUptimeStock(fcurrent);
+                }
+            }
+        }, 1000);
+    }
+
+    /** Stop uptime ticker and clear baselines. */
+    function stopUptimeTicker() {
+        if (uptimeTickTimer) {
+            clearInterval(uptimeTickTimer);
+            uptimeTickTimer = null;
+        }
+        uptimeBaselines = {};
+        freshnessBaselines = {};
     }
 
     /** Format detail key: snake_case → Title Case. */
@@ -484,50 +612,160 @@
         return key.replace(/_/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
     }
 
+    /** Format boolean: true → "Ok", false → "Fail". */
+    function formatBool(val) {
+        return val ? 'Ok' : 'Fail';
+    }
+
+    // Updatable detail keys → POST action URL (only geo-split)
+    var GEO_UPDATE_ACTIONS = {
+        'geo_zone':       '/api/geo-split/update-subnets',
+        'domain_sources': '/api/geo-split/update-domains'
+    };
+
     /**
-     * Render details grid HTML from data object.
-     * Includes top-level fields (pid, memory_kb, uptime) + all details.* fields.
-     * @param {{running: boolean, pid?: string, memory_kb?: string, uptime?: string, details?: Object}} data
+     * Render details grid HTML from data.details object.
+     * Iterates keys in JSON order (matches status.sh text output).
+     * Booleans rendered via formatBool() with red color for negative states.
+     * Red highlighting suppressed when service is stopped (running=false).
+     * @param {Object} details - data.details from status API
+     * @param {boolean} isRunning - whether the service is running
      * @returns {string}
      */
-    function renderDetailsGrid(data) {
-        var items = [];
-
-        if (data.uptime) items.push({ k: 'Uptime', v: data.uptime });
-        if (data.pid) items.push({ k: 'PID', v: data.pid });
-        if (data.memory_kb && data.memory_kb !== '0') items.push({ k: 'Memory', v: data.memory_kb + ' kB' });
-
-        if (data.details) {
-            var keys = Object.keys(data.details);
-            for (var i = 0; i < keys.length; i++) {
-                var val = data.details[keys[i]];
-                if (val === '' || val === null || val === undefined) continue;
-                // Format boolean values
-                if (val === true) val = 'Yes';
-                if (val === false) val = 'No';
-                items.push({ k: formatKey(keys[i]), v: String(val) });
-            }
-        }
-
+    function renderDetailsGrid(details, isRunning) {
+        if (!details) return '';
+        var keys = Object.keys(details);
         var html = '';
-        for (var j = 0; j < items.length; j++) {
+        for (var i = 0; i < keys.length; i++) {
+            var key = keys[i];
+            if (DETAILS_SKIP_KEYS[key]) continue;
+            // Keys starting with "_" → empty grid cell (spacer)
+            if (key.charAt(0) === '_') { html += '<div class="ew-detail-item"></div>'; continue; }
+            var val = details[key];
+            if (val === '' || val === null || val === undefined) continue;
+            var valStyle = '';
+            if (typeof val === 'boolean') {
+                if (!val && isRunning) valStyle = ' style="color:var(--error,#f44336)"';
+                val = formatBool(val);
+            } else if (typeof val === 'number' && val === 0 && isRunning) {
+                valStyle = ' style="color:var(--error,#f44336)"';
+            }
+            // Timer fields: numeric seconds → formatted string
+            if (typeof val === 'number' && TIMER_KEYS[key]) {
+                val = formatUptimeStock(val);
+            }
+            val = String(val);
+            // Multi-line values: split on \n, "!" prefix → red line
+            if (val.indexOf('\n') !== -1) {
+                val = val.split('\n').map(function(line) {
+                    if (line.charAt(0) === '!' && isRunning) return '<span style="color:var(--error,#f44336)">' + line.substring(1) + '</span>';
+                    if (line.charAt(0) === '!') return line.substring(1);
+                    return line;
+                }).join('<br>');
+            } else if (val.indexOf(' ') !== -1 && val.indexOf(':') !== -1) {
+                // Space-separated multi-values (e.g. ports)
+                val = val.split(' ').join('<br>');
+            }
+            var updateBtn = '';
+            if (GEO_UPDATE_ACTIONS[key]) {
+                updateBtn = ' <button class="ew-update-btn" data-action="' + GEO_UPDATE_ACTIONS[key] + '" data-tooltip="Force Reload">' +
+                    '<svg class="ndw-svg-icon svg-restart-dims" style="width:14px;height:14px;fill:currentColor"><use href="/assets/sprite/sprite.svg#restart"></use></svg></button>';
+            }
+            // Add data-freshness-key for live ticker on freshness fields
+            var dataAttr = '';
+            if (TIMER_KEYS[key]) {
+                dataAttr = ' data-freshness-key="' + key + '"';
+            }
             html += '<div class="ew-detail-item">' +
-                '<div class="ew-detail-label">' + items[j].k + '</div>' +
-                '<div class="ew-detail-value">' + items[j].v + '</div></div>';
+                '<div class="ew-detail-label">' + formatKey(key) + '</div>' +
+                '<div class="ew-detail-value"' + valStyle + dataAttr + '>' + val + updateBtn + '</div></div>';
         }
         return html;
     }
 
+    /** Start fast polling for geo-split card (3s). */
+    function startGeoFastPolling() {
+        if (geoFastPollTimer) return;
+        geoFastPollTimer = setInterval(function() {
+            fetchSingleServiceStatus('geo-split');
+        }, GEO_FAST_POLL);
+    }
+
+    /** Stop fast polling, remove spinning indicators. */
+    function stopGeoFastPolling() {
+        if (!geoFastPollTimer) return;
+        clearInterval(geoFastPollTimer);
+        geoFastPollTimer = null;
+        // Remove spinning from all update buttons
+        var card = document.getElementById('entware-dashboard-card');
+        if (card) {
+            card.querySelectorAll('.ew-update-btn--spinning').forEach(function(btn) {
+                btn.classList.remove('ew-update-btn--spinning');
+                btn.disabled = false;
+            });
+        }
+    }
+
+    /** Fetch status for a single service and update its row. */
+    function fetchSingleServiceStatus(serviceId) {
+        var svc = null;
+        for (var i = 0; i < SERVICE_APIS.length; i++) {
+            if (SERVICE_APIS[i].id === serviceId) { svc = SERVICE_APIS[i]; break; }
+        }
+        if (!svc) return;
+        var row = document.getElementById('ew-dash-' + svc.id);
+        if (!row) return;
+        var toggle = row.querySelector('.ew-toggle input');
+        var chip = row.querySelector('.ew-chip');
+        var detailsEl = document.getElementById('ew-details-' + svc.id);
+
+        fetch(svc.api, { cache: 'no-store' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var s = parseServiceStatus(data);
+                if (toggle) toggle.checked = data.running;
+                if (chip) {
+                    chip.className = 'ew-chip ew-chip--' + s.state;
+                    chip.innerHTML = '<span class="ew-chip__dot"></span> ' + s.text;
+                }
+                if (detailsEl) {
+                    detailsEl.innerHTML = renderDetailsGrid(data.details, data.running);
+                }
+                // Update uptime baseline
+                if (data.running && data.details && data.details.uptime) {
+                    uptimeBaselines[svc.id] = { seconds: data.details.uptime, timestamp: Date.now() };
+                } else {
+                    delete uptimeBaselines[svc.id];
+                }
+                // Update freshness baselines (timer keys)
+                if (data.details) {
+                    for (var tk in TIMER_KEYS) {
+                        if (data.details[tk]) {
+                            freshnessBaselines[tk] = { seconds: data.details[tk], timestamp: Date.now() };
+                        }
+                    }
+                }
+                // Check background status for fast polling control
+                if (data.details && data.details.background === 'running') {
+                    startGeoFastPolling();
+                } else if (geoFastPollTimer) {
+                    stopGeoFastPolling();
+                }
+            })
+            .catch(function() {});
+    }
+
     /**
      * Build status chip text from structured data.
-     * @param {{running: boolean, uptime?: string}} data
+     * Uptime is read from data.details.uptime.
+     * @param {Object} data - full API response
      * @returns {{state: string, text: string}}
      */
     function parseServiceStatus(data) {
         var state = data.running ? 'running' : 'stopped';
         var text = data.running ? 'RUNNING' : 'STOPPED';
-        if (data.running && data.uptime) {
-            text += ' ' + data.uptime;
+        if (data.running && data.details && data.details.uptime) {
+            text += ' ' + formatUptimeStock(data.details.uptime);
         }
         return { state: state, text: text };
     }
@@ -561,7 +799,32 @@
 
                     // Update expandable details grid
                     if (detailsEl) {
-                        detailsEl.innerHTML = renderDetailsGrid(data);
+                        detailsEl.innerHTML = renderDetailsGrid(data.details, data.running);
+                    }
+
+                    // Update uptime baseline
+                    if (data.running && data.details && data.details.uptime) {
+                        uptimeBaselines[svc.id] = { seconds: data.details.uptime, timestamp: Date.now() };
+                    } else {
+                        delete uptimeBaselines[svc.id];
+                    }
+
+                    // Update freshness baselines (timer keys)
+                    if (data.details) {
+                        for (var tk in TIMER_KEYS) {
+                            if (data.details[tk]) {
+                                freshnessBaselines[tk] = { seconds: data.details[tk], timestamp: Date.now() };
+                            }
+                        }
+                    }
+
+                    // Check geo-split background for fast polling
+                    if (svc.id === 'geo-split' && data.details) {
+                        if (data.details.background === 'running') {
+                            startGeoFastPolling();
+                        } else if (geoFastPollTimer) {
+                            stopGeoFastPolling();
+                        }
                     }
                 })
                 .catch(function() {
@@ -646,6 +909,11 @@
                 clearInterval(dashboardTimer);
                 dashboardTimer = null;
             }
+            if (geoFastPollTimer) {
+                clearInterval(geoFastPollTimer);
+                geoFastPollTimer = null;
+            }
+            stopUptimeTicker();
             var oldCard = document.getElementById('entware-dashboard-card');
             if (oldCard) oldCard.remove();
             tryDashboardCard();

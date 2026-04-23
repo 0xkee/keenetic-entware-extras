@@ -29,3 +29,4 @@ geo-split-data/lists/geoip/*.zone
 
 # Built packages
 dist/*.ipk
+.playwright-mcp/*

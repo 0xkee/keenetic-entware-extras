@@ -15,9 +15,11 @@ _CONFIG_DIR="$INSTALL_DIR/config"
 case "${1:-}" in
   start)
     echo "Starting geo-split..."
-    # Cold start: run sequentially to avoid temp-file conflicts on low-RAM routers
-    "$SCRIPTS/update-subnets.sh"
-    "$SCRIPTS/update-domains.sh"
+    # Parallel: subnets and domains use separate temp files, batch files and tables
+    # (no conflicts after table separation refactor)
+    "$SCRIPTS/update-subnets.sh" &
+    "$SCRIPTS/update-domains.sh" &
+    wait
     # Connect LAN to tables
     "$SCRIPTS/attach-rules.sh"
     # Write PID file (mtime used for uptime tracking)

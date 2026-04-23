@@ -19,14 +19,15 @@
 - [x] ~~переименовать ifaces in conf/code to IN/OUT~~ — ROUTE_OUT (целевой) + ROUTE_IN (LAN-источники)
 - [x] переименовать в geo-split, поправить все описания в док/коде как split общего случая, с примерами о VPN & ru zone
 - [x] refactor apply-routes нужен? и вообще проверка и рекомендации по refactor arch
-- [x] **Разделение route tables + async reload** — план: [tables-separation-plan.md](docs/tables-separation-plan.md)
+- [x] **Разделение route tables + async reload** — план: [tables-separation-plan.md](docs/archive/tables-separation-plan.md)
 - [x] выбрать лицензию kee, с учетом используемых зависимостей/данных — MIT (LICENSE в корне)
 - [x] надо изучить, удаляются ли старые домены из роутинга, ещё вопрос как лучше и надо ли добавить опцию в конфиг
-- [ ] проверить S99 на предмет, можно ли загружать списки паралельно или как лучше (и систематизировать, если используются в нескольких местах)
+- [x] ~~проверить S99 на предмет параллельной загрузки~~ — **Сделано (2026-04-17):** cold start в [`S99geo-split:19`](rootfs/opt/etc/init.d/S99geo-split:19) теперь параллельный (`& wait`). После разделения таблиц temp-файлы и batch-файлы у subnets/domains разные → конфликтов нет.
 - [x] проверит статус (Domain sources: 1 domain(s) configured) , похоже не считаются домены в @include
 - [x] надо изучить и дописать в доки по установке, какие пакеты должны быть поставлены на кинетик
-- [ ] возможно злой баг: таблицы презаполняются при смене состояния любого интерейса (а нам вероятно надо только IN ifaces из конфига?)
-- [ ] **postinst: автоматический restart после upgrade** — сейчас при `opkg install` upgrade цикл prerm→postinst выполняет detach-rules + flush tables, но сервис не стартует автоматически (выводит подсказку `Start: /opt/etc/init.d/S99geo-split start`). После Full Deploy на router-1 2026-04-17 обнаружилось: geo-split остался в `not running`, routes 0/0 — пришлось запускать вручную. Сделать idempotent restart в [`packaging/geo-split/postinst`](../packaging/geo-split/postinst:1) при upgrade, сохранив текущее поведение для first-install. См. [`.project/deploy-workflow.md §4.6`](../.project/deploy-workflow.md:173) (требование идемпотентности).
+- [x] ~~возможно злой баг: таблицы презаполняются при смене состояния любого интерейса~~ — **Исправлено (2026-04-17):** `ip route show default` (iproute2-entware 4.4.0-11) возвращал ВСЕ маршруты main-таблицы вместо только default → false positives для br0/nwg0/br1. Фикс: `ip route | grep "^default"` в [`ndm-hook.sh:47`](scripts/ndm-hook.sh:47) и [`lib/ip.sh:41`](../lib/ip.sh:41)
+- [x] ~~status: freshness заполнения route tables~~ — **Сделано (2026-04-17):** [`lib/ip.sh`](../lib/ip.sh:68) `fill_routes_batch()` пишет stamp-файл `/opt/var/run/geo-split-table-${table}.filled`. [`status.sh`](scripts/status.sh:63) показывает "filled Xm ago ✓". Stamp-файлы удаляются в [`detach-rules.sh`](scripts/detach-rules.sh:25) и [`prerm`](../packaging/geo-split/prerm:17)
+- [x] ~~postinst: автоматический restart после upgrade~~ — **Сделано (2026-04-17):** [`postinst`](../packaging/geo-split/postinst:29) безусловно вызывает `S99geo-split start` после setup cron/hook. opkg не рестартует сервисы сам — только через prerm/postinst скрипты.
 ---
 
 ## Выполнено

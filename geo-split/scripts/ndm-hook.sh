@@ -40,9 +40,12 @@ fi
 
 case "${connected:-}-${link:-}-${up:-}" in
   yes-up-up)
-    # In auto mode (empty TARGET_IFACE), only react if this interface has default route
+    # In auto mode (empty TARGET_IFACE), only react if this interface has default route.
+    # NOTE: "ip route show default" on iproute2-entware returns ALL main table routes
+    # (not just default), causing false positives for br0/nwg0/etc.
+    # Using "ip route | grep ^default" for exact default-route-only match.
     if [ -z "$TARGET_IFACE" ]; then
-      ip route show default | grep -q "dev ${system_name:-}" || exit 0
+      ip route | grep "^default" | grep -q "dev ${system_name:-}" || exit 0
     fi
     logger -t "$LOG_TAG" "Interface ${system_name:-} up, filling tables + attaching rules"
     {

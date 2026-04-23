@@ -1,5 +1,5 @@
 Package: keenetic-entware-extras
-Version: 0.5.0
+Version: 0.5.2
 Architecture: all
 Maintainer: 0xkee
 Description: Shared shell libraries and CLI tools for keenetic-entware-extras.

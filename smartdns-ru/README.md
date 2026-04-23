@@ -153,9 +153,10 @@ smartdns-ru/
 ├── scripts/
 │   └── status.sh          # диагностика
 └── docs/                  # документация, исследования
+    ├── archive/
+    │   └── current-state-assessment.md
     ├── improvement-plan.md
-    ├── dns-landscape-research.md
-    └── current-state-assessment.md
+    └── dns-landscape-research.md
 ```
 
 ## Версионирование

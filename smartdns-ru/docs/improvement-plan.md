@@ -5,7 +5,7 @@
 **Updated:** 2026-04-16
 **Status:** ✅ Этапы A+B реализованы, ⏳ Этап C — pending
 **Входные данные:**
-- [Phase 1: Assessment](current-state-assessment.md)
+- [Phase 1: Assessment](archive/current-state-assessment.md)
 - [Phase 2: DNS Research](dns-landscape-research.md)
 - [`.project/target-arch.md`](../../.project/target-arch.md), [`.project/target-code.md`](../../.project/target-code.md)
 
@@ -286,7 +286,8 @@ smartdns-ru/
 ├── config/
 │   └── smartdns.conf               # (обновляется в Этапе B)
 ├── docs/
-│   ├── current-state-assessment.md
+│   ├── archive/
+│   │   └── current-state-assessment.md
 │   ├── dns-landscape-research.md
 │   └── improvement-plan.md         # этот файл
 ├── scripts/

@@ -138,8 +138,80 @@ show_dns_tests() {
   dns_test "github.com"  "default-group"
 }
 
+# Collect structured data and emit JSON for webui.
+json_output() {
+  local running="false" pid_val="" mem_val="" version_val=""
+  local ports_val="" servers=0 rules=0 cache_size=""
+
+  # Process
+  if [ -n "$__PID" ] && kill -0 "$__PID" 2>/dev/null; then
+    running="true"
+    pid_val="$__PID"
+    mem_val="$(awk '/VmRSS/{print $2}' "/proc/$__PID/status" 2>/dev/null || echo "0")"
+  fi
+
+  # Uptime
+  if [ -f "$PIDFILE" ]; then
+    local mtime age
+    mtime="$(file_mtime "$PIDFILE")"
+    if [ -n "$mtime" ] && [ "$mtime" -gt 0 ] 2>/dev/null; then
+      age=$(( $(date +%s) - mtime ))
+      uptime_seconds_val="$age"
+    fi
+  fi
+
+  # Ports
+  ports_val="$(netstat -tlnup 2>/dev/null | grep smartdns | awk '{print $4}' | sort -u | tr '\n' ' ' | sed 's/ $//')"
+
+  # Config
+  if [ -f "$CONF" ]; then
+    servers="$(grep -c '^server' "$CONF" 2>/dev/null || echo 0)"
+    rules="$(grep -c '^nameserver' "$CONF" 2>/dev/null || echo 0)"
+  fi
+
+  # Cache (formatted via format_size_kb)
+  if [ -f "$CACHE_FILE" ]; then
+    cache_size="$(format_size_kb "$(du -k "$CACHE_FILE" 2>/dev/null | awk '{print $1}')")"
+  fi
+
+  # Version
+  version_val="$(installed_pkg_version smartdns-ru)"
+
+  printf '{'
+  json_kv_bool "running" "$([ "$running" = "true" ] && echo 0 || echo 1)"
+  printf ','
+  json_kv_bool "ok" "$STATUS_OK"
+  printf ',"details":{'
+  json_kv "ports" "$ports_val"
+  printf ','
+  json_kv_num "servers" "$servers"
+  printf ','
+  json_kv_num "rules" "$rules"
+  printf ','
+  json_kv "cache" "${cache_size:-none}"
+  printf ','
+  json_kv "memory" "$([ -n "$mem_val" ] && [ "$mem_val" != "0" ] && format_size_kb "$mem_val" || printf '')"
+  printf ','
+  json_kv "pid" "$pid_val"
+  printf ','
+  json_kv_num "uptime" "${uptime_seconds_val:-0}"
+  printf ','
+  json_kv "version" "${version_val:-unknown}"
+  printf '}}\n'
+}
+
 # --- main ---
 detect_pid
+
+if [ "${1:-}" = "--json" ]; then
+  # Run checks silently to set STATUS_OK
+  show_process >/dev/null 2>&1 || true
+  show_ports >/dev/null 2>&1 || true
+  show_config >/dev/null 2>&1 || true
+  show_dns_tests >/dev/null 2>&1 || true
+  json_output
+  exit "$STATUS_OK"
+fi
 
 echo "smartdns-ru status:"
 echo "  Service:"

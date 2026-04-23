@@ -47,7 +47,7 @@
 
 ### Phase 5 — Preserve Keenetic filter profiles (optional)
 
-**Отложено по решению пользователя.** Подробности — [`docs/smartdns-redirect-plan.md`](../docs/smartdns-redirect-plan.md) раздел «Phase 5».
+**Отложено по решению пользователя.** Подробности — [`docs/archive/smartdns-redirect-plan.md`](../docs/archive/smartdns-redirect-plan.md) раздел «Phase 5».
 
 - [ ] `scripts/filter-profile-exclusions.sh` — парсер `show running-config` → список MAC, привязанных к filter profile
 - [ ] Интеграция в `dns-redirect.sh`: при `PRESERVE_FILTER_PROFILES=yes` — ACCEPT-правила для excluded MAC ДО REDIRECT
@@ -59,7 +59,7 @@
 
 - [ ] **SmartDNS TCP on :6053** — в recon обнаружено что SmartDNS слушает только UDP. TCP-редирект в iptables безвреден но бесполезен. Либо добавить `bind-tcp 127.0.0.1:6053` в [`smartdns-ru/config/smartdns.conf`](../smartdns-ru/config/smartdns.conf), либо убрать TCP-правило из `dns-redirect.sh`. Сейчас — оставлено TCP-правило для forward-compat.
 - [ ] **Deploy на router-2** — второй роутер.
-- [ ] **Uptime через pidfile** — `status.sh` показывает uptime через `file_mtime(PIDFILE)`. При `reload` PIDFILE перезаписывается → uptime сбрасывается. Решение: отдельный `start-stamp` файл, создаваемый только при `start` (не при `reload`).
+- [x] ~~Uptime через pidfile~~ — поведение через PIDFILE оставлено как есть (сброс при reload — acceptable).
 - [ ] **AGH / Unbound preset configs** — в `config/` добавить закомментированные примеры `UPSTREAM_PORT=5353 WATCHDOG_SERVICE=S80adguardhome` и `UPSTREAM_PORT=5335 WATCHDOG_SERVICE=S60unbound`.
 - [ ] **router-2 deploy** через `opkg install`.
 
@@ -69,8 +69,8 @@
 - [x] TODO.md (этот файл)
 - [x] `.project/target-arch.md`
 - [x] `.project/target-code.md`
-- [ ] Ссылка с корневого [`README.md`](../README.md) проекта на smartdns-redirect subproject
-- [ ] Упоминание в [`docs/smartdns-replacement-options.md`](../docs/smartdns-replacement-options.md) — закрыть «Вариант 8» с референсом на готовый пакет
+- [x] ~~Ссылка с корневого README.md~~ — уже есть в [`README.md`](../README.md:59) (секция «Подпроекты»)
+- [x] ~~Упоминание в smartdns-replacement-options.md~~ — **Сделано (2026-04-17):** [`Вариант 8`](../docs/archive/smartdns-replacement-options.md:588) получил статус-баннер «✅ РЕАЛИЗОВАНО как пакет smartdns-redirect v0.1.1»
 
 ---
 

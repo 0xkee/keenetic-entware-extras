@@ -147,7 +147,7 @@ show_version() {
 
 # Collect structured data and emit JSON for webui.
 json_output() {
-  local running="false" uptime_val="" version_val=""
+  local running="false" version_val=""
   local upstream_ok="false" upstream_name=""
 
   # Running: PIDFILE exists = service is attached
@@ -155,7 +155,7 @@ json_output() {
     running="true"
     local age
     age=$(( $(date +%s) - $(file_mtime "$PIDFILE") ))
-    uptime_val="$(format_age "$age")"
+    uptime_seconds_val="$age"
   fi
 
   # Upstream listening?
@@ -177,22 +177,55 @@ json_output() {
   # Version
   version_val=$(installed_pkg_version smartdns-redirect)
 
+  # Rules check: verify iptables REDIRECT rules for all interfaces × protos
+  local rules_ok_val=0 _iface _proto
+  if [ -n "$INTERFACES" ]; then
+    for _iface in $INTERFACES; do
+      for _proto in udp tcp; do
+        iptables -t nat -C PREROUTING -i "$_iface" -p "$_proto" --dport 53 \
+          -j REDIRECT --to-ports "$UPSTREAM_PORT" 2>/dev/null || rules_ok_val=1
+      done
+    done
+    if [ "$ENABLE_IPV6" = "yes" ] && command -v ip6tables >/dev/null 2>&1; then
+      for _iface in $INTERFACES; do
+        for _proto in udp tcp; do
+          ip6tables -t nat -C PREROUTING -i "$_iface" -p "$_proto" --dport 53 \
+            -j REDIRECT --to-ports "$UPSTREAM_PORT" 2>/dev/null || rules_ok_val=1
+        done
+      done
+    fi
+  fi
+
+  # NDM hook presence
+  local ndm_hook_ok_val=1
+  [ -x "/opt/etc/ndm/netfilter.d/smartdns-redirect-hook" ] && ndm_hook_ok_val=0
+
+  # Init script presence
+  local init_ok_val=1
+  [ -x "/opt/etc/init.d/S39smartdns-redirect" ] && init_ok_val=0
+
   printf '{'
   json_kv_bool "running" "$([ "$running" = "true" ] && echo 0 || echo 1)"
   printf ','
-  json_kv "uptime" "$uptime_val"
-  printf ','
   json_kv_bool "ok" "$STATUS_OK"
   printf ',"details":{'
-  json_kv "upstream" "127.0.0.1:${UPSTREAM_PORT}"
-  printf ','
-  json_kv "upstream_name" "$upstream_name"
-  printf ','
   json_kv "interfaces" "$INTERFACES"
   printf ','
   json_kv "ipv6" "$ENABLE_IPV6"
   printf ','
-  json_kv_bool "upstream_listening" "$([ "$upstream_ok" = "true" ] && echo 0 || echo 1)"
+  json_kv_bool "ndm_hook" "$ndm_hook_ok_val"
+  printf ','
+  json_kv "upstream" "127.0.0.1:${UPSTREAM_PORT}"
+  printf ','
+  json_kv "name" "$upstream_name"
+  printf ','
+  json_kv_bool "status" "$([ "$upstream_ok" = "true" ] && echo 0 || echo 1)"
+  printf ','
+  json_kv_bool "init" "$init_ok_val"
+  printf ','
+  json_kv_bool "rules" "$rules_ok_val"
+  printf ','
+  json_kv_num "uptime" "${uptime_seconds_val:-0}"
   printf ','
   json_kv "version" "${version_val:-unknown}"
   printf '}}\n'

@@ -1,0 +1,74 @@
+#!/bin/sh
+# nginx-webui init script for Entware.
+# Standalone init (no rc.func) — safe alongside stock nginx.
+# Config: /opt/etc/nginx/nginx-webui.conf (separate instance on port 8080).
+
+ENABLED=yes
+DESC="nginx WebUI dashboard"
+CONF="/opt/etc/nginx/nginx-webui.conf"
+PIDFILE="/opt/var/run/nginx-webui.pid"
+NGINX="/opt/sbin/nginx"
+PATH="/opt/sbin:/opt/bin:/sbin:/bin:/usr/sbin:/usr/bin"
+
+is_running() {
+    [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null
+}
+
+start() {
+    [ "$ENABLED" != "yes" ] && return 8
+    printf " Starting %s... " "$DESC"
+    if is_running; then
+        echo "already running."
+        return 0
+    fi
+    $NGINX -c "$CONF" 2>&1
+    if is_running; then
+        echo "done. PID=$(cat "$PIDFILE")"
+    else
+        echo "failed."
+        return 1
+    fi
+}
+
+stop() {
+    printf " Stopping %s... " "$DESC"
+    if ! is_running; then
+        echo "not running."
+        return 0
+    fi
+    $NGINX -c "$CONF" -s stop 2>&1
+    COUNTER=0
+    while is_running && [ "$COUNTER" -le 10 ]; do
+        sleep 1
+        COUNTER=$((COUNTER + 1))
+    done
+    if is_running; then
+        echo "failed, killing."
+        kill -9 "$(cat "$PIDFILE")" 2>/dev/null
+        rm -f "$PIDFILE"
+    else
+        echo "done."
+    fi
+}
+
+case "${1:-}" in
+    start)   start ;;
+    stop)    stop ;;
+    restart) stop; start ;;
+    check|status)
+        if is_running; then
+            echo "$DESC is running, PID=$(cat "$PIDFILE")"
+        else
+            echo "$DESC is not running."
+            exit 1
+        fi
+        ;;
+    reload)
+        $NGINX -c "$CONF" -s reload 2>&1
+        echo "$DESC reloaded."
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart|check|status|reload}"
+        exit 1
+        ;;
+esac

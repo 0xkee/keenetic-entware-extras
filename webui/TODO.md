@@ -18,7 +18,7 @@
 - [ ] **nginx: user root → privilege separation** — `config/nginx.conf:11` — io.popen() от root = RCE risk
 - [x] **inject.js: window.showInContent утечка** — заменено на addEventListener
 - [ ] **inject.js: setInterval pathname polling → popstate** — опрашивает pathname каждые 2с
-- [ ] **Toggle switches: подключить к backend** — сейчас cosmetic; нужен API start/stop
+- [ ] **Toggle switches: подключить к backend** — сейчас cosmetic; API start/stop готов (`api-router.lua` action_routes), осталось подключить frontend
 
 ## 🟢 Мелкие / Cleanup
 

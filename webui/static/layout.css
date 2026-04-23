@@ -1,0 +1,146 @@
+/* layout.css — Custom component styles using stock Keenetic CSS variables.
+ * Stock styles-*.css provides variables (--background, --primary-text, etc.)
+ * Component styles (dashboard-card, ndw-tabs, etc.) are Angular-scoped
+ * in main-*.js and cannot be reused — we implement our own minimal versions.
+ */
+
+body {
+    font-family: 'Roboto', sans-serif;
+    margin: 0; padding: 0;
+    background: var(--background, #1b2434);
+    color: var(--primary-text, #c2c2c2);
+    min-height: 100vh;
+}
+
+/* ── Page wrapper ─────────────────────────────────────────────────── */
+.ndw-page-wrapper { padding: 24px; max-width: 1200px; }
+.ndw-page-wrapper__header { margin-bottom: 16px; }
+.ndw-page-wrapper__title {
+    font-size: 20px; font-weight: 500;
+    color: var(--primary-text, #c2c2c2); margin: 0;
+}
+.ndw-page-wrapper__content { display: flex; flex-direction: column; gap: 16px; }
+
+/* ── Tabs ─────────────────────────────────────────────────────────── */
+.ndw-tabs { margin-bottom: 16px; }
+.ndw-tabs__list {
+    display: flex; gap: 0;
+    border-bottom: 2px solid var(--stroke, #4d545f);
+}
+.ndw-tabs__tab {
+    padding: 10px 20px; cursor: pointer;
+    color: var(--text-gray, #949b9f);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px; user-select: none;
+    font-size: 14px;
+}
+.ndw-tabs__tab:hover { color: var(--primary-text, #c2c2c2); }
+.ndw-tabs__tab--active {
+    color: var(--primary-color, #0086cb);
+    border-bottom-color: var(--primary-color, #0086cb);
+}
+
+/* ── Dashboard card ───────────────────────────────────────────────── */
+.dashboard-card {
+    border: 1px solid var(--dashboard-card-border, #4d545f);
+    border-radius: 8px;
+    background: var(--dashboard-background, #1b2434);
+    padding: 24px;
+}
+.dashboard-card__header {
+    display: flex; align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+.text-card-heading {
+    font-size: 13px; font-weight: 600;
+    letter-spacing: 0.5px; text-transform: uppercase;
+    color: var(--primary-text, #c2c2c2);
+}
+.dashboard-card__header-buttons { display: flex; gap: 8px; }
+.dashboard-card__content { /* contains service rows */ }
+
+/* ── Status badges ────────────────────────────────────────────────── */
+.ndw-status { display: inline-block; }
+.status { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+.status__icon {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--text-gray, #949b9f); flex-shrink: 0;
+}
+.status--success .status__icon {
+    background: var(--indicator-online, #7dce70);
+    box-shadow: 0 0 4px var(--indicator-online, #7dce70);
+}
+.status--success .status__text { color: var(--indicator-online, #7dce70); }
+.status--warning .status__icon { background: var(--error, #de3d3d); }
+.status--warning .status__text { color: var(--error, #de3d3d); }
+.status__text { color: var(--primary-text, #c2c2c2); }
+
+/* ── Buttons ──────────────────────────────────────────────────────── */
+.ndw-button {
+    border: 1px solid var(--stroke, #4d545f);
+    border-radius: 4px; background: transparent;
+    color: var(--primary-text, #c2c2c2);
+    cursor: pointer; padding: 6px 10px;
+    font-size: 14px; line-height: 1;
+    display: inline-flex; align-items: center; justify-content: center;
+}
+.ndw-button:hover { border-color: var(--primary-color, #0086cb); color: var(--primary-color, #0086cb); }
+
+/* ── Service rows (custom ew-*) ───────────────────────────────────── */
+.ew-services { display: flex; flex-direction: column; gap: 0; }
+.ew-service-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
+.ew-service-row + .ew-service-row { border-top: 1px solid var(--stroke, #4d545f); }
+.ew-service-info { flex: 1; }
+.ew-service-meta { color: var(--text-gray, #949b9f); font-size: 12px; margin-top: 2px; }
+.ew-toggle-wrap { flex-shrink: 0; }
+
+/* Details pre block */
+.ew-details-pre {
+    font-family: monospace; font-size: 12px;
+    line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+    color: var(--text-gray, #949b9f); padding: 8px 0; margin: 0;
+}
+
+/* Hidden utility */
+.ew-hidden { display: none !important; }
+
+/* ── Update button inline (stock Keenetic style) ─────────────────── */
+.ew-update-btn {
+    position: relative;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-gray, #949b9f);
+    font-size: 16px;
+    padding: 0 2px;
+    margin-left: 4px;
+    vertical-align: middle;
+    line-height: 1;
+    opacity: 0.7;
+    transition: color .15s, opacity .15s;
+}
+.ew-update-btn:hover {
+    color: var(--primary-text, #c2c2c2);
+    opacity: 1;
+}
+.ew-update-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.ew-update-btn--spinning svg { animation: ew-spin 1s linear infinite; }
+@keyframes ew-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* Tooltip (stock Keenetic variables) */
+.ew-update-btn[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--tooltip-background, #2a3444);
+    color: var(--tooltip-text, #fff);
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 1000;
+}

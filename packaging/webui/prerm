@@ -1,0 +1,8 @@
+#!/opt/bin/sh
+# prerm — runs before package files are removed.
+set -eu
+
+S80="/opt/etc/init.d/S80nginx-webui"
+if [ -x "$S80" ]; then
+    "$S80" stop 2>/dev/null || true
+fi

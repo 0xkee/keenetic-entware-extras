@@ -1,0 +1,39 @@
+#!/opt/bin/sh
+# postinst — runs after package files are unpacked.
+# Must be idempotent (called on both install and upgrade).
+set -eu
+
+INSTALL_DIR="/opt/keenetic-entware-extras/webui"
+S80="/opt/etc/init.d/S80nginx-webui"
+
+# 1. Deploy logrotate config
+LOGROTATE_DIR="/opt/etc/logrotate.d"
+if [ -d "$LOGROTATE_DIR" ]; then
+    cp "$INSTALL_DIR/config/logrotate.conf" "$LOGROTATE_DIR/nginx-webui"
+    echo "logrotate config deployed: $LOGROTATE_DIR/nginx-webui"
+fi
+
+# 2. Ensure logrotate runs via cron.daily
+CRON_DAILY="/opt/etc/cron.daily"
+CRON_LOGROTATE="$CRON_DAILY/logrotate"
+if [ ! -f "$CRON_LOGROTATE" ]; then
+    mkdir -p "$CRON_DAILY"
+    cat > "$CRON_LOGROTATE" <<'EOF'
+#!/opt/bin/sh
+# Run logrotate daily (created by webui package).
+/opt/sbin/logrotate /opt/etc/logrotate.conf
+EOF
+    chmod 755 "$CRON_LOGROTATE"
+    echo "cron.daily/logrotate wrapper created"
+fi
+
+# 3. Deploy init script
+cp "$INSTALL_DIR/rootfs/opt/etc/init.d/S80nginx-webui" "$S80"
+chmod 755 "$S80"
+
+# 4. (Re)start nginx-webui
+"$S80" restart || true
+
+echo "webui installed. Dashboard: http://<router-ip>:8080/custom/"
+echo "Config: $INSTALL_DIR/config/nginx.conf"
+echo "Status: $INSTALL_DIR/scripts/status.sh"

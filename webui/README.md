@@ -31,9 +31,10 @@ opkg install nginx-ssl nginx-mod-lua
 
 | Source (repo)                         | Target (router)                         |
 |---------------------------------------|-----------------------------------------|
-| `config/nginx.conf`                   | `/opt/etc/nginx/nginx-webui.conf`       |
-| `lua/api-router.lua`                  | `/opt/etc/nginx/lua/api-router.lua`     |
-| `static/*`                            | `/opt/share/keenetic-webui/`            |
+| `config/nginx.conf`                   | `/opt/keenetic-entware-extras/webui/config/nginx.conf` |
+| `lua/api-router.lua`                  | `/opt/keenetic-entware-extras/webui/lua/api-router.lua` |
+| `lua/stock-css-init.lua`              | `/opt/keenetic-entware-extras/webui/lua/stock-css-init.lua` |
+| `static/*`                            | `/opt/keenetic-entware-extras/webui/static/` |
 | `rootfs/opt/etc/init.d/S80nginx-webui`| `/opt/etc/init.d/S80nginx-webui`        |
 | `scripts/status.sh`                   | `/opt/keenetic-entware-extras/webui/scripts/status.sh` |
 
@@ -43,15 +44,10 @@ opkg install nginx-ssl nginx-mod-lua
 # 1. Install packages
 opkg install nginx-ssl nginx-mod-lua
 
-# 2. Copy config
-cp config/nginx.conf /opt/etc/nginx/nginx-webui.conf
+# 2. Deploy project tree (all files live under remote_base)
+# Files are deployed via scp/opkg to /opt/keenetic-entware-extras/webui/
 
-# 3. Copy Lua router
-mkdir -p /opt/etc/nginx/lua
-cp lua/api-router.lua /opt/etc/nginx/lua/
-
-# 4. Copy static files
-mkdir -p /opt/share/keenetic-webui
+# 3. Copy init script
 cp static/* /opt/share/keenetic-webui/
 
 # 5. Copy init script

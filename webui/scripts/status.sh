@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/common.sh"
 
 PIDFILE="/opt/var/run/nginx-webui.pid"
-CONF="/opt/etc/nginx/nginx-webui.conf"
+CONF="/opt/keenetic-entware-extras/webui/config/nginx.conf"
 LISTEN_PORT="8080"
 BASE_URL="http://127.0.0.1:${LISTEN_PORT}"
 
@@ -114,6 +114,31 @@ show_uptime() {
   fi
 }
 
+# Show logrotate status for nginx-webui logs.
+show_logrotate() {
+  local all_ok=true
+
+  if [ -x "/opt/sbin/logrotate" ]; then
+    echo "    Binary:      /opt/sbin/logrotate ✓"
+  else
+    echo "    Binary:      /opt/sbin/logrotate NOT FOUND ✗"; all_ok=false
+  fi
+
+  if [ -f "/opt/etc/logrotate.d/nginx-webui" ]; then
+    echo "    Config:      /opt/etc/logrotate.d/nginx-webui ✓"
+  else
+    echo "    Config:      /opt/etc/logrotate.d/nginx-webui NOT FOUND ✗"; all_ok=false
+  fi
+
+  if [ -x "/opt/etc/cron.daily/logrotate" ]; then
+    echo "    Cron daily:  /opt/etc/cron.daily/logrotate ✓"
+  else
+    echo "    Cron daily:  /opt/etc/cron.daily/logrotate NOT FOUND ✗"; all_ok=false
+  fi
+
+  if ! "$all_ok"; then STATUS_OK=1; fi
+}
+
 # Show installed package version.
 show_version() {
   local ver
@@ -171,6 +196,14 @@ json_output() {
   local http_ok_val=1
   [ "$port_ok" = "true" ] && http_ok_val=0
 
+  # Logrotate: binary + config + cron wrapper all present
+  local logrotate_ok_val=1
+  if [ -x "/opt/sbin/logrotate" ] \
+     && [ -f "/opt/etc/logrotate.d/nginx-webui" ] \
+     && [ -x "/opt/etc/cron.daily/logrotate" ]; then
+    logrotate_ok_val=0
+  fi
+
   printf '{'
   json_kv_bool "running" "$([ "$running" = "true" ] && echo 0 || echo 1)"
   printf ','
@@ -189,6 +222,8 @@ json_output() {
   json_kv "pid" "$pid_val"
   printf ','
   json_kv "memory" "$([ -n "$mem_val" ] && [ "$mem_val" != "0" ] && format_size_kb "$mem_val" || printf '')"
+  printf ','
+  json_kv_bool "logrotate" "$logrotate_ok_val"
   printf ','
   json_kv_num "uptime" "${uptime_seconds_val:-0}"
   printf ','
@@ -217,6 +252,9 @@ show_port
 echo
 echo "  HTTP:"
 show_http
+echo
+echo "  Logrotate:"
+show_logrotate
 echo
 echo "  System:"
 show_uptime

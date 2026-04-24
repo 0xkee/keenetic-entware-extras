@@ -27,6 +27,9 @@ geo-split-data/lists/geoip/*.zone
 # Remote host config (contains host-specific data)
 .project/target-hosts.json
 
+# Stock firmware backup (11MB, local-only reference)
+docs/knowledge/keenetic-webui-research/stock-backup-*
+
 # Built packages
 dist/*.ipk
 .playwright-mcp/*

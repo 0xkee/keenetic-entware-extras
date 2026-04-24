@@ -397,177 +397,22 @@
 
     // ── Inject dashboard card CSS ────────────────────────────────────────────
 
-    /** Inject minimal CSS for dashboard card layout (once). */
+    /**
+     * Inject external CSS stylesheets for dashboard card layout (once).
+     * Loads common.css (shared styles) and inject.css (stock page styles)
+     * via <link> elements instead of inline <style>.
+     */
     function injectDashStyles() {
         if (document.getElementById('entware-dash-styles')) return;
-        var style = document.createElement('style');
-        style.id = 'entware-dash-styles';
-        // Scoped via #entware-dashboard-card to avoid leaking into stock UI.
-        // Stock Angular component CSS is scoped with [_ngcontent-*] attributes
-        // and does NOT cascade to dynamically injected DOM — we provide our own.
-        style.textContent =
-            /* Card container — stock: flex column, no padding, background=--background */
-            /* Wrapper — stock row gap: 24px between drag-panel rows */
-            '#entware-dashboard-wrapper{margin-bottom:24px;}' +
-            /* Card — stock ndw-dashboard-card host */
-            '#entware-dashboard-card{' +
-                'width:100%;position:relative;' +
-                'word-break:break-word;' +
-                'display:flex;flex-direction:column;' +
-                'border:1px solid var(--dashboard-card-border,#4d545f);' +
-                'border-radius:8px;' +
-                'background:var(--background,#1b2434);' +
-                'box-sizing:border-box;}' +
-            /* Card header — matches stock: margin-top:24px, padding:0 8px 0 24px */
-            '#entware-dashboard-card .dashboard-card__header{' +
-                'display:flex;align-items:center;justify-content:space-between;' +
-                'margin-top:24px;margin-bottom:16px;' +
-                'padding:0 8px 0 24px;' +
-                'color:var(--text-gray,#949b9f);}' +
-            '#entware-dashboard-card .text-card-heading{' +
-                'font-size:16px;font-weight:700;letter-spacing:1px;' +
-                'text-transform:uppercase;color:var(--primary-text,#c2c2c2);' +
-                'text-decoration:none;cursor:pointer;line-height:1.2;}' +
-            '#entware-dashboard-card .text-card-heading:hover{' +
-                'text-decoration:underline;}' +
-            '#entware-dashboard-card .dashboard-card__header-buttons{' +
-                'display:flex;align-items:center;gap:8px;}' +
-            '#entware-dashboard-card .dashboard-card__drag-icon{' +
-                'color:var(--text-gray,#949b9f);cursor:grab;display:flex;}' +
-            '#entware-dashboard-card .dashboard-card__drag-icon svg{' +
-                'width:20px;height:20px;fill:currentColor;}' +
-            /* Card content — stock: position:relative + same left/right padding as header */
-            '#entware-dashboard-card .dashboard-card__content{' +
-                'position:relative;padding:0 24px 16px 24px;}' +
-            /* Service rows — stock layout: toggle | info block */
-            '.ew-dash-row{display:flex;align-items:flex-start;gap:16px;padding:14px 0;}' +
-            '.ew-dash-row+.ew-dash-row,.ew-details+.ew-dash-row{border-top:1px solid var(--stroke,#4d545f);}' +
-            '.ew-dash-info{flex:1;min-width:0;}' +
-            '.ew-dash-title{font-size:16px;font-weight:500;color:var(--primary-text,#c2c2c2);' +
-                'cursor:pointer;line-height:1.3;}' +
-            '.ew-dash-title:hover{text-decoration:underline;}' +
-            '.ew-dash-desc{color:var(--text-gray,#949b9f);font-size:13px;margin-top:2px;}' +
-            '.ew-dash-meta{color:var(--text-gray,#949b9f);font-size:12px;margin-top:2px;' +
-                'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}' +
-            /* Toggle switch — connected to start/stop API */
-            '.ew-toggle{position:relative;width:36px;height:20px;flex-shrink:0;margin-top:2px;}' +
-            '.ew-toggle input{opacity:0;width:0;height:0;position:absolute;}' +
-            '.ew-toggle__bar{position:absolute;top:0;left:0;right:0;bottom:0;' +
-                'background:var(--disabled,#2f3745);border-radius:10px;cursor:pointer;' +
-                'transition:background .2s;}' +
-            '.ew-toggle__bar::after{content:\'\';position:absolute;width:16px;height:16px;' +
-                'border-radius:50%;background:var(--text-gray,#949b9f);' +
-                'bottom:2px;left:2px;transition:transform .2s,background .2s;}' +
-            '.ew-toggle input:checked+.ew-toggle__bar{' +
-                'background:var(--primary-color-disabled,#2e3d57);}' +
-            '.ew-toggle input:checked+.ew-toggle__bar::after{' +
-                'transform:translateX(16px);background:var(--primary-color,#0086cb);}' +
-            '.ew-toggle input:disabled+.ew-toggle__bar{opacity:0.5;cursor:not-allowed;}' +
-            /* Status chip — stock-like with background */
-            '.ew-chip{display:inline-flex;align-items:center;gap:6px;' +
-                'padding:4px 12px;border-radius:12px;font-size:12px;font-weight:500;' +
-                'text-transform:uppercase;letter-spacing:.5px;margin-top:6px;}' +
-            '.ew-chip__dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}' +
-            '.ew-chip--running{background:rgba(125,206,112,.12);color:var(--indicator-online,#7dce70);}' +
-            '.ew-chip--running .ew-chip__dot{background:var(--indicator-online,#7dce70);}' +
-            '.ew-chip--caution{background:rgba(242,229,114,.12);color:var(--status-caution-text,#ffbb57);}' +
-            '.ew-chip--caution .ew-chip__dot{background:var(--indicator-yellow,#f2e572);}' +
-            '.ew-chip--stopped{background:var(--disabled,#2f3745);color:var(--text-gray,#949b9f);}' +
-            '.ew-chip--stopped .ew-chip__dot{background:var(--text-gray,#949b9f);}' +
-            '.ew-chip--error{background:rgba(222,61,61,.12);color:var(--error,#de3d3d);}' +
-            '.ew-chip--error .ew-chip__dot{background:var(--error,#de3d3d);}' +
-            /* Expand button — stock toggle vars, geometry tuned for our card style */
-            '.ew-expand-btn{' +
-                'min-width:unset;width:36px;height:36px;' +
-                'justify-content:center;padding:0;' +
-                'border:1px solid var(--toggle-button-default-border,rgba(235,235,235,.24));' +
-                'border-radius:8px;outline:none;' +
-                'background:var(--toggle-button-default-background,var(--background,#1b2434));' +
-                'color:var(--primary-text,#c2c2c2);' +
-                'display:flex;align-items:center;' +
-                'flex-shrink:0;align-self:flex-start;cursor:pointer;' +
-                'transition:border-color .15s,color .15s,background .15s;}' +
-            '.ew-expand-btn:hover{' +
-                'border-color:var(--toggle-button-hover-background,rgba(105,201,155,.15));' +
-                'background:var(--toggle-button-hover-background,rgba(105,201,155,.15));cursor:pointer;}' +
-            '.ew-expand-btn--active,.ew-expand-btn:active{' +
-                'border-color:var(--toggle-button-active-border,#03825a);' +
-                'background:var(--toggle-button-hover-background,rgba(105,201,155,.15));}' +
-            '.ew-expand-btn:disabled{' +
-                'border-color:var(--outline-button-disabled-border,#687378);' +
-                'background:var(--outline-button-disabled-background,#333a48);' +
-                'color:var(--outline-button-disabled-text,#687378);' +
-                'cursor:default;-webkit-user-select:none;user-select:none;}' +
-            '.ew-expand-btn svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;}' +
-            /* Expandable details — CSS Grid for left-to-right order */
-            '.ew-details{display:none;padding:16px 0;}' +
-                '.ew-details--open{display:grid;grid-template-columns:repeat(3,1fr);gap:16px 24px;}' +
-            '.ew-detail-item{overflow-wrap:anywhere;}' +
-            '.ew-detail-label{color:var(--text-gray,#949b9f);font-size:14px;' +
-                'line-height:22px;}' +
-            '.ew-detail-value{color:var(--primary-text,#c2c2c2);font-size:14px;' +
-                'line-height:22px;min-height:16px;}' +
-            /* Update button inline (stock Keenetic style) */
-            '.ew-update-btn{' +
-                'position:relative;background:none;border:none;cursor:pointer;' +
-                'color:var(--text-gray,#949b9f);font-size:16px;' +
-                'padding:0 2px;margin-left:4px;vertical-align:middle;' +
-                'line-height:1;opacity:0.7;transition:color .15s,opacity .15s;}' +
-            '.ew-update-btn:hover{color:var(--primary-text,#c2c2c2);opacity:1;}' +
-            '.ew-update-btn:disabled{opacity:0.3;cursor:not-allowed;}' +
-            '.ew-update-btn--spinning svg{animation:ew-spin 1s linear infinite;}' +
-            '@keyframes ew-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}' +
-            /* Tooltip (stock Keenetic variables) */
-            '.ew-update-btn[data-tooltip]:hover::after{' +
-                'content:attr(data-tooltip);position:absolute;' +
-                'bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);' +
-                'background:var(--tooltip-background,#2a3444);' +
-                'color:var(--tooltip-text,#fff);font-size:12px;' +
-                'padding:4px 8px;border-radius:4px;white-space:nowrap;' +
-                'pointer-events:none;z-index:1000;}' +
-            /* ── Cards Position dialog — card stub styling ── */
-            '.entware-dialog-row{margin-bottom:24px;}' +
-            '.entware-dialog-row .dashboard-card{' +
-                'background:var(--dashboard-card-background,var(--background,#1b2434));' +
-                'border-radius:8px;border:1px solid var(--dashboard-card-border,#4d545f);' +
-                'padding-bottom:4px;}' +
-            '.ew-dialog-toggle{padding:8px 16px 12px 16px;}' +
-            /* ── Cards Position dialog — stock ndw-toggle 1:1 replica ── */
-            /* Uses stock CSS vars (--toggle-*) from body — auto-adapts to dark/light theme */
-            '.entware-dialog-row .ndw-toggle__checkbox{' +
-                'position:absolute;opacity:0;width:34px;height:20px;margin:0;cursor:pointer;}' +
-            '.entware-dialog-row .ndw-toggle{display:inline-block;}' +
-            '.entware-dialog-row .ndw-toggle__wrapper{' +
-                'display:flex;align-items:center;cursor:pointer;gap:8px;}' +
-            '.entware-dialog-row .ndw-toggle__button{' +
-                'position:relative;width:34px;height:14px;display:block;}' +
-            '.entware-dialog-row .ndw-toggle__toggle-bar{' +
-                'width:inherit;height:14px;border:1px solid transparent;' +
-                'border-radius:10px;background-color:var(--toggle-off-background,#2e3d57);' +
-                'transition:background-color .1s;}' +
-            '.entware-dialog-row .ndw-toggle__toggle-bar__thumb{' +
-                'width:20px;height:20px;position:absolute;top:-3px;left:1px;' +
-                'border-radius:50%;transition:transform .1s;' +
-                'transform:translate(-1px);' +
-                'background-color:var(--toggle-off-thumb-background,#808B96);' +
-                'box-shadow:var(--toggle-off-thumb-box-shadow,0);}' +
-            '.entware-dialog-row .ndw-toggle__toggle-bar--on{' +
-                'background-color:var(--toggle-on-background,#3d5073);}' +
-            '.entware-dialog-row .ndw-toggle__toggle-bar--on .ndw-toggle__toggle-bar__thumb{' +
-                'transform:translate(14px);' +
-                'background-color:var(--toggle-on-thumb-background,#0097DC);' +
-                'box-shadow:var(--toggle-on-thumb-box-shadow,0);}' +
-            '.entware-dialog-row .ndw-toggle__label-wrapper{display:flex;align-items:center;}' +
-            '.entware-dialog-row .ndw-toggle__label{' +
-                'font-size:14px;line-height:16px;color:inherit;}' +
-            /* ── HTML5 drag visual feedback ── */
-            /* ── Cards Position dialog — disabled card state (toggle OFF) ── */
-            '.entware-dialog-row--off .dashboard-card{opacity:0.5;}' +
-            '.entware-dialog-row--off .ndw-drag-handle{display:none;}' +
-            /* ── HTML5 drag visual feedback ── */
-            '.ew-dragging{opacity:0.5;}' +
-            '.ew-drag-over{border-top:2px solid var(--primary-color,#0086cb);}';
-        document.head.appendChild(style);
+        var marker = document.createElement('meta');
+        marker.id = 'entware-dash-styles';
+        document.head.appendChild(marker);
+        ['common.css', 'inject.css'].forEach(function(file) {
+            var link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = '/custom/' + file;
+            document.head.appendChild(link);
+        });
     }
 
     // ── Build sidebar section ────────────────────────────────────────────────
@@ -901,9 +746,6 @@
             }
         }
         if (!colEl) return;
-
-        // Inject CSS for dashboard card layout
-        injectDashStyles();
 
         // Card container — stock class
         var card = document.createElement('div');
@@ -1293,6 +1135,7 @@
         if (!container) return false;
         container.appendChild(buildSection());
         injected = true;
+        injectDashStyles();
         setupRestore();
         setupCardsPositionDialog();
         return true;

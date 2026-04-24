@@ -4,6 +4,46 @@
 (function() {
     'use strict';
 
+    // ── Card ID for RCI ndw4_settings integration ────────────────────────────
+    var ENTWARE_CARD_ID = 'ENTWARE_EXTRAS';
+
+    // ── XHR interceptor — re-inject ENTWARE_EXTRAS into ndw4_settings on save ─
+    // Angular uses XMLHttpRequest (not fetch) for RCI API.  When user saves
+    // via Cards Position dialog, Angular strips unknown card IDs.  This
+    // monkey-patch intercepts the outgoing request and re-inserts our card.
+    var _origXhrSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.send = function(body) {
+        if (body && typeof body === 'string' && body.indexOf('ndw4_settings') !== -1) {
+            try {
+                var parsed = JSON.parse(body);
+                for (var i = 0; i < parsed.length; i++) {
+                    var cmd = parsed[i];
+                    if (cmd && cmd.system && cmd.system.environment && cmd.system.environment.set &&
+                        cmd.system.environment.set.name === 'ndw4_settings') {
+                        var ndw4 = JSON.parse(cmd.system.environment.set.value);
+                        var cfg = ndw4.dashboardCardsConfiguration;
+                        if (cfg && [].concat.apply([], cfg.desktop).indexOf(ENTWARE_CARD_ID) === -1) {
+                            var pos = getEntwareCardPosition();
+                            var col = pos ? pos.column : 0;
+                            var idx = pos ? pos.position : cfg.desktop[col].length;
+                            if (col >= cfg.desktop.length) col = 0;
+                            if (idx > cfg.desktop[col].length) idx = cfg.desktop[col].length;
+                            cfg.desktop[col].splice(idx, 0, ENTWARE_CARD_ID);
+                            if (cfg.mobile && cfg.mobile[0] &&
+                                cfg.mobile[0].indexOf(ENTWARE_CARD_ID) === -1) {
+                                cfg.mobile[0].push(ENTWARE_CARD_ID);
+                            }
+                            cfg.cardStates[ENTWARE_CARD_ID] = pos ? pos.visible !== false : true;
+                            cmd.system.environment.set.value = JSON.stringify(ndw4);
+                            body = JSON.stringify(parsed);
+                        }
+                    }
+                }
+            } catch(e) { /* don't break Angular */ }
+        }
+        return _origXhrSend.call(this, body);
+    };
+
     var CUSTOM_ITEMS = [
         { id: 'dashboard',          label: 'Dashboard',    url: '/custom/' },
         { id: 'geo-split',          label: 'Geo Split',    url: '/custom/#geo-split' },
@@ -36,6 +76,325 @@
     var freshnessBaselines = {};  // { 'subnet_freshness': {seconds, timestamp}, 'domain_freshness': ... }
     var uptimeTickTimer = null;
 
+    // ── RCI card position tracking ───────────────────────────────────────────
+    // Card position is stored in RCI env variable "entware_extras_dashboard"
+    // as JSON: { column: 0, position: 2, visible: true }
+    var _entwareCardPos = null;
+    var _entwareCardPosRead = false;
+
+    /** @returns {{column:number, position:number, visible:boolean}|null} */
+    function getEntwareCardPosition() { return _entwareCardPos; }
+
+    /**
+     * Read card position from RCI env variables.
+     * Also triggers first-run registration in ndw4_settings if needed.
+     * @param {function} callback - called with position or null
+     */
+    function readEntwarePosition(callback) {
+        _entwareCardPosRead = true;
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '/rci/', true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.onload = function() {
+            try {
+                var resp = JSON.parse(xhr.responseText);
+                var env = resp[0] && resp[0].show && resp[0].show.environment;
+                if (env) {
+                    if (env.entware_extras_dashboard) {
+                        _entwareCardPos = JSON.parse(env.entware_extras_dashboard);
+                    }
+                    // First-run: register in ndw4_settings if not present
+                    if (env.ndw4_settings) {
+                        registerEntwareCard(env.ndw4_settings);
+                    }
+                }
+            } catch(e) {}
+            callback(_entwareCardPos);
+        };
+        xhr.onerror = function() { callback(null); };
+        xhr.send(JSON.stringify([{"show":{"environment":{}}}]));
+    }
+
+    /**
+     * Persist card position to RCI env variable.
+     * @param {{column:number, position:number, visible:boolean}} pos
+     */
+    function saveEntwarePosition(pos) {
+        _entwareCardPos = pos;
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '/rci/', true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.send(JSON.stringify([{"system":{"environment":{"set":{
+            "name": "entware_extras_dashboard",
+            "value": JSON.stringify(pos)
+        }}}}]));
+    }
+
+    /**
+     * First-run: add ENTWARE_EXTRAS to ndw4_settings if not yet present.
+     * @param {string} ndw4settings - raw JSON string from RCI env
+     */
+    function registerEntwareCard(ndw4settings) {
+        try {
+            var ndw4 = JSON.parse(ndw4settings);
+            var cfg = ndw4.dashboardCardsConfiguration;
+            if (!cfg || !cfg.desktop) return;
+            if ([].concat.apply([], cfg.desktop).indexOf(ENTWARE_CARD_ID) !== -1) return;
+            cfg.desktop[0].push(ENTWARE_CARD_ID);
+            if (cfg.mobile && cfg.mobile[0]) {
+                cfg.mobile[0].push(ENTWARE_CARD_ID);
+            }
+            cfg.cardStates[ENTWARE_CARD_ID] = true;
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', '/rci/', true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.send(JSON.stringify([{"system":{"environment":{"set":{
+                "name": "ndw4_settings",
+                "value": JSON.stringify(ndw4)
+            }}}}]));
+            if (!_entwareCardPos) {
+                saveEntwarePosition({ column: 0, position: cfg.desktop[0].length - 1, visible: true });
+            }
+        } catch(e) {}
+    }
+
+    // ── Cards Position dialog integration ────────────────────────────────────
+
+    /**
+     * Watch for Cards Position dialog opening via CDK overlay container.
+     * Injects ENTWARE EXTRAS row with show/hide toggle into the dialog.
+     */
+    var _cardsDialogObserverSet = false;
+    function setupCardsPositionDialog() {
+        if (_cardsDialogObserverSet) return;
+        _cardsDialogObserverSet = true;
+        var container = document.querySelector('.cdk-overlay-container') || document.body;
+        new MutationObserver(function(mutations) {
+            for (var mi = 0; mi < mutations.length; mi++) {
+                var added = mutations[mi].addedNodes;
+                for (var ni = 0; ni < added.length; ni++) {
+                    var node = added[ni];
+                    if (node.nodeType !== 1) continue;
+                    // Angular renders dialog content async — the overlay pane
+                    // is added first, column-wrapper comes in a later tick.
+                    // Detect any node added inside .cdk-overlay-container and
+                    // poll for the dialog column-wrapper inside overlay panes.
+                    _tryInjectCardsDialog();
+                    return; // one fire per batch is enough
+                }
+            }
+        }).observe(container, { childList: true, subtree: true });
+    }
+
+    var _cardsDialogPending = false;
+    /** Poll overlay panes for Cards Position dialog and inject our row. */
+    function _tryInjectCardsDialog() {
+        if (_cardsDialogPending) return;
+        _cardsDialogPending = true;
+        var attempts = 0;
+        var timer = setInterval(function() {
+            attempts++;
+            // Find dialog pane inside overlay (not the main dashboard)
+            var panes = document.querySelectorAll('.cdk-overlay-pane');
+            for (var i = 0; i < panes.length; i++) {
+                var wrapper = panes[i].querySelector('.ndw-drag-panel__column-wrapper');
+                if (wrapper && !wrapper.querySelector('.entware-dialog-row')) {
+                    injectIntoCardsDialog(wrapper);
+                    clearInterval(timer);
+                    _cardsDialogPending = false;
+                    return;
+                }
+            }
+            if (attempts > 15) { // 3 seconds max
+                clearInterval(timer);
+                _cardsDialogPending = false;
+            }
+        }, 200);
+    }
+
+    /**
+     * Inject ENTWARE EXTRAS row into the Cards Position dialog.
+     * Reproduces stock DOM structure: ndw-dashboard-card stub + ndw-toggle.
+     * @param {HTMLElement} dialogWrapper - .ndw-drag-panel__column-wrapper element
+     */
+    function injectIntoCardsDialog(dialogWrapper) {
+        if (dialogWrapper.querySelector('.entware-dialog-row')) return;
+        var pos = getEntwareCardPosition();
+        var colIdx = pos ? pos.column : 0;
+        var cols = dialogWrapper.querySelectorAll('.ndw-drag-panel__column');
+        var col = cols[colIdx] || cols[0];
+        if (!col) return;
+
+        var isVisible = pos ? pos.visible !== false : true;
+
+        var row = document.createElement('div');
+        row.className = 'ndw-drag-panel__row entware-dialog-row' + (isVisible ? '' : ' entware-dialog-row--off');
+        row.innerHTML = '<div>' +
+            '<ndw-dashboard-card class="dashboard-card-stub">' +
+              '<div class="dashboard-card">' +
+                '<div class="dashboard-card__header">' +
+                  '<div class="dashboard-card__header-text text-card-heading">ENTWARE EXTRAS</div>' +
+                  '<div class="dashboard-card__header-buttons">' +
+                    '<ndw-svg-icon class="ndw-drag-handle dashboard-card__drag-icon">' +
+                      '<svg class="ndw-svg-icon svg-drag-and-drop-dims">' +
+                        '<use href="./assets/sprite/sprite.svg#drag-and-drop"></use>' +
+                    '</svg></ndw-svg-icon></div></div>' +
+                '<div class="ew-dialog-toggle">' +
+                  '<ndw-toggle><div class="ndw-toggle"><label class="ndw-toggle__wrapper">' +
+                    '<div class="ndw-toggle__button" tabindex="0">' +
+                      '<input type="checkbox" role="switch" tabindex="-1" class="ndw-toggle__checkbox entware-show-toggle"' +
+                        ' aria-label="ENTWARE_EXTRAS"' + (isVisible ? ' checked' : '') + '>' +
+                      '<div class="ndw-toggle__toggle-bar' + (isVisible ? ' ndw-toggle__toggle-bar--on' : '') + '">' +
+                        '<div class="ndw-toggle__toggle-bar__thumb"></div></div></div>' +
+                    '<div class="ndw-toggle__label-wrapper"><div class="ndw-toggle__label" role="status">Show card</div></div>' +
+                  '</label></div></ndw-toggle></div>' +
+              '</div>' +
+            '</ndw-dashboard-card></div>';
+
+        // Insert before hidden placeholder row if present
+        var placeholder = col.querySelector('.ndw-drag-panel__row--hidden');
+        if (placeholder) {
+            col.insertBefore(row, placeholder);
+        } else {
+            col.appendChild(row);
+        }
+
+        // Enable HTML5 drag for our dialog row
+        setupEntwareDrag(row, function(colIdx, posIdx) {
+            var p = getEntwareCardPosition() || { column: 0, position: 0, visible: true };
+            p.column = colIdx;
+            p.position = posIdx;
+            saveEntwarePosition(p);
+        });
+
+        // Toggle handler — show/hide card + persist via RCI
+        var toggle = row.querySelector('.entware-show-toggle');
+        if (toggle) {
+            toggle.addEventListener('change', function(e) {
+                var visible = e.target.checked;
+                row.classList.toggle('entware-dialog-row--off', !visible);
+                var barEl = row.querySelector('.ndw-toggle__toggle-bar');
+                if (barEl) {
+                    barEl.classList.toggle('ndw-toggle__toggle-bar--on', visible);
+                    barEl.classList.toggle('ndw-toggle__toggle-bar--off', !visible);
+                }
+                var p = getEntwareCardPosition() || { column: 0, position: 999, visible: true };
+                p.visible = visible;
+                saveEntwarePosition(p);
+                // Show/hide on live dashboard
+                var wrapper = document.getElementById('entware-dashboard-wrapper');
+                if (wrapper) {
+                    wrapper.style.display = visible ? '' : 'none';
+                }
+            });
+        }
+    }
+
+    // ── HTML5 drag-and-drop for our injected elements ────────────────────────
+
+    /**
+     * Enable HTML5 native drag on our row element within drag-panel columns.
+     * Works for both dashboard wrapper and Cards Position dialog rows.
+     * @param {HTMLElement} row - the draggable row (.ndw-drag-panel__row)
+     * @param {function} [onDrop] - callback(colIdx, posIdx) after drop
+     */
+    function setupEntwareDrag(row, onDrop) {
+        row.setAttribute('draggable', 'true');
+
+        // Use drag handle as the visual cue (stock CDK pattern)
+        var handle = row.querySelector('.ndw-drag-handle, .dashboard-card__drag-icon');
+        if (handle) handle.style.cursor = 'grab';
+
+        row.addEventListener('dragstart', function(e) {
+            e.dataTransfer.setData('text/plain', 'entware-drag');
+            e.dataTransfer.effectAllowed = 'move';
+            row.classList.add('ew-dragging');
+            // Store ref for cross-column drops
+            window._ewDragRow = row;
+        });
+
+        row.addEventListener('dragend', function() {
+            row.classList.remove('ew-dragging');
+            // Clean up all drag-over indicators
+            document.querySelectorAll('.ew-drag-over').forEach(function(el) {
+                el.classList.remove('ew-drag-over');
+            });
+            window._ewDragRow = null;
+        });
+
+        // Set up drop zones on sibling columns
+        var columnWrapper = row.closest('.ndw-drag-panel__column-wrapper');
+        if (!columnWrapper) return;
+        var columns = columnWrapper.querySelectorAll('.ndw-drag-panel__column');
+
+        columns.forEach(function(col) {
+            // Prevent duplicate listeners with a flag
+            if (col._ewDropSetup) return;
+            col._ewDropSetup = true;
+
+            col.addEventListener('dragover', function(e) {
+                if (!window._ewDragRow) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                // Find closest row to show drop indicator
+                var rows = col.querySelectorAll('.ndw-drag-panel__row:not(.ndw-drag-panel__row--hidden):not(.ew-dragging)');
+                var closest = null;
+                var closestDist = Infinity;
+                for (var i = 0; i < rows.length; i++) {
+                    var rect = rows[i].getBoundingClientRect();
+                    var mid = rect.top + rect.height / 2;
+                    var dist = Math.abs(e.clientY - mid);
+                    if (dist < closestDist) { closestDist = dist; closest = rows[i]; }
+                }
+                // Remove old indicators
+                col.querySelectorAll('.ew-drag-over').forEach(function(el) {
+                    el.classList.remove('ew-drag-over');
+                });
+                if (closest) closest.classList.add('ew-drag-over');
+            });
+
+            col.addEventListener('dragleave', function() {
+                col.querySelectorAll('.ew-drag-over').forEach(function(el) {
+                    el.classList.remove('ew-drag-over');
+                });
+            });
+
+            col.addEventListener('drop', function(e) {
+                if (!window._ewDragRow) return;
+                e.preventDefault();
+                var dragRow = window._ewDragRow;
+                // Find target position
+                var target = col.querySelector('.ew-drag-over');
+                col.querySelectorAll('.ew-drag-over').forEach(function(el) {
+                    el.classList.remove('ew-drag-over');
+                });
+
+                if (target) {
+                    var targetRect = target.getBoundingClientRect();
+                    var above = e.clientY < targetRect.top + targetRect.height / 2;
+                    if (above) {
+                        col.insertBefore(dragRow, target);
+                    } else {
+                        col.insertBefore(dragRow, target.nextSibling);
+                    }
+                } else {
+                    // Drop at end (before hidden placeholder)
+                    var ph = col.querySelector('.ndw-drag-panel__row--hidden');
+                    if (ph) { col.insertBefore(dragRow, ph); }
+                    else { col.appendChild(dragRow); }
+                }
+
+                // Calculate new position
+                var colIdx = Array.prototype.indexOf.call(columns, col);
+                var visibleRows = col.querySelectorAll('.ndw-drag-panel__row:not(.ndw-drag-panel__row--hidden)');
+                var posIdx = Array.prototype.indexOf.call(visibleRows, dragRow);
+                if (onDrop && colIdx >= 0 && posIdx >= 0) {
+                    onDrop(colIdx, posIdx);
+                }
+            });
+        });
+    }
+
     // ── Inject dashboard card CSS ────────────────────────────────────────────
 
     /** Inject minimal CSS for dashboard card layout (once). */
@@ -48,12 +407,17 @@
         // and does NOT cascade to dynamically injected DOM — we provide our own.
         style.textContent =
             /* Card container — stock: flex column, no padding, background=--background */
+            /* Wrapper — stock row gap: 24px between drag-panel rows */
+            '#entware-dashboard-wrapper{margin-bottom:24px;}' +
+            /* Card — stock ndw-dashboard-card host */
             '#entware-dashboard-card{' +
+                'width:100%;position:relative;' +
+                'word-break:break-word;' +
                 'display:flex;flex-direction:column;' +
                 'border:1px solid var(--dashboard-card-border,#4d545f);' +
                 'border-radius:8px;' +
                 'background:var(--background,#1b2434);' +
-                'box-sizing:border-box;margin-top:16px;}' +
+                'box-sizing:border-box;}' +
             /* Card header — matches stock: margin-top:24px, padding:0 8px 0 24px */
             '#entware-dashboard-card .dashboard-card__header{' +
                 'display:flex;align-items:center;justify-content:space-between;' +
@@ -110,25 +474,29 @@
             '.ew-chip--stopped .ew-chip__dot{background:var(--text-gray,#949b9f);}' +
             '.ew-chip--error{background:rgba(222,61,61,.12);color:var(--error,#de3d3d);}' +
             '.ew-chip--error .ew-chip__dot{background:var(--error,#de3d3d);}' +
-            /* Expand button — stock computed: hover bg=border=rgba(105,201,155,.15), active border=#03825a */
+            /* Expand button — stock toggle vars, geometry tuned for our card style */
             '.ew-expand-btn{' +
-                'background:transparent;' +
-                'border:1px solid var(--stroke,#4d545f);' +
-                'border-radius:4px;' +
-                'color:var(--text-gray,#949b9f);' +
-                'cursor:pointer;width:32px;height:32px;' +
-                'display:flex;align-items:center;justify-content:center;' +
-                'flex-shrink:0;align-self:flex-start;padding:0;outline:none;' +
+                'min-width:unset;width:36px;height:36px;' +
+                'justify-content:center;padding:0;' +
+                'border:1px solid var(--toggle-button-default-border,rgba(235,235,235,.24));' +
+                'border-radius:8px;outline:none;' +
+                'background:var(--toggle-button-default-background,var(--background,#1b2434));' +
+                'color:var(--primary-text,#c2c2c2);' +
+                'display:flex;align-items:center;' +
+                'flex-shrink:0;align-self:flex-start;cursor:pointer;' +
                 'transition:border-color .15s,color .15s,background .15s;}' +
-            /* Hover: border = bg = same semi-transparent green (stock pattern) */
             '.ew-expand-btn:hover{' +
-                'border-color:rgba(105,201,155,.15);' +
-                'background:rgba(105,201,155,.15);}' +
-            /* Active/expanded: solid green border + same bg */
+                'border-color:var(--toggle-button-hover-background,rgba(105,201,155,.15));' +
+                'background:var(--toggle-button-hover-background,rgba(105,201,155,.15));cursor:pointer;}' +
             '.ew-expand-btn--active,.ew-expand-btn:active{' +
-                'border-color:#03825a;' +
-                'background:rgba(105,201,155,.15);}' +
-            '.ew-expand-btn svg{width:16px;height:16px;stroke:currentColor;fill:none;}' +
+                'border-color:var(--toggle-button-active-border,#03825a);' +
+                'background:var(--toggle-button-hover-background,rgba(105,201,155,.15));}' +
+            '.ew-expand-btn:disabled{' +
+                'border-color:var(--outline-button-disabled-border,#687378);' +
+                'background:var(--outline-button-disabled-background,#333a48);' +
+                'color:var(--outline-button-disabled-text,#687378);' +
+                'cursor:default;-webkit-user-select:none;user-select:none;}' +
+            '.ew-expand-btn svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;}' +
             /* Expandable details — CSS Grid for left-to-right order */
             '.ew-details{display:none;padding:16px 0;}' +
                 '.ew-details--open{display:grid;grid-template-columns:repeat(3,1fr);gap:16px 24px;}' +
@@ -154,7 +522,49 @@
                 'background:var(--tooltip-background,#2a3444);' +
                 'color:var(--tooltip-text,#fff);font-size:12px;' +
                 'padding:4px 8px;border-radius:4px;white-space:nowrap;' +
-                'pointer-events:none;z-index:1000;}';
+                'pointer-events:none;z-index:1000;}' +
+            /* ── Cards Position dialog — card stub styling ── */
+            '.entware-dialog-row{margin-bottom:24px;}' +
+            '.entware-dialog-row .dashboard-card{' +
+                'background:var(--dashboard-card-background,var(--background,#1b2434));' +
+                'border-radius:8px;border:1px solid var(--dashboard-card-border,#4d545f);' +
+                'padding-bottom:4px;}' +
+            '.ew-dialog-toggle{padding:8px 16px 12px 16px;}' +
+            /* ── Cards Position dialog — stock ndw-toggle 1:1 replica ── */
+            /* Uses stock CSS vars (--toggle-*) from body — auto-adapts to dark/light theme */
+            '.entware-dialog-row .ndw-toggle__checkbox{' +
+                'position:absolute;opacity:0;width:34px;height:20px;margin:0;cursor:pointer;}' +
+            '.entware-dialog-row .ndw-toggle{display:inline-block;}' +
+            '.entware-dialog-row .ndw-toggle__wrapper{' +
+                'display:flex;align-items:center;cursor:pointer;gap:8px;}' +
+            '.entware-dialog-row .ndw-toggle__button{' +
+                'position:relative;width:34px;height:14px;display:block;}' +
+            '.entware-dialog-row .ndw-toggle__toggle-bar{' +
+                'width:inherit;height:14px;border:1px solid transparent;' +
+                'border-radius:10px;background-color:var(--toggle-off-background,#2e3d57);' +
+                'transition:background-color .1s;}' +
+            '.entware-dialog-row .ndw-toggle__toggle-bar__thumb{' +
+                'width:20px;height:20px;position:absolute;top:-3px;left:1px;' +
+                'border-radius:50%;transition:transform .1s;' +
+                'transform:translate(-1px);' +
+                'background-color:var(--toggle-off-thumb-background,#808B96);' +
+                'box-shadow:var(--toggle-off-thumb-box-shadow,0);}' +
+            '.entware-dialog-row .ndw-toggle__toggle-bar--on{' +
+                'background-color:var(--toggle-on-background,#3d5073);}' +
+            '.entware-dialog-row .ndw-toggle__toggle-bar--on .ndw-toggle__toggle-bar__thumb{' +
+                'transform:translate(14px);' +
+                'background-color:var(--toggle-on-thumb-background,#0097DC);' +
+                'box-shadow:var(--toggle-on-thumb-box-shadow,0);}' +
+            '.entware-dialog-row .ndw-toggle__label-wrapper{display:flex;align-items:center;}' +
+            '.entware-dialog-row .ndw-toggle__label{' +
+                'font-size:14px;line-height:16px;color:inherit;}' +
+            /* ── HTML5 drag visual feedback ── */
+            /* ── Cards Position dialog — disabled card state (toggle OFF) ── */
+            '.entware-dialog-row--off .dashboard-card{opacity:0.5;}' +
+            '.entware-dialog-row--off .ndw-drag-handle{display:none;}' +
+            /* ── HTML5 drag visual feedback ── */
+            '.ew-dragging{opacity:0.5;}' +
+            '.ew-drag-over{border-top:2px solid var(--primary-color,#0086cb);}';
         document.head.appendChild(style);
     }
 
@@ -456,28 +866,39 @@
 
     /**
      * Build and inject ENTWARE EXTRAS summary card on /dashboard.
-     * Uses stock dashboard-card classes. Finds the grid container
-     * via ndw-dashboard-card.parentElement.
+     * Uses stock dashboard-card classes + ndw-drag-panel column layout.
+     * Reads card position from RCI to place in correct column/position.
      */
     function injectDashboardCard() {
         dashboardPending = false;
         if (dashboardInjected) return;
         if (window.location.pathname !== '/dashboard') return;
 
-        // Find grid via existing stock dashboard cards
-        var grid = null;
-        var firstCard = document.querySelector('ndw-dashboard-card');
-        if (firstCard) {
-            grid = firstCard.parentElement;
-        } else {
-            // Fallback: layout content area
-            var menu = document.querySelector('ndw-menu');
-            if (menu && menu.parentElement) {
-                grid = menu.parentElement.querySelector('[class*="layout__content"]');
-            }
-            if (!grid) grid = document.querySelector('[class*="layout__content"]');
+        // Determine target column from saved position
+        var pos = getEntwareCardPosition();
+        var colIdx = pos ? pos.column : 0;
+        var visible = pos ? pos.visible !== false : true;
+
+        // Find target column in drag-panel grid
+        var colEl = null;
+        var columns = document.querySelectorAll('.ndw-drag-panel__column');
+        if (columns.length > 0) {
+            colEl = columns[colIdx] || columns[0];
         }
-        if (!grid) return;
+        if (!colEl) {
+            // Fallback: find grid via stock dashboard card parent
+            var firstCard = document.querySelector('ndw-dashboard-card');
+            if (firstCard) {
+                colEl = firstCard.parentElement;
+            } else {
+                var menu = document.querySelector('ndw-menu');
+                if (menu && menu.parentElement) {
+                    colEl = menu.parentElement.querySelector('[class*="layout__content"]');
+                }
+                if (!colEl) colEl = document.querySelector('[class*="layout__content"]');
+            }
+        }
+        if (!colEl) return;
 
         // Inject CSS for dashboard card layout
         injectDashStyles();
@@ -523,8 +944,34 @@
 
         card.appendChild(header);
         card.appendChild(content);
-        grid.appendChild(card);
+
+        // Wrap card in ndw-drag-panel__row for grid integration
+        var wrapper = document.createElement('div');
+        wrapper.className = 'ndw-drag-panel__row';
+        wrapper.id = 'entware-dashboard-wrapper';
+        wrapper.appendChild(card);
+
+        // Hide wrapper if card visibility is off
+        if (!visible) {
+            wrapper.style.display = 'none';
+        }
+
+        // Insert at position: before hidden placeholder row
+        var placeholder = colEl.querySelector('.ndw-drag-panel__row--hidden');
+        if (placeholder) {
+            colEl.insertBefore(wrapper, placeholder);
+        } else {
+            colEl.appendChild(wrapper);
+        }
         dashboardInjected = true;
+
+        // Enable HTML5 drag for our dashboard card
+        setupEntwareDrag(wrapper, function(colIdx, posIdx) {
+            var p = getEntwareCardPosition() || { column: 0, position: 0, visible: true };
+            p.column = colIdx;
+            p.position = posIdx;
+            saveEntwarePosition(p);
+        });
 
         // Event delegation for update buttons (geo-split subnet/domain refresh)
         card.addEventListener('click', function(e) {
@@ -849,6 +1296,7 @@
         container.appendChild(buildSection());
         injected = true;
         setupRestore();
+        setupCardsPositionDialog();
         return true;
     }
 
@@ -859,7 +1307,14 @@
         if (dashboardInjected || dashboardPending) return;
         if (window.location.pathname === '/dashboard') {
             dashboardPending = true;
-            setTimeout(injectDashboardCard, 1500);
+            if (!_entwareCardPosRead) {
+                // First time: read position from RCI, then inject
+                readEntwarePosition(function() {
+                    setTimeout(injectDashboardCard, 1000);
+                });
+            } else {
+                setTimeout(injectDashboardCard, 1500);
+            }
         }
     }
 
@@ -873,6 +1328,14 @@
             if (tryInject()) {
                 tryDashboardCard();
             }
+        }
+        // Check if Angular removed our wrapper (full dashboard re-render)
+        if (dashboardInjected && !document.getElementById('entware-dashboard-wrapper')) {
+            dashboardInjected = false;
+            dashboardPending = false;
+            if (dashboardTimer) { clearInterval(dashboardTimer); dashboardTimer = null; }
+            if (geoFastPollTimer) { clearInterval(geoFastPollTimer); geoFastPollTimer = null; }
+            stopUptimeTicker();
         }
         if (injected && !dashboardInjected) {
             tryDashboardCard();
@@ -914,6 +1377,8 @@
                 geoFastPollTimer = null;
             }
             stopUptimeTicker();
+            var oldWrapper = document.getElementById('entware-dashboard-wrapper');
+            if (oldWrapper) oldWrapper.remove();
             var oldCard = document.getElementById('entware-dashboard-card');
             if (oldCard) oldCard.remove();
             tryDashboardCard();

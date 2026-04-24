@@ -1,0 +1,45 @@
+/* common.css — Shared styles used by both inject.js (stock pages) and
+ * iframe pages (/custom/).  Loaded via <link> in both contexts.
+ * Stock Keenetic CSS variables (--text-gray, --tooltip-*, etc.) are
+ * available on both stock pages and iframe (via proxy stylesheet).
+ */
+
+/* ── Update button inline (stock Keenetic style) ─────────────────── */
+.ew-update-btn {
+    position: relative;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-gray, #949b9f);
+    font-size: 16px;
+    padding: 0 2px;
+    margin-left: 4px;
+    vertical-align: middle;
+    line-height: 1;
+    opacity: 0.7;
+    transition: color .15s, opacity .15s;
+}
+.ew-update-btn:hover {
+    color: var(--primary-text, #c2c2c2);
+    opacity: 1;
+}
+.ew-update-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.ew-update-btn--spinning svg { animation: ew-spin 1s linear infinite; }
+@keyframes ew-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* ── Tooltip (stock Keenetic variables) ──────────────────────────── */
+.ew-update-btn[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--tooltip-background, #2a3444);
+    color: var(--tooltip-text, #fff);
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 1000;
+}

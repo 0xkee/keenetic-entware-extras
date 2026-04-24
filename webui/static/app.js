@@ -49,6 +49,9 @@ function setStatus(id, state, text) {
     if (state === "ok") {
         statusClass = "status status--success";
         iconHtml = '<div class="status__icon"></div>';
+    } else if (state === "caution") {
+        statusClass = "status status--caution";
+        iconHtml = '<div class="status__icon"></div>';
     } else if (state === "warn") {
         statusClass = "status status--warning";
         iconHtml = '<div class="status__icon"></div>';
@@ -222,19 +225,28 @@ function fetchStatus(url, id) {
             if (data.running !== undefined) {
                 // New structured format
                 if (data.running) {
+                    // Check if any detail field is false → caution badge
+                    var hasFail = false;
+                    if (data.details) {
+                        var dkeys = Object.keys(data.details);
+                        for (var di = 0; di < dkeys.length; di++) {
+                            if (data.details[dkeys[di]] === false) { hasFail = true; break; }
+                        }
+                    }
+                    var badgeState = hasFail ? "caution" : "ok";
                     var uptimeSecs = data.details && data.details.uptime;
                     if (uptimeSecs) {
-                        setStatus(id, "ok", "Running " + formatUptimeStock(uptimeSecs));
+                        setStatus(id, badgeState, "Running " + formatUptimeStock(uptimeSecs));
                     } else {
-                        setStatus(id, "ok", "Running");
+                        setStatus(id, badgeState, "Running");
                     }
                 } else {
                     setStatus(id, "fail", "Stopped");
                 }
                 setDetails(id, data);
-                // Update uptime baseline
+                // Update uptime baseline (store badge state for ticker)
                 if (data.running && data.details && data.details.uptime) {
-                    uptimeBaselines[id] = { seconds: data.details.uptime, timestamp: Date.now() };
+                    uptimeBaselines[id] = { seconds: data.details.uptime, timestamp: Date.now(), state: badgeState };
                 } else {
                     delete uptimeBaselines[id];
                 }
@@ -310,7 +322,7 @@ function startUptimeTicker() {
             var bl = uptimeBaselines[id];
             var elapsed = Math.floor((now - bl.timestamp) / 1000);
             var currentSeconds = bl.seconds + elapsed;
-            setStatus(id, "ok", "Running " + formatUptimeStock(currentSeconds));
+            setStatus(id, bl.state || "ok", "Running " + formatUptimeStock(currentSeconds));
         }
         // Update freshness counters
         for (var fkey in freshnessBaselines) {

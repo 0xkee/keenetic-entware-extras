@@ -1,0 +1,8 @@
+#!/opt/bin/sh
+# postrm — runs after package files are removed.
+set -eu
+
+rm -f /opt/etc/init.d/S80nginx-webui
+rm -f /opt/etc/logrotate.d/nginx-webui
+rm -f /opt/var/run/nginx-webui.pid
+# Don't delete logs — user might want to inspect them

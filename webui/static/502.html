@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="refresh" content="5">
+    <title>Service Unavailable</title>
+    <style>
+        body{background:#1b2434;color:#c2c2c2;font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+             display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
+        .msg{text-align:center}
+        .msg h1{font-size:1.5rem;font-weight:400;margin-bottom:.5rem}
+        .msg p{color:#949b9f;font-size:.9rem}
+        .spinner{width:36px;height:36px;margin:1.2rem auto 0;border:3px solid #2e3d57;
+                 border-top-color:#0086cb;border-radius:50%;animation:spin .8s linear infinite}
+        @keyframes spin{to{transform:rotate(360deg)}}
+    </style>
+</head>
+<body>
+    <div class="msg">
+        <h1>Keenetic WebUI is temporarily unavailable</h1>
+        <p>Retrying in 5 seconds&hellip;</p>
+        <div class="spinner"></div>
+    </div>
+</body>
+</html>

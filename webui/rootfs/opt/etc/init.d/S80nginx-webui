@@ -1,11 +1,11 @@
 #!/bin/sh
 # nginx-webui init script for Entware.
 # Standalone init (no rc.func) — safe alongside stock nginx.
-# Config: /opt/etc/nginx/nginx-webui.conf (separate instance on port 8080).
+# Config: /opt/keenetic-entware-extras/webui/config/nginx.conf (separate instance on port 8080).
 
 ENABLED=yes
 DESC="nginx WebUI dashboard"
-CONF="/opt/etc/nginx/nginx-webui.conf"
+CONF="/opt/keenetic-entware-extras/webui/config/nginx.conf"
 PIDFILE="/opt/var/run/nginx-webui.pid"
 NGINX="/opt/sbin/nginx"
 PATH="/opt/sbin:/opt/bin:/sbin:/bin:/usr/sbin:/usr/bin"

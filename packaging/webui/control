@@ -1,0 +1,12 @@
+Package: webui
+Version: 0.1.0
+Architecture: all
+Maintainer: 0xkee
+Depends: keenetic-entware-extras, nginx, nginx-mod-lua, logrotate
+Description: Custom dashboard and reverse proxy for Keenetic/Entware.
+ Provides a custom web dashboard at port 8080 showing status of
+ geo-split, smartdns-ru, and smartdns-redirect services.
+ Proxies stock Keenetic WebUI with inject.js for sidebar integration.
+ Includes logrotate config for nginx-webui log rotation.
+Section: net
+Priority: optional

@@ -53,8 +53,8 @@ body {
     margin-bottom: 16px;
 }
 .text-card-heading {
-    font-size: 13px; font-weight: 600;
-    letter-spacing: 0.5px; text-transform: uppercase;
+    font-size: 16px; font-weight: 700;
+    letter-spacing: 1px; text-transform: uppercase;
     color: var(--primary-text, #c2c2c2);
 }
 .dashboard-card__header-buttons { display: flex; gap: 8px; }
@@ -76,16 +76,36 @@ body {
 .status--warning .status__text { color: var(--error, #de3d3d); }
 .status__text { color: var(--primary-text, #c2c2c2); }
 
-/* ── Buttons ──────────────────────────────────────────────────────── */
+/* ── Buttons — 1:1 stock ndw-button replica ──────────────────────── */
 .ndw-button {
-    border: 1px solid var(--stroke, #4d545f);
-    border-radius: 4px; background: transparent;
-    color: var(--primary-text, #c2c2c2);
-    cursor: pointer; padding: 6px 10px;
-    font-size: 14px; line-height: 1;
-    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 92px; column-gap: 8px; justify-content: center;
+    padding: 16px 8px; border: 1px solid; border-radius: 4px;
+    outline: none; text-wrap: nowrap;
+    flex-direction: row; display: flex; align-items: center;
+    font-size: 14px; cursor: pointer;
 }
-.ndw-button:hover { border-color: var(--primary-color, #0086cb); color: var(--primary-color, #0086cb); }
+.ndw-button--toggle {
+    border-color: var(--toggle-button-default-border, rgba(235,235,235,.24));
+    background: var(--toggle-button-default-background, var(--background, #1b2434));
+    color: var(--toggle-button-text, #fff);
+}
+.ndw-button--toggle:hover {
+    border-color: var(--toggle-button-hover-background, rgba(105,201,155,.15));
+    background: var(--toggle-button-hover-background, rgba(105,201,155,.15));
+}
+.ndw-button--toggle-enabled, .ndw-button--toggle:active {
+    border-color: var(--toggle-button-active-border, #03825a);
+    background: var(--toggle-button-hover-background, rgba(105,201,155,.15));
+}
+.ndw-button--toggle:disabled {
+    border-color: var(--outline-button-disabled-border, #687378);
+    background: var(--outline-button-disabled-background, #333a48);
+    color: var(--outline-button-disabled-text, #687378);
+    cursor: default; user-select: none;
+}
+.ndw-button--small { height: 32px; }
+.ndw-button--no-text { width: 40px; min-width: unset; }
+.ndw-button--no-text.ndw-button--small { width: 32px; min-width: unset; }
 
 /* ── Service rows (custom ew-*) ───────────────────────────────────── */
 .ew-services { display: flex; flex-direction: column; gap: 0; }

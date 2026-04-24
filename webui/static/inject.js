@@ -470,6 +470,8 @@
             '.ew-chip__dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}' +
             '.ew-chip--running{background:rgba(125,206,112,.12);color:var(--indicator-online,#7dce70);}' +
             '.ew-chip--running .ew-chip__dot{background:var(--indicator-online,#7dce70);}' +
+            '.ew-chip--caution{background:rgba(242,229,114,.12);color:var(--status-caution-text,#ffbb57);}' +
+            '.ew-chip--caution .ew-chip__dot{background:var(--indicator-yellow,#f2e572);}' +
             '.ew-chip--stopped{background:var(--disabled,#2f3745);color:var(--text-gray,#949b9f);}' +
             '.ew-chip--stopped .ew-chip__dot{background:var(--text-gray,#949b9f);}' +
             '.ew-chip--error{background:rgba(222,61,61,.12);color:var(--error,#de3d3d);}' +
@@ -1029,7 +1031,9 @@
                 var row = document.getElementById('ew-dash-' + id);
                 if (!row) continue;
                 var chip = row.querySelector('.ew-chip');
-                if (!chip || !chip.classList.contains('ew-chip--running')) continue;
+                if (!chip) continue;
+                // Tick both running and caution chips (both show uptime)
+                if (!chip.classList.contains('ew-chip--running') && !chip.classList.contains('ew-chip--caution')) continue;
                 chip.innerHTML = '<span class="ew-chip__dot"></span> RUNNING ' + formatUptimeStock(currentSeconds);
             }
             // Update freshness counters
@@ -1153,63 +1157,49 @@
         }
     }
 
-    /** Fetch status for a single service and update its row. */
+    /**
+     * Fetch status for a single service and update its row.
+     * Used by geo-split fast polling (1s interval during background updates).
+     * @param {string} serviceId - SERVICE_APIS entry id
+     */
     function fetchSingleServiceStatus(serviceId) {
         var svc = null;
         for (var i = 0; i < SERVICE_APIS.length; i++) {
             if (SERVICE_APIS[i].id === serviceId) { svc = SERVICE_APIS[i]; break; }
         }
         if (!svc) return;
-        var row = document.getElementById('ew-dash-' + svc.id);
-        if (!row) return;
-        var toggle = row.querySelector('.ew-toggle input');
-        var chip = row.querySelector('.ew-chip');
-        var detailsEl = document.getElementById('ew-details-' + svc.id);
-
         fetch(svc.api, { cache: 'no-store' })
             .then(function(r) { return r.json(); })
-            .then(function(data) {
-                var s = parseServiceStatus(data);
-                if (toggle) toggle.checked = data.running;
-                if (chip) {
-                    chip.className = 'ew-chip ew-chip--' + s.state;
-                    chip.innerHTML = '<span class="ew-chip__dot"></span> ' + s.text;
-                }
-                if (detailsEl) {
-                    detailsEl.innerHTML = renderDetailsGrid(data.details, data.running);
-                }
-                // Update uptime baseline
-                if (data.running && data.details && data.details.uptime) {
-                    uptimeBaselines[svc.id] = { seconds: data.details.uptime, timestamp: Date.now() };
-                } else {
-                    delete uptimeBaselines[svc.id];
-                }
-                // Update freshness baselines (timer keys)
-                if (data.details) {
-                    for (var tk in TIMER_KEYS) {
-                        if (data.details[tk]) {
-                            freshnessBaselines[tk] = { seconds: data.details[tk], timestamp: Date.now() };
-                        }
-                    }
-                }
-                // Check background status for fast polling control
-                if (data.details && data.details.background === 'running') {
-                    startGeoFastPolling();
-                } else if (geoFastPollTimer) {
-                    stopGeoFastPolling();
-                }
-            })
+            .then(function(data) { applyServiceData(svc, data); })
             .catch(function() {});
     }
 
     /**
+     * Check if any detail field is boolean false.
+     * @param {Object} details
+     * @returns {boolean}
+     */
+    function hasFailField(details) {
+        if (!details) return false;
+        var keys = Object.keys(details);
+        for (var i = 0; i < keys.length; i++) {
+            if (details[keys[i]] === false) return true;
+        }
+        return false;
+    }
+
+    /**
      * Build status chip text from structured data.
-     * Uptime is read from data.details.uptime.
+     * Returns "caution" state if running but any detail is boolean false.
      * @param {Object} data - full API response
      * @returns {{state: string, text: string}}
      */
     function parseServiceStatus(data) {
         var state = data.running ? 'running' : 'stopped';
+        // If running but at least one detail field is false → caution (yellow)
+        if (data.running && hasFailField(data.details)) {
+            state = 'caution';
+        }
         var text = data.running ? 'RUNNING' : 'STOPPED';
         if (data.running && data.details && data.details.uptime) {
             text += ' ' + formatUptimeStock(data.details.uptime);
@@ -1218,63 +1208,71 @@
     }
 
     /**
-     * Fetch service statuses and update dashboard card rows.
-     * Updates toggle, status chip, and expandable details grid.
+     * Apply fetched status data to a single service row in the dashboard card.
+     * Updates toggle, chip, details grid, uptime/freshness baselines,
+     * and geo-split fast polling state.
+     * @param {Object} svc - SERVICE_APIS entry
+     * @param {Object} data - parsed API response
+     */
+    function applyServiceData(svc, data) {
+        var row = document.getElementById('ew-dash-' + svc.id);
+        if (!row) return;
+        var toggle = row.querySelector('.ew-toggle input');
+        var chip = row.querySelector('.ew-chip');
+        var detailsEl = document.getElementById('ew-details-' + svc.id);
+        var s = parseServiceStatus(data);
+
+        // Update toggle
+        if (toggle) toggle.checked = data.running;
+
+        // Update chip
+        if (chip) {
+            chip.className = 'ew-chip ew-chip--' + s.state;
+            chip.innerHTML = '<span class="ew-chip__dot"></span> ' + s.text;
+        }
+
+        // Update expandable details grid
+        if (detailsEl) {
+            detailsEl.innerHTML = renderDetailsGrid(data.details, data.running);
+        }
+
+        // Update uptime baseline
+        if (data.running && data.details && data.details.uptime) {
+            uptimeBaselines[svc.id] = { seconds: data.details.uptime, timestamp: Date.now() };
+        } else {
+            delete uptimeBaselines[svc.id];
+        }
+
+        // Update freshness baselines (timer keys)
+        if (data.details) {
+            for (var tk in TIMER_KEYS) {
+                if (data.details[tk]) {
+                    freshnessBaselines[tk] = { seconds: data.details[tk], timestamp: Date.now() };
+                }
+            }
+        }
+
+        // Check geo-split background for fast polling
+        if (svc.id === 'geo-split' && data.details) {
+            if (data.details.background === 'running') {
+                startGeoFastPolling();
+            } else if (geoFastPollTimer) {
+                stopGeoFastPolling();
+            }
+        }
+    }
+
+    /**
+     * Fetch service statuses in parallel and update dashboard card rows.
+     * Each service is fetched independently for maximum parallelism.
      */
     function fetchDashboardStatuses() {
         SERVICE_APIS.forEach(function(svc) {
-            var row = document.getElementById('ew-dash-' + svc.id);
-            if (!row) return;
-
-            var toggle = row.querySelector('.ew-toggle input');
-            var chip = row.querySelector('.ew-chip');
-            var detailsEl = document.getElementById('ew-details-' + svc.id);
-
             fetch(svc.api, { cache: 'no-store' })
                 .then(function(r) { return r.json(); })
-                .then(function(data) {
-                    var s = parseServiceStatus(data);
-
-                    // Update toggle
-                    if (toggle) toggle.checked = data.running;
-
-                    // Update chip
-                    if (chip) {
-                        chip.className = 'ew-chip ew-chip--' + s.state;
-                        chip.innerHTML = '<span class="ew-chip__dot"></span> ' + s.text;
-                    }
-
-                    // Update expandable details grid
-                    if (detailsEl) {
-                        detailsEl.innerHTML = renderDetailsGrid(data.details, data.running);
-                    }
-
-                    // Update uptime baseline
-                    if (data.running && data.details && data.details.uptime) {
-                        uptimeBaselines[svc.id] = { seconds: data.details.uptime, timestamp: Date.now() };
-                    } else {
-                        delete uptimeBaselines[svc.id];
-                    }
-
-                    // Update freshness baselines (timer keys)
-                    if (data.details) {
-                        for (var tk in TIMER_KEYS) {
-                            if (data.details[tk]) {
-                                freshnessBaselines[tk] = { seconds: data.details[tk], timestamp: Date.now() };
-                            }
-                        }
-                    }
-
-                    // Check geo-split background for fast polling
-                    if (svc.id === 'geo-split' && data.details) {
-                        if (data.details.background === 'running') {
-                            startGeoFastPolling();
-                        } else if (geoFastPollTimer) {
-                            stopGeoFastPolling();
-                        }
-                    }
-                })
+                .then(function(data) { applyServiceData(svc, data); })
                 .catch(function() {
+                    var chip = document.querySelector('#ew-dash-' + svc.id + ' .ew-chip');
                     if (chip) {
                         chip.className = 'ew-chip ew-chip--error';
                         chip.innerHTML = '<span class="ew-chip__dot"></span> ERROR';

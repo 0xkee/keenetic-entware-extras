@@ -72,6 +72,11 @@ body {
     box-shadow: 0 0 4px var(--indicator-online, #7dce70);
 }
 .status--success .status__text { color: var(--indicator-online, #7dce70); }
+.status--caution .status__icon {
+    background: var(--indicator-yellow, #f2e572);
+    box-shadow: 0 0 4px var(--indicator-yellow, #f2e572);
+}
+.status--caution .status__text { color: var(--status-caution-text, #ffbb57); }
 .status--warning .status__icon { background: var(--error, #de3d3d); }
 .status--warning .status__text { color: var(--error, #de3d3d); }
 .status__text { color: var(--primary-text, #c2c2c2); }

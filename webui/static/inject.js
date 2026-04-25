@@ -1,8 +1,20 @@
 // inject.js — Keenetic NDMS WebUI sidebar + dashboard integration for Entware extras.
 // Injected via nginx sub_filter into every proxied Keenetic page.
 // Uses stock Keenetic DOM classes (dashboard-card, ndw-status, ndw-router-link).
+// Reconciler model: nginx patches Angular bundle (set order + getTemplate);
+// this script reconciles Angular-created rows by order index from __ewLastOrder.
 (function() {
     'use strict';
+
+    // ── Sync position from localStorage for set order() patch ────────────────
+    // Must be sync, before Angular renders — set order() reads window.__ewPos
+    try {
+        var _p = localStorage.getItem('ew-card-pos');
+        if (_p) window.__ewPos = JSON.parse(_p);
+        else window.__ewPos = { c: 0, i: 999 };
+    } catch(_e) {
+        window.__ewPos = { c: 0, i: 999 };
+    }
 
     // ── Card ID for RCI ndw4_settings integration ────────────────────────────
     var ENTWARE_CARD_ID = 'ENTWARE_EXTRAS';
@@ -23,7 +35,8 @@
                         var ndw4 = JSON.parse(cmd.system.environment.set.value);
                         var cfg = ndw4.dashboardCardsConfiguration;
                         if (cfg && [].concat.apply([], cfg.desktop).indexOf(ENTWARE_CARD_ID) === -1) {
-                            var pos = getEntwareCardPosition();
+                            var wp = window.__ewPos;
+                            var pos = wp ? { column: wp.c, position: wp.i } : getEntwareCardPosition();
                             var col = pos ? pos.column : 0;
                             var idx = pos ? pos.position : cfg.desktop[col].length;
                             if (col >= cfg.desktop.length) col = 0;
@@ -116,11 +129,16 @@
     }
 
     /**
-     * Persist card position to RCI env variable.
+     * Persist card position to RCI env variable + sync to localStorage
+     * for next page load (sync read by set order() nginx patch).
      * @param {{column:number, position:number, visible:boolean}} pos
      */
     function saveEntwarePosition(pos) {
         _entwareCardPos = pos;
+        // Sync to localStorage for set order() patch (sync read on page load)
+        try { localStorage.setItem('ew-card-pos', JSON.stringify({c: pos.column, i: pos.position})); } catch(e) {}
+        window.__ewPos = { c: pos.column, i: pos.position };
+        // Async to RCI for cross-device persistence
         var xhr = new XMLHttpRequest();
         xhr.open('POST', '/rci/', true);
         xhr.setRequestHeader('Content-Type', 'application/json');
@@ -158,6 +176,274 @@
         } catch(e) {}
     }
 
+    // ── Reconciler: patch Angular-created rows by order index ─────────
+    var EW_KEY = 'ENTWARE_EXTRAS';
+    var EW_ATTR = 'data-ew-key';
+
+    var ewScheduled = false;
+    var ewInDrag = false;
+
+    /** Schedule deferred reconcile — 2x rAF ensures Angular render complete. */
+    function ewScheduleReconcile(reason) {
+        if (ewScheduled) return;
+        ewScheduled = true;
+        requestAnimationFrame(function() {
+            requestAnimationFrame(function() {
+                ewScheduled = false;
+                ewReconcile(reason);
+            });
+        });
+    }
+
+    /** Check element is visible (connected + has dimensions). */
+    function ewVisible(el) {
+        if (!el || !el.isConnected) return false;
+        var r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+    }
+
+    /** Filter out CDK drag previews/placeholders (transient clones). */
+    function ewIsCdkNoise(el) {
+        return el.classList.contains('cdk-drag-preview') ||
+               el.classList.contains('cdk-drag-placeholder') ||
+               !!el.closest('.cdk-drag-preview') ||
+               !!el.closest('.cdk-drag-placeholder');
+    }
+
+    /** Find the panel root — Cards Position dialog overlay OR dashboard panel. */
+    function ewFindPanelRoot() {
+        return document.querySelector('.cdk-overlay-pane ndw-cards-position-dialog') ||
+               document.querySelector('ndw-drag-panel') ||
+               null;
+    }
+
+    /** Get live Angular-created rows in a column, excluding CDK noise. */
+    function ewGetColRows(col) {
+        return [].slice.call(col.querySelectorAll(
+            ':scope > .cdk-drag.ndw-drag-panel__row'
+        )).filter(function(row) { return !ewIsCdkNoise(row); });
+    }
+
+    /**
+     * Main reconcile — find ENTWARE_EXTRAS row by order index, patch it.
+     * Source of truth: window.__ewLastOrder ONLY.
+     * Never creates/moves CDK rows. Idempotent.
+     */
+    function ewReconcile(reason) {
+        if (ewInDrag) {
+            ewScheduleReconcile('drag-active');
+            return;
+        }
+
+        var order = window.__ewLastOrder;
+        if (!Array.isArray(order)) return;
+
+        // Flatten order to find ENTWARE_EXTRAS
+        var flat = [].concat.apply([], order);
+        var entwareCount = 0;
+        for (var i = 0; i < flat.length; i++) {
+            if (flat[i] === EW_KEY) entwareCount++;
+        }
+        if (entwareCount !== 1) return;
+
+        // Find column and index of ENTWARE_EXTRAS in order
+        var entwareCol = -1, entwareIdx = -1;
+        for (var ci = 0; ci < order.length; ci++) {
+            var idx = order[ci].indexOf(EW_KEY);
+            if (idx >= 0) {
+                entwareCol = ci;
+                entwareIdx = idx;
+                break;
+            }
+        }
+        if (entwareCol < 0) return;
+
+        var root = ewFindPanelRoot();
+        if (!root) return;
+
+        // Find column containers
+        var columns = root.querySelectorAll('.ndw-drag-panel__column');
+        var col = columns[entwareCol];
+        if (!col) return;
+
+        // Get rows in this column (excluding CDK noise)
+        var rows = ewGetColRows(col);
+
+        if (rows.length <= entwareIdx) {
+            ewScheduleReconcile('rows-not-ready');
+            return;
+        }
+
+        var targetRow = rows[entwareIdx];
+
+        // Remove stale ENTWARE marks from ALL rows across ALL columns
+        var allMarked = root.querySelectorAll('[' + EW_ATTR + ']');
+        for (var mi = 0; mi < allMarked.length; mi++) {
+            if (allMarked[mi] !== targetRow) {
+                ewUnpatchRow(allMarked[mi]);
+            }
+        }
+
+        // Patch the target row
+        var patched = ewPatchDashboardRow(targetRow);
+
+        if (patched) {
+            // Track position for saveEntwarePosition
+            ewTrackPosition(entwareCol, entwareIdx);
+
+            // Ensure dashboard polling is started
+            if (!dashboardInjected && window.location.pathname === '/dashboard') {
+                dashboardInjected = true;
+                fetchDashboardStatuses();
+                if (!dashboardTimer) {
+                    dashboardTimer = setInterval(fetchDashboardStatuses, DASH_POLL_INTERVAL);
+                }
+                startUptimeTicker();
+                if (!_entwareCardPosRead) {
+                    readEntwarePosition(function() {});
+                }
+            }
+        }
+    }
+
+    /**
+     * Remove our injected content and restore Angular-managed DOM.
+     * Removing .ew-dash-card deactivates the CSS rule that hides Angular
+     * stub content, so original children become visible automatically.
+     */
+    function ewUnpatchRow(row) {
+        row.removeAttribute(EW_ATTR);
+        row.classList.remove('ew-row');
+        // Remove our injected content
+        var ewContent = row.querySelector('#entware-dash-content');
+        if (ewContent) ewContent.remove();
+        // Remove card-level marker — deactivates CSS hiding rule,
+        // Angular stub content becomes visible automatically
+        var card = row.querySelector('.ew-dash-card');
+        if (card) card.classList.remove('ew-dash-card');
+        // Restore original title from saved data
+        var title = row.querySelector('.dashboard-card__header-link a') ||
+                    row.querySelector('.dashboard-card__header-link') ||
+                    row.querySelector('.text-card-heading');
+        if (title && row.dataset.ewOrigTitle) {
+            title.textContent = row.dataset.ewOrigTitle;
+            if (row.dataset.ewOrigHref && title.tagName === 'A') {
+                title.setAttribute('href', row.dataset.ewOrigHref);
+            }
+        }
+        delete row.dataset.ewOrigTitle;
+        delete row.dataset.ewOrigHref;
+    }
+
+    /**
+     * Patch an Angular-created row IN-PLACE — modify header + content
+     * inside the existing .dashboard-card, preserving Angular component shell
+     * (ndw-*-card, ndw-dashboard-card wrappers).
+     * Does NOT create/move .cdk-drag elements. Idempotent.
+     */
+    function ewPatchDashboardRow(row) {
+        if (!row || !row.isConnected) return false;
+
+        // Mark the row
+        row.setAttribute(EW_ATTR, 'entware-extras');
+        row.classList.add('ew-row');
+
+        // Apply visibility from saved position
+        var pos = getEntwareCardPosition();
+        if (pos && pos.visible === false) {
+            row.style.display = 'none';
+        } else {
+            row.style.display = '';
+        }
+
+        // Find the existing .dashboard-card inside Angular component shell
+        var card = row.querySelector('.dashboard-card');
+        if (!card) return false;
+
+        // Already patched — nothing to do (idempotent)
+        if (card.classList.contains('ew-dash-card') &&
+            card.querySelector('#entware-dash-content')) return true;
+
+        // Mark the card
+        card.classList.add('ew-dash-card');
+
+        // Patch header: replace link text with "ENTWARE EXTRAS"
+        var title =
+            card.querySelector('.dashboard-card__header-link a') ||
+            card.querySelector('.dashboard-card__header-link') ||
+            card.querySelector('.text-card-heading');
+        if (title) {
+            // Save original title/href for reversible unpatch
+            row.dataset.ewOrigTitle = title.textContent;
+            row.dataset.ewOrigHref = title.getAttribute('href') || '';
+            title.textContent = 'ENTWARE EXTRAS';
+            if (title.tagName === 'A') {
+                title.removeAttribute('href');
+                title.removeAttribute('tabindex');
+                title.style.cursor = 'default';
+                title.setAttribute('role', 'heading');
+                title.setAttribute('aria-level', '2');
+            }
+        }
+
+        // Patch content: append our content alongside Angular-managed children.
+        // CSS rule (.ew-dash-card .dashboard-card__content > :not(#entware-dash-content))
+        // hides Angular stub content automatically — handles re-renders too.
+        var content = card.querySelector('.dashboard-card__content');
+        if (content && !content.querySelector('#entware-dash-content')) {
+            content.appendChild(buildEntwareDashboardContent());
+        }
+
+        // Event delegation for update buttons (geo-split subnet/domain refresh)
+        // Attach to card so it survives content re-patches
+        if (!card._ewClickHandler) {
+            card._ewClickHandler = true;
+            card.addEventListener('click', function(e) {
+                var btn = e.target.closest('.ew-update-btn');
+                if (!btn || btn.disabled) return;
+                var actionUrl = btn.getAttribute('data-action');
+                btn.classList.add('ew-update-btn--spinning');
+                btn.disabled = true;
+                fetch(actionUrl, { method: 'POST' })
+                    .then(function(r) { return r.json(); })
+                    .then(function() {
+                        startGeoFastPolling();
+                    })
+                    .catch(function() {
+                        btn.classList.remove('ew-update-btn--spinning');
+                        btn.disabled = false;
+                    });
+            });
+        }
+
+        return true;
+    }
+
+    /**
+     * Build only the dashboard content — service rows in a wrapper div.
+     * Does NOT create the full card/header structure.
+     * @returns {HTMLDivElement} #entware-dash-content wrapper
+     */
+    function buildEntwareDashboardContent() {
+        var wrapper = document.createElement('div');
+        wrapper.id = 'entware-dash-content';
+        wrapper.className = 'ew-dash-content ew-loading';
+        SERVICE_APIS.forEach(function(svc) {
+            wrapper.appendChild(buildServiceRow(svc));
+        });
+        return wrapper;
+    }
+
+    /** Track position changes and persist to RCI. */
+    function ewTrackPosition(colIdx, posIdx) {
+        var p = getEntwareCardPosition() || { column: 0, position: 0, visible: true };
+        if (p.column !== colIdx || p.position !== posIdx) {
+            p.column = colIdx;
+            p.position = posIdx;
+            saveEntwarePosition(p);
+        }
+    }
+
     // ── Cards Position dialog integration ────────────────────────────────────
 
     /**
@@ -171,14 +457,22 @@
         var container = document.querySelector('.cdk-overlay-container') || document.body;
         new MutationObserver(function(mutations) {
             for (var mi = 0; mi < mutations.length; mi++) {
+                // Detect dialog CLOSE: overlay pane removed → clear flag
+                var removed = mutations[mi].removedNodes;
+                for (var ri = 0; ri < removed.length; ri++) {
+                    var rn = removed[ri];
+                    if (rn.nodeType === 1 && rn.classList &&
+                        rn.classList.contains('cdk-overlay-pane') &&
+                        rn.querySelector && rn.querySelector('.ndw-drag-panel__column-wrapper')) {
+                        window.__ewDialogOpen = false;
+                        if (_dialogRepatchObserver) { _dialogRepatchObserver.disconnect(); _dialogRepatchObserver = null; }
+                    }
+                }
+                // Detect dialog OPEN: new nodes → poll for column-wrapper
                 var added = mutations[mi].addedNodes;
                 for (var ni = 0; ni < added.length; ni++) {
                     var node = added[ni];
                     if (node.nodeType !== 1) continue;
-                    // Angular renders dialog content async — the overlay pane
-                    // is added first, column-wrapper comes in a later tick.
-                    // Detect any node added inside .cdk-overlay-container and
-                    // poll for the dialog column-wrapper inside overlay panes.
                     _tryInjectCardsDialog();
                     return; // one fire per batch is enough
                 }
@@ -187,25 +481,39 @@
     }
 
     var _cardsDialogPending = false;
-    /** Poll overlay panes for Cards Position dialog and inject our row. */
+    /**
+     * Poll overlay panes for Cards Position dialog and inject our row.
+     * Retries if injectIntoCardsDialog cannot reliably identify the ENTWARE row
+     * (e.g. __ewLastOrder still stale from dashboard's set order() call).
+     */
     function _tryInjectCardsDialog() {
         if (_cardsDialogPending) return;
         _cardsDialogPending = true;
         var attempts = 0;
         var timer = setInterval(function() {
             attempts++;
-            // Find dialog pane inside overlay (not the main dashboard)
-            var panes = document.querySelectorAll('.cdk-overlay-pane');
-            for (var i = 0; i < panes.length; i++) {
-                var wrapper = panes[i].querySelector('.ndw-drag-panel__column-wrapper');
-                if (wrapper && !wrapper.querySelector('.entware-dialog-row')) {
-                    injectIntoCardsDialog(wrapper);
-                    clearInterval(timer);
-                    _cardsDialogPending = false;
-                    return;
+            // Dialog has SEPARATE column-wrapper per column, possibly in same pane.
+            // Use querySelectorAll to find ALL wrappers across ALL panes.
+            var allWrappers = document.querySelectorAll('.cdk-overlay-pane .ndw-drag-panel__column-wrapper');
+            var anyPatched = false;
+            for (var i = 0; i < allWrappers.length; i++) {
+                var wrapper = allWrappers[i];
+                if (wrapper.querySelector('.entware-dialog-patched')) {
+                    anyPatched = true;
+                    continue;
+                }
+                var isLastAttempt = attempts > 15;
+                if (injectIntoCardsDialog(wrapper, isLastAttempt)) {
+                    anyPatched = true;
                 }
             }
-            if (attempts > 15) { // 3 seconds max
+            if (anyPatched) {
+                window.__ewDialogOpen = true;
+                clearInterval(timer);
+                _cardsDialogPending = false;
+                return;
+            }
+            if (attempts > 15) {
                 clearInterval(timer);
                 _cardsDialogPending = false;
             }
@@ -213,186 +521,223 @@
     }
 
     /**
-     * Inject ENTWARE EXTRAS row into the Cards Position dialog.
-     * Reproduces stock DOM structure: ndw-dashboard-card stub + ndw-toggle.
+     * Inject ENTWARE EXTRAS content into the Cards Position dialog.
+     * Uses __ewLastOrder key→DOM mapping to reliably identify the ENTWARE row
+     * by card ID name (not position or text matching).
+     *
+     * Returns false if the ENTWARE row cannot be reliably identified
+     * (e.g. __ewLastOrder is stale from dashboard) — caller should retry.
+     *
      * @param {HTMLElement} dialogWrapper - .ndw-drag-panel__column-wrapper element
+     * @param {boolean} lastAttempt - if true, use DOM fallback instead of retrying
+     * @returns {boolean} true if patched (or already patched), false to retry
      */
-    function injectIntoCardsDialog(dialogWrapper) {
-        if (dialogWrapper.querySelector('.entware-dialog-row')) return;
+    function injectIntoCardsDialog(dialogWrapper, lastAttempt) {
+        if (dialogWrapper.querySelector('.entware-dialog-patched')) return true;
         var pos = getEntwareCardPosition();
         var colIdx = pos ? pos.column : 0;
+        var isVisible = pos ? pos.visible !== false : true;
         var cols = dialogWrapper.querySelectorAll('.ndw-drag-panel__column');
         var col = cols[colIdx] || cols[0];
-        if (!col) return;
+        if (!col) return false;
 
-        var isVisible = pos ? pos.visible !== false : true;
-
-        var row = document.createElement('div');
-        row.className = 'ndw-drag-panel__row entware-dialog-row' + (isVisible ? '' : ' entware-dialog-row--off');
-        row.innerHTML = '<div>' +
-            '<ndw-dashboard-card class="dashboard-card-stub">' +
-              '<div class="dashboard-card">' +
-                '<div class="dashboard-card__header">' +
-                  '<div class="dashboard-card__header-text text-card-heading">ENTWARE EXTRAS</div>' +
-                  '<div class="dashboard-card__header-buttons">' +
-                    '<ndw-svg-icon class="ndw-drag-handle dashboard-card__drag-icon">' +
-                      '<svg class="ndw-svg-icon svg-drag-and-drop-dims">' +
-                        '<use href="./assets/sprite/sprite.svg#drag-and-drop"></use>' +
-                    '</svg></ndw-svg-icon></div></div>' +
-                '<div class="ew-dialog-toggle">' +
-                  '<ndw-toggle><div class="ndw-toggle"><label class="ndw-toggle__wrapper">' +
-                    '<div class="ndw-toggle__button" tabindex="0">' +
-                      '<input type="checkbox" role="switch" tabindex="-1" class="ndw-toggle__checkbox entware-show-toggle"' +
-                        ' aria-label="ENTWARE_EXTRAS"' + (isVisible ? ' checked' : '') + '>' +
-                      '<div class="ndw-toggle__toggle-bar' + (isVisible ? ' ndw-toggle__toggle-bar--on' : '') + '">' +
-                        '<div class="ndw-toggle__toggle-bar__thumb"></div></div></div>' +
-                    '<div class="ndw-toggle__label-wrapper"><div class="ndw-toggle__label" role="status">Show card</div></div>' +
-                  '</label></div></ndw-toggle></div>' +
-              '</div>' +
-            '</ndw-dashboard-card></div>';
-
-        // Insert before hidden placeholder row if present
-        var placeholder = col.querySelector('.ndw-drag-panel__row--hidden');
-        if (placeholder) {
-            col.insertBefore(row, placeholder);
-        } else {
-            col.appendChild(row);
+        // ── Primary: find ENTWARE row via __ewLastOrder key→DOM mapping ───────
+        // __ewLastOrder stores full order arrays with card ID strings, set by
+        // each NdwDragPanel's set order() nginx patch.  We search for
+        // ENTWARE_CARD_ID by KEY NAME — no position guessing.
+        // Validation: DOM row count must equal order column length to confirm
+        // __ewLastOrder belongs to THIS dialog panel (not stale dashboard data).
+        // If validation fails → return false → caller retries on next poll
+        // (dialog's set order() will have updated __ewLastOrder by then).
+        var targetRow = null;
+        var order = window.__ewLastOrder;
+        // Dialog uses SEPARATE column-wrapper per column (cols.length always 1).
+        // Search ALL order columns; validate by matching row count with cols[0].
+        if (order && cols[0]) {
+            var wrapperRows = cols[0].querySelectorAll(
+                ':scope > .cdk-drag.ndw-drag-panel__row:not(.cdk-drag-placeholder):not(.cdk-drag-preview)'
+            );
+            for (var oi = 0; oi < order.length; oi++) {
+                var ewIdx = order[oi].indexOf(ENTWARE_CARD_ID);
+                if (ewIdx < 0) continue;
+                // Validate: this wrapper's row count must match this order column
+                if (wrapperRows.length === order[oi].length && ewIdx < wrapperRows.length) {
+                    targetRow = wrapperRows[ewIdx];
+                    col = cols[0];
+                }
+                break;
+            }
         }
 
-        // Enable HTML5 drag for our dialog row
-        setupEntwareDrag(row, function(colIdx, posIdx) {
-            var p = getEntwareCardPosition() || { column: 0, position: 0, visible: true };
-            p.column = colIdx;
-            p.position = posIdx;
-            saveEntwarePosition(p);
-        });
+        // If __ewLastOrder lookup failed and this is NOT the last attempt,
+        // signal caller to retry — __ewLastOrder will update on next cycle.
+        if (!targetRow && !lastAttempt) {
+            return false;
+        }
 
-        // Toggle handler — show/hide card + persist via RCI
-        var toggle = row.querySelector('.entware-show-toggle');
+        // Strategy: duplicate header-text detection — ENTWARE row uses stub
+        // template that duplicates another card's name (e.g. "INTERNET")
+        if (!targetRow) {
+            var allDialogRows = [].slice.call(
+                dialogWrapper.querySelectorAll('.cdk-drag.ndw-drag-panel__row:not(.cdk-drag-placeholder):not(.cdk-drag-preview)')
+            );
+            var textCounts = {};
+            for (var dri = 0; dri < allDialogRows.length; dri++) {
+                var h = allDialogRows[dri].querySelector('.dashboard-card__header-text');
+                if (!h) continue;
+                var t = h.textContent.trim();
+                if (!textCounts[t]) textCounts[t] = [];
+                textCounts[t].push(allDialogRows[dri]);
+            }
+            for (var tk in textCounts) {
+                if (textCounts[tk].length > 1) {
+                    targetRow = textCounts[tk][textCounts[tk].length - 1];
+                    break;
+                }
+            }
+        }
+
+        if (!targetRow) return false;
+
+        // Mark row with data attribute for idempotent identity
+        targetRow.dataset.ewKey = ENTWARE_CARD_ID;
+        targetRow.classList.add('entware-dialog-patched', 'entware-dialog-row');
+        if (!isVisible) targetRow.classList.add('entware-dialog-row--off');
+
+        // ── In-place patch: modify header + toggle inside existing Angular row ──
+        // Patch header text — Angular fallback renders "Internet" or other stock card
+        var heading = targetRow.querySelector('.dashboard-card__header-text') ||
+                      targetRow.querySelector('.text-card-heading');
+        if (heading) {
+            heading.textContent = 'ENTWARE EXTRAS';
+        }
+
+        // Patch toggle: Angular already binds it to cardStates["ENTWARE_EXTRAS"]
+        // (from order array). We just fix aria-label, initial state, and add
+        // our handler for RCI persistence + dashboard sync.
+        var toggle = targetRow.querySelector('input[role="switch"]');
         if (toggle) {
-            toggle.addEventListener('change', function(e) {
-                var visible = e.target.checked;
-                row.classList.toggle('entware-dialog-row--off', !visible);
-                var barEl = row.querySelector('.ndw-toggle__toggle-bar');
-                if (barEl) {
-                    barEl.classList.toggle('ndw-toggle__toggle-bar--on', visible);
-                    barEl.classList.toggle('ndw-toggle__toggle-bar--off', !visible);
-                }
-                var p = getEntwareCardPosition() || { column: 0, position: 999, visible: true };
-                p.visible = visible;
-                saveEntwarePosition(p);
-                // Show/hide on live dashboard
-                var wrapper = document.getElementById('entware-dashboard-wrapper');
-                if (wrapper) {
-                    wrapper.style.display = visible ? '' : 'none';
-                }
-            });
+            toggle.setAttribute('aria-label', ENTWARE_CARD_ID);
+            toggle.checked = isVisible;
+            var barEl = targetRow.querySelector('.ndw-toggle__toggle-bar');
+            if (barEl) {
+                barEl.classList.toggle('ndw-toggle__toggle-bar--on', isVisible);
+                barEl.classList.toggle('ndw-toggle__toggle-bar--off', !isVisible);
+            }
+            if (!toggle._ewHandlerSet) {
+                toggle._ewHandlerSet = true;
+                toggle.addEventListener('change', function(e) {
+                    var visible = e.target.checked;
+                    targetRow.classList.toggle('entware-dialog-row--off', !visible);
+                    var p = getEntwareCardPosition() || { column: 0, position: 999, visible: true };
+                    p.visible = visible;
+                    saveEntwarePosition(p);
+                    var ewRow = document.querySelector('[' + EW_ATTR + '="entware-extras"]');
+                    if (ewRow) ewRow.style.display = visible ? '' : 'none';
+                });
+            }
         }
+
+        // ── MutationObserver: re-patch after Angular re-renders (CDK drag/drop) ──
+        _setupDialogRepatcher(dialogWrapper);
+
+        return true;
     }
 
-    // ── HTML5 drag-and-drop for our injected elements ────────────────────────
+    /** @type {MutationObserver|null} */
+    var _dialogRepatchObserver = null;
 
     /**
-     * Enable HTML5 native drag on our row element within drag-panel columns.
-     * Works for both dashboard wrapper and Cards Position dialog rows.
-     * @param {HTMLElement} row - the draggable row (.ndw-drag-panel__row)
-     * @param {function} [onDrop] - callback(colIdx, posIdx) after drop
+     * Set up MutationObserver on dialog wrapper to re-patch ENTWARE row
+     * when Angular re-renders it (CDK drag/drop, change detection).
+     * Reads CURRENT visibility from getEntwareCardPosition() each time
+     * (not stale closure value — fixes toggle snap-back bug).
+     * @param {HTMLElement} dialogWrapper
      */
-    function setupEntwareDrag(row, onDrop) {
-        row.setAttribute('draggable', 'true');
-
-        // Use drag handle as the visual cue (stock CDK pattern)
-        var handle = row.querySelector('.ndw-drag-handle, .dashboard-card__drag-icon');
-        if (handle) handle.style.cursor = 'grab';
-
-        row.addEventListener('dragstart', function(e) {
-            e.dataTransfer.setData('text/plain', 'entware-drag');
-            e.dataTransfer.effectAllowed = 'move';
-            row.classList.add('ew-dragging');
-            // Store ref for cross-column drops
-            window._ewDragRow = row;
+    function _setupDialogRepatcher(dialogWrapper) {
+        if (_dialogRepatchObserver) _dialogRepatchObserver.disconnect();
+        _dialogRepatchObserver = new MutationObserver(function() {
+            requestAnimationFrame(function() {
+                var curPos = getEntwareCardPosition();
+                var curVisible = curPos ? curPos.visible !== false : true;
+                _repatchDialogEntwareRow(dialogWrapper, curVisible);
+            });
         });
+        _dialogRepatchObserver.observe(dialogWrapper, { childList: true, subtree: true });
+    }
 
-        row.addEventListener('dragend', function() {
-            row.classList.remove('ew-dragging');
-            // Clean up all drag-over indicators
-            document.querySelectorAll('.ew-drag-over').forEach(function(el) {
-                el.classList.remove('ew-drag-over');
-            });
-            window._ewDragRow = null;
-        });
+    /**
+     * Minimal re-patch: fix header-text and aria-label on the ENTWARE row
+     * if Angular reverted them to fallback template content.
+     * @param {HTMLElement} dialogWrapper
+     * @param {boolean} isVisible
+     */
+    function _repatchDialogEntwareRow(dialogWrapper, isVisible) {
+        // Strategy 1: find by data-ew-key (survives Angular inner re-render)
+        var row = dialogWrapper.querySelector('[data-ew-key="' + ENTWARE_CARD_ID + '"]');
 
-        // Set up drop zones on sibling columns
-        var columnWrapper = row.closest('.ndw-drag-panel__column-wrapper');
-        if (!columnWrapper) return;
-        var columns = columnWrapper.querySelectorAll('.ndw-drag-panel__column');
-
-        columns.forEach(function(col) {
-            // Prevent duplicate listeners with a flag
-            if (col._ewDropSetup) return;
-            col._ewDropSetup = true;
-
-            col.addEventListener('dragover', function(e) {
-                if (!window._ewDragRow) return;
-                e.preventDefault();
-                e.dataTransfer.dropEffect = 'move';
-                // Find closest row to show drop indicator
-                var rows = col.querySelectorAll('.ndw-drag-panel__row:not(.ndw-drag-panel__row--hidden):not(.ew-dragging)');
-                var closest = null;
-                var closestDist = Infinity;
-                for (var i = 0; i < rows.length; i++) {
-                    var rect = rows[i].getBoundingClientRect();
-                    var mid = rect.top + rect.height / 2;
-                    var dist = Math.abs(e.clientY - mid);
-                    if (dist < closestDist) { closestDist = dist; closest = rows[i]; }
-                }
-                // Remove old indicators
-                col.querySelectorAll('.ew-drag-over').forEach(function(el) {
-                    el.classList.remove('ew-drag-over');
-                });
-                if (closest) closest.classList.add('ew-drag-over');
-            });
-
-            col.addEventListener('dragleave', function() {
-                col.querySelectorAll('.ew-drag-over').forEach(function(el) {
-                    el.classList.remove('ew-drag-over');
-                });
-            });
-
-            col.addEventListener('drop', function(e) {
-                if (!window._ewDragRow) return;
-                e.preventDefault();
-                var dragRow = window._ewDragRow;
-                // Find target position
-                var target = col.querySelector('.ew-drag-over');
-                col.querySelectorAll('.ew-drag-over').forEach(function(el) {
-                    el.classList.remove('ew-drag-over');
-                });
-
-                if (target) {
-                    var targetRect = target.getBoundingClientRect();
-                    var above = e.clientY < targetRect.top + targetRect.height / 2;
-                    if (above) {
-                        col.insertBefore(dragRow, target);
-                    } else {
-                        col.insertBefore(dragRow, target.nextSibling);
+        // Strategy 2: if row lost data-ew-key (full Angular re-create),
+        // re-map via __ewLastOrder
+        // Strategy 2: re-map via __ewLastOrder (separate wrapper per column)
+        if (!row) {
+            var cols = dialogWrapper.querySelectorAll('.ndw-drag-panel__column');
+            var order = window.__ewLastOrder;
+            if (order && cols[0]) {
+                var wRows = cols[0].querySelectorAll(
+                    ':scope > .cdk-drag.ndw-drag-panel__row:not(.cdk-drag-placeholder):not(.cdk-drag-preview)'
+                );
+                for (var oi = 0; oi < order.length; oi++) {
+                    var ewIdx = order[oi].indexOf(ENTWARE_CARD_ID);
+                    if (ewIdx < 0) continue;
+                    if (wRows.length === order[oi].length && ewIdx < wRows.length) {
+                        row = wRows[ewIdx];
+                        row.dataset.ewKey = ENTWARE_CARD_ID;
                     }
-                } else {
-                    // Drop at end (before hidden placeholder)
-                    var ph = col.querySelector('.ndw-drag-panel__row--hidden');
-                    if (ph) { col.insertBefore(dragRow, ph); }
-                    else { col.appendChild(dragRow); }
+                    break;
                 }
+            }
+        }
 
-                // Calculate new position
-                var colIdx = Array.prototype.indexOf.call(columns, col);
-                var visibleRows = col.querySelectorAll('.ndw-drag-panel__row:not(.ndw-drag-panel__row--hidden)');
-                var posIdx = Array.prototype.indexOf.call(visibleRows, dragRow);
-                if (onDrop && colIdx >= 0 && posIdx >= 0) {
-                    onDrop(colIdx, posIdx);
+        // Strategy 3: duplicate header-text detection (stub template duplicates another card)
+        if (!row) {
+            var allDialogRows2 = [].slice.call(
+                dialogWrapper.querySelectorAll('.cdk-drag.ndw-drag-panel__row:not(.cdk-drag-placeholder):not(.cdk-drag-preview)')
+            );
+            var textCounts2 = {};
+            for (var dri2 = 0; dri2 < allDialogRows2.length; dri2++) {
+                var h2 = allDialogRows2[dri2].querySelector('.dashboard-card__header-text');
+                if (!h2) continue;
+                var t2 = h2.textContent.trim();
+                if (!textCounts2[t2]) textCounts2[t2] = [];
+                textCounts2[t2].push(allDialogRows2[dri2]);
+            }
+            for (var tk2 in textCounts2) {
+                if (textCounts2[tk2].length > 1) {
+                    row = textCounts2[tk2][textCounts2[tk2].length - 1];
+                    row.dataset.ewKey = ENTWARE_CARD_ID;
+                    break;
                 }
-            });
-        });
+            }
+        }
+        if (!row) return;
+
+        // Fix header text (Angular fallback renders "Internet" or other stock card)
+        var heading = row.querySelector('.dashboard-card__header-text');
+        if (heading && heading.textContent !== 'ENTWARE EXTRAS') {
+            heading.textContent = 'ENTWARE EXTRAS';
+        }
+
+        // Fix toggle aria-label (Angular binds to ENTWARE_EXTRAS from order,
+        // but renders INTERNET label from stub template)
+        var input = row.querySelector('input[role="switch"]');
+        if (input && input.getAttribute('aria-label') !== ENTWARE_CARD_ID) {
+            input.setAttribute('aria-label', ENTWARE_CARD_ID);
+        }
+
+        // Ensure patched classes are present
+        if (!row.classList.contains('entware-dialog-patched')) {
+            row.classList.add('entware-dialog-patched', 'entware-dialog-row');
+        }
     }
 
     // ── Inject dashboard card CSS ────────────────────────────────────────────
@@ -711,134 +1056,16 @@
         return frag;
     }
 
+
+    // ── Dashboard card injection (reconciler-driven) ─────────────────────────
+
     /**
-     * Build and inject ENTWARE EXTRAS summary card on /dashboard.
-     * Uses stock dashboard-card classes + ndw-drag-panel column layout.
-     * Reads card position from RCI to place in correct column/position.
+     * Trigger reconciler to patch Angular-created ENTWARE_EXTRAS row.
+     * All CDK row management removed — reconciler finds row by order index.
      */
     function injectDashboardCard() {
         dashboardPending = false;
-        if (dashboardInjected) return;
-        if (window.location.pathname !== '/dashboard') return;
-
-        // Determine target column from saved position
-        var pos = getEntwareCardPosition();
-        var colIdx = pos ? pos.column : 0;
-        var visible = pos ? pos.visible !== false : true;
-
-        // Find target column in drag-panel grid
-        var colEl = null;
-        var columns = document.querySelectorAll('.ndw-drag-panel__column');
-        if (columns.length > 0) {
-            colEl = columns[colIdx] || columns[0];
-        }
-        if (!colEl) {
-            // Fallback: find grid via stock dashboard card parent
-            var firstCard = document.querySelector('ndw-dashboard-card');
-            if (firstCard) {
-                colEl = firstCard.parentElement;
-            } else {
-                var menu = document.querySelector('ndw-menu');
-                if (menu && menu.parentElement) {
-                    colEl = menu.parentElement.querySelector('[class*="layout__content"]');
-                }
-                if (!colEl) colEl = document.querySelector('[class*="layout__content"]');
-            }
-        }
-        if (!colEl) return;
-
-        // Card container — stock class
-        var card = document.createElement('div');
-        card.id = 'entware-dashboard-card';
-        card.className = 'dashboard-card ew-dash-card';
-
-        // Header — stock pattern: title left, buttons right
-        var header = document.createElement('div');
-        header.className = 'dashboard-card__header';
-
-        var headerTitle = document.createElement('span');
-        headerTitle.className = 'dashboard-card__header-link text-card-heading';
-        headerTitle.textContent = 'ENTWARE EXTRAS';
-        headerTitle.addEventListener('click', function(e) {
-            e.preventDefault();
-            showInContent({ id: 'dashboard', url: '/custom/' });
-        });
-
-        var headerButtons = document.createElement('div');
-        headerButtons.className = 'dashboard-card__header-buttons';
-        // Drag handle icon (6 dots) — stock SVG sprite
-        headerButtons.innerHTML =
-            '<ndw-svg-icon class="ndw-drag-handle dashboard-card__drag-icon">' +
-                '<svg class="ndw-svg-icon svg-drag-and-drop-dims">' +
-                    '<use href="./assets/sprite/sprite.svg#drag-and-drop"></use>' +
-                '</svg>' +
-            '</ndw-svg-icon>';
-
-        header.appendChild(headerTitle);
-        header.appendChild(headerButtons);
-
-        // Content with service rows
-        var content = document.createElement('div');
-        content.className = 'dashboard-card__content';
-        content.id = 'entware-dash-content';
-
-        SERVICE_APIS.forEach(function(svc) {
-            content.appendChild(buildServiceRow(svc));
-        });
-
-        card.appendChild(header);
-        card.appendChild(content);
-
-        // Wrap card in ndw-drag-panel__row for grid integration
-        var wrapper = document.createElement('div');
-        wrapper.className = 'ndw-drag-panel__row';
-        wrapper.id = 'entware-dashboard-wrapper';
-        wrapper.appendChild(card);
-
-        // Hide wrapper if card visibility is off
-        if (!visible) {
-            wrapper.style.display = 'none';
-        }
-
-        // Insert at position: before hidden placeholder row
-        var placeholder = colEl.querySelector('.ndw-drag-panel__row--hidden');
-        if (placeholder) {
-            colEl.insertBefore(wrapper, placeholder);
-        } else {
-            colEl.appendChild(wrapper);
-        }
-        dashboardInjected = true;
-
-        // Enable HTML5 drag for our dashboard card
-        setupEntwareDrag(wrapper, function(colIdx, posIdx) {
-            var p = getEntwareCardPosition() || { column: 0, position: 0, visible: true };
-            p.column = colIdx;
-            p.position = posIdx;
-            saveEntwarePosition(p);
-        });
-
-        // Event delegation for update buttons (geo-split subnet/domain refresh)
-        card.addEventListener('click', function(e) {
-            var btn = e.target.closest('.ew-update-btn');
-            if (!btn || btn.disabled) return;
-            var actionUrl = btn.getAttribute('data-action');
-            btn.classList.add('ew-update-btn--spinning');
-            btn.disabled = true;
-            fetch(actionUrl, { method: 'POST' })
-                .then(function(r) { return r.json(); })
-                .then(function() {
-                    // Started in background. Fast polling picks up background=running
-                    startGeoFastPolling();
-                })
-                .catch(function() {
-                    btn.classList.remove('ew-update-btn--spinning');
-                    btn.disabled = false;
-                });
-        });
-
-        fetchDashboardStatuses();
-        dashboardTimer = setInterval(fetchDashboardStatuses, DASH_POLL_INTERVAL);
-        startUptimeTicker();
+        ewScheduleReconcile('injectDashboardCard');
     }
 
     /**
@@ -990,7 +1217,7 @@
         clearInterval(geoFastPollTimer);
         geoFastPollTimer = null;
         // Remove spinning from all update buttons
-        var card = document.getElementById('entware-dashboard-card');
+        var card = document.querySelector('.ew-dash-card');
         if (card) {
             card.querySelectorAll('.ew-update-btn--spinning').forEach(function(btn) {
                 btn.classList.remove('ew-update-btn--spinning');
@@ -1112,12 +1339,24 @@
         SERVICE_APIS.forEach(function(svc) {
             fetch(svc.api, { cache: 'no-store' })
                 .then(function(r) { return r.json(); })
-                .then(function(data) { applyServiceData(svc, data); })
+                .then(function(data) {
+                    applyServiceData(svc, data);
+                    // Remove skeleton shimmer after first successful fetch
+                    var content = document.getElementById('entware-dash-content');
+                    if (content && content.classList.contains('ew-loading')) {
+                        content.classList.remove('ew-loading');
+                    }
+                })
                 .catch(function() {
                     var chip = document.querySelector('#ew-dash-' + svc.id + ' .ew-chip');
                     if (chip) {
                         chip.className = 'ew-chip ew-chip--error';
                         chip.innerHTML = '<span class="ew-chip__dot"></span> ERROR';
+                    }
+                    // Also remove shimmer on error
+                    var content = document.getElementById('entware-dash-content');
+                    if (content && content.classList.contains('ew-loading')) {
+                        content.classList.remove('ew-loading');
                     }
                 });
         });
@@ -1138,55 +1377,44 @@
         injectDashStyles();
         setupRestore();
         setupCardsPositionDialog();
+        ewScheduleReconcile('after-sidebar');
         return true;
     }
 
-    /**
-     * Schedule dashboard card injection (with dedup guard).
-     */
-    function tryDashboardCard() {
-        if (dashboardInjected || dashboardPending) return;
-        if (window.location.pathname === '/dashboard') {
-            dashboardPending = true;
-            if (!_entwareCardPosRead) {
-                // First time: read position from RCI, then inject
-                readEntwarePosition(function() {
-                    setTimeout(injectDashboardCard, 1000);
-                });
-            } else {
-                setTimeout(injectDashboardCard, 1500);
-            }
+    // ── Drag lifecycle — suppress reconcile during active drag ────────
+    document.addEventListener('pointerdown', function(e) {
+        if (e.target.closest('.cdk-drag.ndw-drag-panel__row')) {
+            ewInDrag = true;
         }
-    }
+    }, true);
 
-    // ── Main observer — re-inject sidebar if Angular removes it ──────────────
+    document.addEventListener('pointerup', function() {
+        if (ewInDrag) {
+            ewInDrag = false;
+            ewScheduleReconcile('pointerup');
+        }
+    }, true);
 
+    document.addEventListener('drop', function() {
+        ewInDrag = false;
+        ewScheduleReconcile('drop');
+    }, true);
+
+    // ── Single MutationObserver — sidebar + reconcile ─────────────────
     var observer = new MutationObserver(function() {
+        // Sidebar re-injection
         if (!document.querySelector('.entware-menu-section')) {
             injected = false;
         }
         if (!injected) {
-            if (tryInject()) {
-                tryDashboardCard();
-            }
+            tryInject();
         }
-        // Check if Angular removed our wrapper (full dashboard re-render)
-        if (dashboardInjected && !document.getElementById('entware-dashboard-wrapper')) {
-            dashboardInjected = false;
-            dashboardPending = false;
-            if (dashboardTimer) { clearInterval(dashboardTimer); dashboardTimer = null; }
-            if (geoFastPollTimer) { clearInterval(geoFastPollTimer); geoFastPollTimer = null; }
-            stopUptimeTicker();
-        }
-        if (injected && !dashboardInjected) {
-            tryDashboardCard();
-        }
+        // Dashboard reconcile (coalesced via ewScheduled flag)
+        ewScheduleReconcile('mutation');
     });
-
     observer.observe(document.documentElement, { childList: true, subtree: true });
 
-    // ── Route change watcher ─────────────────────────────────────────────────
-
+    // ── Route change watcher ─────────────────────────────────────────
     var lastPath = window.location.pathname;
     setInterval(function() {
         var currentPath = window.location.pathname;
@@ -1194,17 +1422,10 @@
         // Re-inject sidebar if Angular removed it
         if (!document.querySelector('.entware-menu-section')) {
             injected = false;
-            if (tryInject()) {
-                // Switch to menu-scoped observer for performance
-                var menuEl = document.querySelector('ndw-menu');
-                if (menuEl) {
-                    observer.disconnect();
-                    observer.observe(menuEl, { childList: true, subtree: true });
-                }
-            }
+            tryInject();
         }
 
-        // Reset dashboard card on route change
+        // Reset dashboard state on route change
         if (currentPath !== lastPath) {
             lastPath = currentPath;
             dashboardInjected = false;
@@ -1218,11 +1439,15 @@
                 geoFastPollTimer = null;
             }
             stopUptimeTicker();
-            var oldWrapper = document.getElementById('entware-dashboard-wrapper');
-            if (oldWrapper) oldWrapper.remove();
-            var oldCard = document.getElementById('entware-dashboard-card');
-            if (oldCard) oldCard.remove();
-            tryDashboardCard();
+            // Clear our markers — let Angular manage its own rows
+            var marked = document.querySelectorAll('[' + EW_ATTR + ']');
+            for (var i = 0; i < marked.length; i++) {
+                ewUnpatchRow(marked[i]);
+            }
+            // Trigger reconcile for new route
+            if (currentPath === '/dashboard') {
+                ewScheduleReconcile('route-change');
+            }
         }
     }, 2000);
 })();

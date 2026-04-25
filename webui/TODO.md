@@ -1,6 +1,6 @@
 # WebUI — TODO
 
-> Обновлено 2026-04-24. Логи/disk I/O оптимизированы, packaging/webui/ создан, задеплоено на router-1.
+> Обновлено 2026-04-25. Cards-position & dashboard fixes (v0.2.2): MOVE logic in set order(), per-wrapper dialog injection, skeleton shimmer, debug logs removed.
 
 ## 🔴 Критичные (логи / disk I/O) — ✅ ВЫПОЛНЕНО
 
@@ -13,7 +13,19 @@
 - [x] **inject.js: DRY рефакторинг** — вынесена `applyServiceData()`, устранено дублирование (1410 → 1385 строк)
 - [x] **status.sh: logrotate в статусе** — проверка binary/config/cron, поле `"logrotate": true/false` в JSON
 
-## 🟠 Важные
+## 🔴 Критичные (drag duplication) — ✅ ВЫПОЛНЕНО (v0.2.1)
+
+- [x] **inject.js: replaceChildren → hide + append** — `ewPatchDashboardRow()` теперь скрывает Angular-managed контент (`display:none` + `.ew-hidden-original`) вместо удаления. Angular ViewRef остаётся нетронутым
+- [x] **inject.js: ewUnpatchRow() reversible** — удаляет `#entware-dash-content`, восстанавливает скрытый Angular контент и оригинальный заголовок из `dataset.ewOrigTitle`/`ewOrigHref`
+- [x] **nginx: drop-патч pre-move + dedupe** — sub_filter #5 разбит на 5a (IIFE pre-move: подмена source slot) + 5b (post-emit: dedupe-only). Флаг через `window.__ewDrag`
+
+## 🔴 Cards Position + Dashboard drag — требует Angular bundle анализа
+
+- [ ] **Toggle "слипшийся"** — Toggle ENTWARE в Cards Position диалоге также переключает INTERNET. Angular биндит toggle к card data через внутренний компонент, stub template наследует INTERNET binding. Нужно изучить Angular bundle через MCP.
+- [ ] **Cross-column drag flicker** — При drag ENTWARE между колонками в dialog, название мигает "INTERNET" → "ENTWARE EXTRAS" (~0.5 сек). Angular пересоздаёт row, наш repatcher исправляет через rAF.
+- [ ] **Reconciler ошибочно патчит stock card** — После drag stock карточки (напр. INTERNET) в колонку ENTWARE, reconciler находит неверный row по index и патчит INTERNET content заголовком "ENTWARE EXTRAS". Нужна валидация по `data-ew-key` или content fingerprint перед патчем. НО ! потом по таймеру появляется ent. Ещё наблюдение - когда одну таскаешь int|ent  - они обновляются обе, что не правильно! Вероятно, в ангуляре есть ещё связанные сущности, которые мы не хакнули (ну или поля/атрибуты и прочее)!
+
+## 🟡 Важные
 
 - [ ] **Refresh button: emoji → SVG sprite** — `index.html:55,79,105` используют emoji `⟳`, нужно `<use href="./assets/sprite/sprite.svg#refresh">` по keenetic-dom-catalog.md §12
 - [x] **CUSTOM_ITEMS: добавить DNS Redirect** — добавлен smartdns-redirect в sidebar

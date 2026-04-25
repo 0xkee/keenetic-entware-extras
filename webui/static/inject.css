@@ -1,30 +1,22 @@
 /* inject.css — Styles for Entware dashboard card injected into stock
  * Keenetic pages.  Loaded by injectDashStyles() in inject.js via <link>.
- * Scoped via #entware-dashboard-card where needed to avoid leaking
- * into stock UI.  Stock Angular component CSS is scoped with
- * [_ngcontent-*] attributes and does NOT cascade to dynamically
- * injected DOM — we provide our own.
+ * Scoped via .ew-dash-card where needed to avoid leaking into stock UI.
+ * Stock Angular component CSS is scoped with [_ngcontent-*] attributes
+ * and does NOT cascade to dynamically injected DOM — we provide our own.
  */
 
 /* ── Card wrapper ────────────────────────────────────────────────── */
 /* Stock row gap: 24px between drag-panel rows */
-#entware-dashboard-wrapper { margin-bottom: 24px; }
+.ew-row { margin-bottom: 24px; }
 
-/* ── Card — stock ndw-dashboard-card host ────────────────────────── */
-#entware-dashboard-card {
-    width: 100%;
-    position: relative;
-    word-break: break-word;
-    display: flex;
-    flex-direction: column;
-    border: 1px solid var(--dashboard-card-border, #4d545f);
-    border-radius: 8px;
-    background: var(--background, #1b2434);
-    box-sizing: border-box;
-}
+/* ── Card — patched .dashboard-card inside Angular component shell ─ */
+/* Note: .ew-dash-card is added to the existing .dashboard-card div,
+ * preserving Angular wrappers (ndw-*-card, ndw-dashboard-card).
+ * Stock Angular CSS is [_ngcontent-*]-scoped — doesn't cascade to
+ * our injected content, so we replicate header/content padding. */
 
-/* ── Card header — stock: margin-top:24px, padding:0 8px 0 24px ── */
-#entware-dashboard-card .dashboard-card__header {
+/* Header — stock: margin-top:24px, padding:0 8px 0 24px */
+.ew-dash-card .dashboard-card__header {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -33,37 +25,34 @@
     padding: 0 8px 0 24px;
     color: var(--text-gray, #949b9f);
 }
-#entware-dashboard-card .text-card-heading {
+.ew-dash-card .text-card-heading {
     font-size: 16px;
     font-weight: 700;
     letter-spacing: 1px;
     text-transform: uppercase;
     color: var(--primary-text, #c2c2c2);
     text-decoration: none;
-    cursor: pointer;
+    cursor: default;
     line-height: 1.2;
 }
-#entware-dashboard-card .text-card-heading:hover {
-    text-decoration: underline;
-}
-#entware-dashboard-card .dashboard-card__header-buttons {
+.ew-dash-card .dashboard-card__header-buttons {
     display: flex;
     align-items: center;
     gap: 8px;
 }
-#entware-dashboard-card .dashboard-card__drag-icon {
+.ew-dash-card .dashboard-card__drag-icon {
     color: var(--text-gray, #949b9f);
     cursor: grab;
     display: flex;
 }
-#entware-dashboard-card .dashboard-card__drag-icon svg {
+.ew-dash-card .dashboard-card__drag-icon svg {
     width: 20px;
     height: 20px;
     fill: currentColor;
 }
 
-/* ── Card content — stock: position:relative + same padding as header */
-#entware-dashboard-card .dashboard-card__content {
+/* Content — stock: position:relative + same padding as header */
+.ew-dash-card .dashboard-card__content {
     position: relative;
     padding: 0 24px 16px 24px;
 }
@@ -260,6 +249,18 @@
     min-height: 16px;
 }
 
+/* ── ENTWARE card — hide Angular stub content via CSS ─────────────
+   Angular re-renders stub template (Internet card) periodically inside
+   .dashboard-card__content. CSS hides ALL children except our injected
+   content wrapper (.ew-dash-content class).
+   Uses CLASS selector (not ID) because CDK deepCloneNode() strips id
+   attributes from preview clones — an ID-based :not() would hide our
+   content in the drag preview too.
+   Auto-deactivates when ewUnpatchRow() removes .ew-dash-card class. */
+.ew-dash-card .dashboard-card__content > :not(.ew-dash-content) {
+    display: none !important;
+}
+
 /* ── Cards Position dialog — card stub styling ───────────────────── */
 .entware-dialog-row { margin-bottom: 24px; }
 .entware-dialog-row .dashboard-card {
@@ -335,6 +336,26 @@
 .entware-dialog-row--off .dashboard-card { opacity: 0.5; }
 .entware-dialog-row--off .ndw-drag-handle { display: none; }
 
-/* ── HTML5 drag visual feedback ──────────────────────────────────── */
-.ew-dragging { opacity: 0.5; }
-.ew-drag-over { border-top: 2px solid var(--primary-color, #0086cb); }
+/* ── Loading state — show stock skeleton until first fetch ────────── */
+/* While ew-loading: hide our content, reveal Angular's stub content
+   (which acts as a natural skeleton placeholder matching stock UI).
+   Reset our padding override to avoid double-padding with Angular scoped CSS.
+   Once fetchDashboardStatuses() removes ew-loading, our content appears
+   and the CSS rule in line ~260 hides Angular stub automatically. */
+.ew-dash-card .dashboard-card__content > .ew-loading {
+    display: none !important;
+}
+/* Override the hide-stub rule: show Angular content while loading */
+.ew-dash-card .dashboard-card__content:has(> .ew-loading) > :not(.ew-dash-content) {
+    display: block !important;
+}
+/* Remove our padding override during loading — Angular scoped styles handle it */
+.ew-dash-card .dashboard-card__content:has(> .ew-loading) {
+    padding: 0 !important;
+}
+
+/* ── CDK drag preview for our card ───────────────────────────────── */
+.ndw-drag-panel__row__preview .ew-dash-card {
+    opacity: 0.85;
+    box-shadow: var(--box-shadow-3, 0 8px 16px rgba(0,0,0,.3));
+}

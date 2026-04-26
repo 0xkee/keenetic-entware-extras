@@ -48,6 +48,7 @@
 
 ### Известные проблемы
 
+- [x] ~~**conffile conflict при установке**~~ — решено: `opkg install --force-maintainer` по умолчанию (см. [deploy-workflow.md §4.6](../.project/deploy-workflow.md))
 - [ ] **BUG-6: `restart-on-crash`** — SmartDNS `execv()` fails с relative `argv[0]` при запуске через `S38`/`rc.func`. Upstream SmartDNS bug. Workaround: опция закомментирована; при необходимости — cron watchdog.
 
 ### Улучшения (backlog)

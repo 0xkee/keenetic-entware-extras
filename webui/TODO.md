@@ -1,6 +1,12 @@
 # WebUI — TODO
 
-> Обновлено 2026-04-25. Cards-position & dashboard fixes (v0.2.2): MOVE logic in set order(), per-wrapper dialog injection, skeleton shimmer, debug logs removed.
+> Обновлено 2026-04-26. v0.3.0: Angular-native card — пустой CDK row (sub_filter #9 ngTemplateOutlet=null), inject.js создаёт card DOM с нуля. Удалены хаки: CSS stub hiding, header patch, dialog toggle/header patches. Target: `.project/target-arch.md`.
+
+## 🎯 Спайки — свой template для Angular
+
+- [x] **Spike A: Проверить нативность dialog** ✅ — удалены header/toggle патчи из `injectIntoCardsDialog()` и `_repatchDialogEntwareRow()`. **Результат: Angular рендерит ENTWARE_EXTRAS нативно** — header "ENTWARE EXTRAS" (из dXe), aria-label "ENTWARE_EXTRAS" (из Po), toggle state (FormControl). inject.js change handler оставлен только для dashboard sync. Скриншот: `docs/screenshots/spike-a-dialog-native.png`
+- [x] **Spike D: Пустой CDK row** ✅ — sub_filter #3 → `{__ew:1}` (truthy), sub_filter #9 → `ngTemplateOutlet: templateMap.has(e)?getTemplate(e):null`. Dashboard: пустой CDK row, inject.js создаёт card DOM. Dialog: Bli template нативно. Скриншот: `docs/screenshots/spike-d-entware-card-visible.png`
+- [x] **Spike E: Dashboard хаки удалены** ✅ — `ewPatchDashboardRow()` создаёт полный card DOM в пустом row. CSS stub hiding удалён. Header patch удалён. Loading skeleton удалён. `ewUnpatchRow()` упрощён.
 
 ## 🔴 Критичные (логи / disk I/O) — ✅ ВЫПОЛНЕНО
 
@@ -19,11 +25,11 @@
 - [x] **inject.js: ewUnpatchRow() reversible** — удаляет `#entware-dash-content`, восстанавливает скрытый Angular контент и оригинальный заголовок из `dataset.ewOrigTitle`/`ewOrigHref`
 - [x] **nginx: drop-патч pre-move + dedupe** — sub_filter #5 разбит на 5a (IIFE pre-move: подмена source slot) + 5b (post-emit: dedupe-only). Флаг через `window.__ewDrag`
 
-## 🔴 Cards Position + Dashboard drag — требует Angular bundle анализа
+## 🔴 Cards Position + Dashboard drag — ✅ ВЫПОЛНЕНО (v0.2.3)
 
-- [ ] **Toggle "слипшийся"** — Toggle ENTWARE в Cards Position диалоге также переключает INTERNET. Angular биндит toggle к card data через внутренний компонент, stub template наследует INTERNET binding. Нужно изучить Angular bundle через MCP.
-- [ ] **Cross-column drag flicker** — При drag ENTWARE между колонками в dialog, название мигает "INTERNET" → "ENTWARE EXTRAS" (~0.5 сек). Angular пересоздаёт row, наш repatcher исправляет через rAF.
-- [ ] **Reconciler ошибочно патчит stock card** — После drag stock карточки (напр. INTERNET) в колонку ENTWARE, reconciler находит неверный row по index и патчит INTERNET content заголовком "ENTWARE EXTRAS". Нужна валидация по `data-ew-key` или content fingerprint перед патчем. НО ! потом по таймеру появляется ent. Ещё наблюдение - когда одну таскаешь int|ent  - они обновляются обе, что не правильно! Вероятно, в ангуляре есть ещё связанные сущности, которые мы не хакнули (ну или поля/атрибуты и прочее)!
+- [x] **Toggle "слипшийся"** — Root cause: `Control at ENTWARE_EXTRAS not found` — Angular FormGroup не имел контрола для ENTWARE. Fix: sub_filter #6 добавляет ENTWARE_EXTRAS в Po enum, #8 bypass isCardAvailable → Angular создаёт FormControl нативно. Toggle обрабатывается Angular, ошибка устранена.
+- [x] **Cross-column drag flicker** — Root cause: singleton `_dialogRepatchObserver` покрывал только последний column-wrapper. Fix: `_dialogRepatchObservers` array — каждый wrapper получает свой observer. rAF убран → patch в microtask.
+- [x] **Reconciler ошибочно патчит stock card** — Root cause: index-based lookup без валидации содержимого. Fix: fingerprint guard в `ewPatchDashboardRow()` — проверяет наличие `ndw-*-card` компонентов, не патчит реальные stock cards.
 
 ## 🟡 Важные
 
@@ -37,6 +43,7 @@
 
 ## 🟡 Средние
 
+- [ ] **postinst: автоопределение listen IP** — `nginx.conf` line 49 содержит захардкоженный `listen 10.0.0.1:8080`. При установке на другой роутер — bind fail. Решение: в `postinst` определять IP роутера (через `ip route get 1 | awk '{print $7}'` или наследовать от стокового веб-сервера `ndnproxy` listen address) и подставлять `sed -i` в nginx.conf. Conffile — обновляется только при первой установке.
 - [ ] **Init script: AGENTS.md compliance** — `S80nginx-webui` использует `#!/bin/sh` (нужно `#!/opt/bin/sh`) и нет `set -eu`
 - [ ] **nginx: user root → privilege separation** — `config/nginx.conf:11` — io.popen() от root = RCE risk
 - [x] **inject.js: window.showInContent утечка** — заменено на addEventListener
@@ -52,3 +59,7 @@
 - [ ] **iframe page card headers: `<span>` → ссылки** — `index.html:52,76,100`
 - [ ] **README.md: обновить** — описать inject.js, proxy architecture, packaging, logrotate, 502 page
 - [ ] **spike-update-plan.md: отметить батчи** — Batch 1–4 выполнены
+
+
+ок, остались мелочи, не скрывается карточка, карточка refrash при перносе (а не должна)
+и нужно убрать всё лишее из кода

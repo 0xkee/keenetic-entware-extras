@@ -249,17 +249,8 @@
     min-height: 16px;
 }
 
-/* ── ENTWARE card — hide Angular stub content via CSS ─────────────
-   Angular re-renders stub template (Internet card) periodically inside
-   .dashboard-card__content. CSS hides ALL children except our injected
-   content wrapper (.ew-dash-content class).
-   Uses CLASS selector (not ID) because CDK deepCloneNode() strips id
-   attributes from preview clones — an ID-based :not() would hide our
-   content in the drag preview too.
-   Auto-deactivates when ewUnpatchRow() removes .ew-dash-card class. */
-.ew-dash-card .dashboard-card__content > :not(.ew-dash-content) {
-    display: none !important;
-}
+/* Sub_filter #9 renders ngTemplateOutlet=null → no stub content to hide.
+   inject.js creates card DOM from scratch in empty CDK row. */
 
 /* ── Cards Position dialog — card stub styling ───────────────────── */
 .entware-dialog-row { margin-bottom: 24px; }
@@ -336,23 +327,8 @@
 .entware-dialog-row--off .dashboard-card { opacity: 0.5; }
 .entware-dialog-row--off .ndw-drag-handle { display: none; }
 
-/* ── Loading state — show stock skeleton until first fetch ────────── */
-/* While ew-loading: hide our content, reveal Angular's stub content
-   (which acts as a natural skeleton placeholder matching stock UI).
-   Reset our padding override to avoid double-padding with Angular scoped CSS.
-   Once fetchDashboardStatuses() removes ew-loading, our content appears
-   and the CSS rule in line ~260 hides Angular stub automatically. */
-.ew-dash-card .dashboard-card__content > .ew-loading {
-    display: none !important;
-}
-/* Override the hide-stub rule: show Angular content while loading */
-.ew-dash-card .dashboard-card__content:has(> .ew-loading) > :not(.ew-dash-content) {
-    display: block !important;
-}
-/* Remove our padding override during loading — Angular scoped styles handle it */
-.ew-dash-card .dashboard-card__content:has(> .ew-loading) {
-    padding: 0 !important;
-}
+/* Loading skeleton no longer needed — no Angular stub to show as placeholder.
+   inject.js creates content immediately; ew-loading class triggers shimmer. */
 
 /* ── CDK drag preview for our card ───────────────────────────────── */
 .ndw-drag-panel__row__preview .ew-dash-card {

@@ -274,6 +274,13 @@
             return;
         }
 
+        // DOM consistency: row count must match order column length.
+        // During CDK drag animation, DOM may have stale/transitional rows.
+        if (rows.length !== order[entwareCol].length) {
+            ewScheduleReconcile('dom-inconsistent');
+            return;
+        }
+
         var targetRow = rows[entwareIdx];
 
         // Remove stale ENTWARE marks from ALL rows across ALL columns
@@ -307,38 +314,21 @@
     }
 
     /**
-     * Remove our injected content and restore Angular-managed DOM.
-     * Removing .ew-dash-card deactivates the CSS rule that hides Angular
-     * stub content, so original children become visible automatically.
+     * Remove our injected content from a CDK row.
+     * With sub_filter #9 (null ngTemplateOutlet), the row is empty —
+     * just remove our card DOM. Angular CDK wrapper stays untouched.
      */
     function ewUnpatchRow(row) {
         row.removeAttribute(EW_ATTR);
         row.classList.remove('ew-row');
-        // Remove our injected content
-        var ewContent = row.querySelector('#entware-dash-content');
-        if (ewContent) ewContent.remove();
-        // Remove card-level marker — deactivates CSS hiding rule,
-        // Angular stub content becomes visible automatically
         var card = row.querySelector('.ew-dash-card');
-        if (card) card.classList.remove('ew-dash-card');
-        // Restore original title from saved data
-        var title = row.querySelector('.dashboard-card__header-link a') ||
-                    row.querySelector('.dashboard-card__header-link') ||
-                    row.querySelector('.text-card-heading');
-        if (title && row.dataset.ewOrigTitle) {
-            title.textContent = row.dataset.ewOrigTitle;
-            if (row.dataset.ewOrigHref && title.tagName === 'A') {
-                title.setAttribute('href', row.dataset.ewOrigHref);
-            }
-        }
-        delete row.dataset.ewOrigTitle;
-        delete row.dataset.ewOrigHref;
+        if (card) card.remove();
     }
 
     /**
-     * Patch an Angular-created row IN-PLACE — modify header + content
-     * inside the existing .dashboard-card, preserving Angular component shell
-     * (ndw-*-card, ndw-dashboard-card wrappers).
+     * Patch an Angular-created EMPTY CDK row — create full card DOM inside.
+     * Sub_filter #9 renders ngTemplateOutlet=null → inner div is empty.
+     * We create the complete dashboard-card structure with header + content.
      * Does NOT create/move .cdk-drag elements. Idempotent.
      */
     function ewPatchDashboardRow(row) {
@@ -356,65 +346,57 @@
             row.style.display = '';
         }
 
-        // Find the existing .dashboard-card inside Angular component shell
-        var card = row.querySelector('.dashboard-card');
-        if (!card) return false;
-
         // Already patched — nothing to do (idempotent)
-        if (card.classList.contains('ew-dash-card') &&
-            card.querySelector('#entware-dash-content')) return true;
+        if (row.querySelector('.ew-dash-card') &&
+            row.querySelector('#entware-dash-content')) return true;
 
-        // Mark the card
-        card.classList.add('ew-dash-card');
+        // Find Angular's inner div (ngTemplateOutlet container)
+        var inner = row.querySelector(':scope > div');
+        if (!inner) return false;
 
-        // Patch header: replace link text with "ENTWARE EXTRAS"
-        var title =
-            card.querySelector('.dashboard-card__header-link a') ||
-            card.querySelector('.dashboard-card__header-link') ||
-            card.querySelector('.text-card-heading');
-        if (title) {
-            // Save original title/href for reversible unpatch
-            row.dataset.ewOrigTitle = title.textContent;
-            row.dataset.ewOrigHref = title.getAttribute('href') || '';
-            title.textContent = 'ENTWARE EXTRAS';
-            if (title.tagName === 'A') {
-                title.removeAttribute('href');
-                title.removeAttribute('tabindex');
-                title.style.cursor = 'default';
-                title.setAttribute('role', 'heading');
-                title.setAttribute('aria-level', '2');
-            }
-        }
+        // Create full card structure inside empty Angular container
+        var card = document.createElement('div');
+        card.className = 'dashboard-card ew-dash-card';
 
-        // Patch content: append our content alongside Angular-managed children.
-        // CSS rule (.ew-dash-card .dashboard-card__content > :not(#entware-dash-content))
-        // hides Angular stub content automatically — handles re-renders too.
-        var content = card.querySelector('.dashboard-card__content');
-        if (content && !content.querySelector('#entware-dash-content')) {
-            content.appendChild(buildEntwareDashboardContent());
-        }
+        // Header — stock Keenetic structure
+        var header = document.createElement('div');
+        header.className = 'dashboard-card__header';
+        header.innerHTML =
+            '<div class="dashboard-card__header-link">' +
+                '<span class="text-card-heading" role="heading" aria-level="2" style="cursor:default">ENTWARE EXTRAS</span>' +
+            '</div>' +
+            '<div class="dashboard-card__header-buttons">' +
+                '<ndw-svg-icon class="ndw-drag-handle dashboard-card__drag-icon">' +
+                    '<svg class="ndw-svg-icon" style="width:20px;height:20px;fill:currentColor">' +
+                        '<use href="/assets/sprite/sprite.svg#drag-and-drop"></use>' +
+                    '</svg>' +
+                '</ndw-svg-icon>' +
+            '</div>';
+
+        // Content area — populated by fetchDashboardStatuses()
+        var content = document.createElement('div');
+        content.className = 'dashboard-card__content';
+        content.appendChild(buildEntwareDashboardContent());
+
+        card.appendChild(header);
+        card.appendChild(content);
+        inner.appendChild(card);
 
         // Event delegation for update buttons (geo-split subnet/domain refresh)
-        // Attach to card so it survives content re-patches
-        if (!card._ewClickHandler) {
-            card._ewClickHandler = true;
-            card.addEventListener('click', function(e) {
-                var btn = e.target.closest('.ew-update-btn');
-                if (!btn || btn.disabled) return;
-                var actionUrl = btn.getAttribute('data-action');
-                btn.classList.add('ew-update-btn--spinning');
-                btn.disabled = true;
-                fetch(actionUrl, { method: 'POST' })
-                    .then(function(r) { return r.json(); })
-                    .then(function() {
-                        startGeoFastPolling();
-                    })
-                    .catch(function() {
-                        btn.classList.remove('ew-update-btn--spinning');
-                        btn.disabled = false;
-                    });
-            });
-        }
+        card.addEventListener('click', function(e) {
+            var btn = e.target.closest('.ew-update-btn');
+            if (!btn || btn.disabled) return;
+            var actionUrl = btn.getAttribute('data-action');
+            btn.classList.add('ew-update-btn--spinning');
+            btn.disabled = true;
+            fetch(actionUrl, { method: 'POST' })
+                .then(function(r) { return r.json(); })
+                .then(function() { startGeoFastPolling(); })
+                .catch(function() {
+                    btn.classList.remove('ew-update-btn--spinning');
+                    btn.disabled = false;
+                });
+        });
 
         return true;
     }
@@ -465,7 +447,8 @@
                         rn.classList.contains('cdk-overlay-pane') &&
                         rn.querySelector && rn.querySelector('.ndw-drag-panel__column-wrapper')) {
                         window.__ewDialogOpen = false;
-                        if (_dialogRepatchObserver) { _dialogRepatchObserver.disconnect(); _dialogRepatchObserver = null; }
+                        _dialogRepatchObservers.forEach(function(o) { o.disconnect(); });
+                        _dialogRepatchObservers = [];
                     }
                 }
                 // Detect dialog OPEN: new nodes → poll for column-wrapper
@@ -604,38 +587,22 @@
         targetRow.classList.add('entware-dialog-patched', 'entware-dialog-row');
         if (!isVisible) targetRow.classList.add('entware-dialog-row--off');
 
-        // ── In-place patch: modify header + toggle inside existing Angular row ──
-        // Patch header text — Angular fallback renders "Internet" or other stock card
-        var heading = targetRow.querySelector('.dashboard-card__header-text') ||
-                      targetRow.querySelector('.text-card-heading');
-        if (heading) {
-            heading.textContent = 'ENTWARE EXTRAS';
-        }
-
-        // Patch toggle: Angular already binds it to cardStates["ENTWARE_EXTRAS"]
-        // (from order array). We just fix aria-label, initial state, and add
-        // our handler for RCI persistence + dashboard sync.
+        // ── Spike A: header + toggle are now Angular-native ──────────────
+        // dXe patch (#7) gives Angular the correct title "ENTWARE EXTRAS".
+        // Angular FormControl handles toggle state via cardStates.
+        // We only add a change listener for dashboard card real-time sync.
         var toggle = targetRow.querySelector('input[role="switch"]');
-        if (toggle) {
-            toggle.setAttribute('aria-label', ENTWARE_CARD_ID);
-            toggle.checked = isVisible;
-            var barEl = targetRow.querySelector('.ndw-toggle__toggle-bar');
-            if (barEl) {
-                barEl.classList.toggle('ndw-toggle__toggle-bar--on', isVisible);
-                barEl.classList.toggle('ndw-toggle__toggle-bar--off', !isVisible);
-            }
-            if (!toggle._ewHandlerSet) {
-                toggle._ewHandlerSet = true;
-                toggle.addEventListener('change', function(e) {
-                    var visible = e.target.checked;
-                    targetRow.classList.toggle('entware-dialog-row--off', !visible);
-                    var p = getEntwareCardPosition() || { column: 0, position: 999, visible: true };
-                    p.visible = visible;
-                    saveEntwarePosition(p);
-                    var ewRow = document.querySelector('[' + EW_ATTR + '="entware-extras"]');
-                    if (ewRow) ewRow.style.display = visible ? '' : 'none';
-                });
-            }
+        if (toggle && !toggle._ewHandlerSet) {
+            toggle._ewHandlerSet = true;
+            toggle.addEventListener('change', function(e) {
+                var visible = e.target.checked;
+                targetRow.classList.toggle('entware-dialog-row--off', !visible);
+                var p = getEntwareCardPosition() || { column: 0, position: 999, visible: true };
+                p.visible = visible;
+                saveEntwarePosition(p);
+                var ewRow = document.querySelector('[' + EW_ATTR + '="entware-extras"]');
+                if (ewRow) ewRow.style.display = visible ? '' : 'none';
+            });
         }
 
         // ── MutationObserver: re-patch after Angular re-renders (CDK drag/drop) ──
@@ -644,26 +611,25 @@
         return true;
     }
 
-    /** @type {MutationObserver|null} */
-    var _dialogRepatchObserver = null;
+    /** @type {MutationObserver[]} */
+    var _dialogRepatchObservers = [];
 
     /**
      * Set up MutationObserver on dialog wrapper to re-patch ENTWARE row
      * when Angular re-renders it (CDK drag/drop, change detection).
-     * Reads CURRENT visibility from getEntwareCardPosition() each time
-     * (not stale closure value — fixes toggle snap-back bug).
+     * Uses array instead of singleton — each column-wrapper gets its own
+     * observer (dialog has 2 wrappers, one per column).
+     * Patches in microtask (no rAF) to minimize flicker.
      * @param {HTMLElement} dialogWrapper
      */
     function _setupDialogRepatcher(dialogWrapper) {
-        if (_dialogRepatchObserver) _dialogRepatchObserver.disconnect();
-        _dialogRepatchObserver = new MutationObserver(function() {
-            requestAnimationFrame(function() {
-                var curPos = getEntwareCardPosition();
-                var curVisible = curPos ? curPos.visible !== false : true;
-                _repatchDialogEntwareRow(dialogWrapper, curVisible);
-            });
+        var obs = new MutationObserver(function() {
+            var curPos = getEntwareCardPosition();
+            var curVisible = curPos ? curPos.visible !== false : true;
+            _repatchDialogEntwareRow(dialogWrapper, curVisible);
         });
-        _dialogRepatchObserver.observe(dialogWrapper, { childList: true, subtree: true });
+        obs.observe(dialogWrapper, { childList: true, subtree: true });
+        _dialogRepatchObservers.push(obs);
     }
 
     /**
@@ -721,18 +687,9 @@
         }
         if (!row) return;
 
-        // Fix header text (Angular fallback renders "Internet" or other stock card)
-        var heading = row.querySelector('.dashboard-card__header-text');
-        if (heading && heading.textContent !== 'ENTWARE EXTRAS') {
-            heading.textContent = 'ENTWARE EXTRAS';
-        }
-
-        // Fix toggle aria-label (Angular binds to ENTWARE_EXTRAS from order,
-        // but renders INTERNET label from stub template)
-        var input = row.querySelector('input[role="switch"]');
-        if (input && input.getAttribute('aria-label') !== ENTWARE_CARD_ID) {
-            input.setAttribute('aria-label', ENTWARE_CARD_ID);
-        }
+        // Spike A: header + aria-label are now Angular-native (dXe + Bli template).
+        // No patching needed — Angular renders "ENTWARE EXTRAS" and sets
+        // aria-label="ENTWARE_EXTRAS" from Po enum via Bli template binding.
 
         // Ensure patched classes are present
         if (!row.classList.contains('entware-dialog-patched')) {
@@ -1391,7 +1348,11 @@
     document.addEventListener('pointerup', function() {
         if (ewInDrag) {
             ewInDrag = false;
-            ewScheduleReconcile('pointerup');
+            // Delay reconcile to let CDK drop animation finish (~250ms).
+            // Immediate reconcile would find stale/transitional DOM.
+            setTimeout(function() {
+                ewScheduleReconcile('pointerup-delayed');
+            }, 300);
         }
     }, true);
 

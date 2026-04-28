@@ -53,7 +53,7 @@ Backup: `backups/router-1-unblock-20260407/`
 | `ovpn_br0/br1` | OpenVPN | DOWN |
 
 ### DNS
-- See [`smartdns-ru/`](../../smartdns-ru/) subproject for DNS server configuration
+- See [`smartdns-conf-ru-split/`](../../smartdns-conf-ru-split/) subproject for DNS server configuration
 - SmartDNS on port 6053, two groups: `ru` and `default`
 - `dig @localhost` resolves through SmartDNS
 

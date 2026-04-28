@@ -1,2 +1,3 @@
 /opt/keenetic-entware-extras/webui/config/nginx.conf
 /opt/keenetic-entware-extras/webui/config/logrotate.conf
+/opt/keenetic-entware-extras/webui/config/config.sh

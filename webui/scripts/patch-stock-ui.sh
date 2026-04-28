@@ -15,6 +15,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PATCHES_DIR="$PROJECT_DIR/webui/patches"
 
+# Source webui config
+_CONFIG_DIR="$PROJECT_DIR/webui/config"
+# shellcheck source=/dev/null
+. "$_CONFIG_DIR/config.sh"
+
 HTDOCS="/usr/share/htdocs_"
 CACHE="/tmp/ew-webui"
 
@@ -49,7 +54,7 @@ done
 log "Firmware: JS=main-${JS_HASH}.js CSS=styles-${CSS_HASH}.css"
 
 # -- Patch index.html (version-agnostic: </body> and </head> stable) ---
-sed -i 's|</body>|<script src="/custom/inject.js"></script></body>|' "$CACHE/index.html"
+sed -i "s|</body>|<script>window.__ewConfig={injectSidebar:${INJECT_SIDEBAR:-0},pollInterval:${DASH_POLL_INTERVAL:-30000}}</script><script src=\"/custom/inject.js\"></script></body>|" "$CACHE/index.html"
 sed -i 's|</head>|<link rel="stylesheet" href="/custom/inject.css"></head>|' "$CACHE/index.html"
 
 if ! grep -q 'inject.js' "$CACHE/index.html"; then

@@ -6,6 +6,8 @@
 (function() {
     'use strict';
 
+    var __cfg = window.__ewConfig || {};
+
     var CUSTOM_ITEMS = [
         { id: 'dashboard',          label: 'Dashboard',    url: '/custom/' },
         { id: 'geo-split',          label: 'Geo Split',    url: '/custom/#geo-split' },
@@ -21,7 +23,7 @@
         { id: 'webui',             label: 'WebUI',        desc: 'Entware Extras web dashboard',               url: '/custom/#webui',              api: '/api/webui/status' },
     ];
 
-    var DASH_POLL_INTERVAL = 30000;
+    var DASH_POLL_INTERVAL = (__cfg.pollInterval > 0) ? __cfg.pollInterval : 30000;
     var DETAILS_SKIP_KEYS = { uptime: 1, version: 1, pid: 1, background: 1 };
     /** Detail keys whose numeric values are seconds — formatted via formatUptimeStock() and live-ticked. */
     var TIMER_KEYS = { subnet_freshness: 1, domain_freshness: 1 };
@@ -919,6 +921,13 @@
      */
     function tryInject() {
         if (injected) return true;
+        // Config guard: skip sidebar injection when disabled
+        if (!__cfg.injectSidebar) {
+            injected = true;
+            injectDashStyles();
+            ewScheduleReconcile('no-sidebar');
+            return true;
+        }
         var container = document.querySelector('ndw-menu .menu__contents');
         if (!container) return false;
         container.appendChild(buildSection());
@@ -954,9 +963,11 @@
 
     // ── Single MutationObserver — sidebar + reconcile ─────────────────
     var observer = new MutationObserver(function() {
-        // Sidebar re-injection
-        if (!document.querySelector('.entware-menu-section')) {
-            injected = false;
+        // Sidebar re-injection (only when enabled)
+        if (__cfg.injectSidebar) {
+            if (!document.querySelector('.entware-menu-section')) {
+                injected = false;
+            }
         }
         if (!injected) {
             tryInject();
@@ -974,8 +985,8 @@
     setInterval(function() {
         var currentPath = window.location.pathname;
 
-        // Re-inject sidebar if Angular removed it
-        if (!document.querySelector('.entware-menu-section')) {
+        // Re-inject sidebar if Angular removed it (only when enabled)
+        if (__cfg.injectSidebar && !document.querySelector('.entware-menu-section')) {
             injected = false;
             tryInject();
         }

@@ -2,14 +2,18 @@
 # nginx-webui init script for Entware.
 # Standalone init (no rc.func) — safe alongside stock nginx.
 # Config: /opt/keenetic-entware-extras/webui/config/nginx.conf (separate instance on port 8080).
+# shellcheck disable=SC1091  # sourced files resolved at runtime on router
 set -eu
 
-ENABLED=yes
+INSTALL_DIR="/opt/keenetic-entware-extras/webui"
+_CONFIG_DIR="$INSTALL_DIR/config"
+# shellcheck source=/dev/null
+. "$_CONFIG_DIR/config.sh"
+
 DESC="nginx WebUI dashboard"
-CONF="/opt/keenetic-entware-extras/webui/config/nginx.conf"
-PIDFILE="/opt/var/run/nginx-webui.pid"
+CONF="$_CONFIG_DIR/nginx.conf"
 NGINX="/opt/sbin/nginx"
-PATCH="/opt/keenetic-entware-extras/webui/scripts/patch-stock-ui.sh"
+PATCH="$INSTALL_DIR/scripts/patch-stock-ui.sh"
 PATH="/opt/sbin:/opt/bin:/sbin:/bin:/usr/sbin:/usr/bin"
 
 is_running() {

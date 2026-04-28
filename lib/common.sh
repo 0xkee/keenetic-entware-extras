@@ -37,6 +37,19 @@ is_entware() {
   [ -d /opt/etc ]
 }
 
+# Detect router LAN IP address (Keenetic br0 bridge).
+# Method: br0 is the standard LAN bridge on Keenetic routers.
+# Fallback: ip route get → source IP (may return VPN/WAN on tunneled setups).
+# stdout: IP address or empty string
+detect_router_ip() {
+  local ip=""
+  ip=$(ip -4 addr show br0 2>/dev/null | awk '/inet / {split($2, a, "/"); print a[1]; exit}')
+  if [ -z "$ip" ]; then
+    ip=$(ip route get 1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}')
+  fi
+  printf '%s' "$ip"
+}
+
 # Get file modification time as epoch seconds (BusyBox compatible).
 # BusyBox stat does not support GNU -c format.
 # Args: $1 - file path
@@ -88,10 +101,13 @@ format_size_kb() {
 }
 
 # Read installed package version via opkg.
+# Uses 'opkg list-installed' (fast, reliable on Entware) instead of
+# 'opkg info' which may return empty or stale data.
+# Output format: "pkg - version" → extract version field.
 # Args: $1 - package name
 # stdout: version string, or empty if not installed
 installed_pkg_version() {
-  opkg info "$1" 2>/dev/null | sed -n 's/^Version: //p'
+  opkg list-installed "$1" 2>/dev/null | awk -F ' - ' '{print $2}'
 }
 
 # Escape a string for safe JSON value embedding (no surrounding quotes).

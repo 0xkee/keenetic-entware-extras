@@ -9,6 +9,8 @@
 # Exit code: 0 if every package is Alive, 1 otherwise.
 #
 # Flags:
+#   -d | --details        show full status output for every package
+#                         (not just ✗ lines for failures)
 #   -n | --no-color       disable ANSI colors (also: NO_COLOR=1 env var)
 #   -c | --color=always   force ANSI colors even when stdout is not a TTY
 #                         (useful for `kee-status | less -R`)
@@ -26,7 +28,7 @@ NAME_COL_WIDTH=20
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [-n|--no-color] [-c|--color=always] [-h|--help]
+Usage: $(basename "$0") [-d|--details] [-n|--no-color] [-c|--color=always] [-h|--help]
 
 Aggregated status of installed keenetic-entware-extras packages.
 
@@ -34,14 +36,20 @@ Discovers every ${BASE}/<pkg>/scripts/status.sh, runs it, and reports
 Alive / FAIL plus filtered error lines (lines containing ✗) grouped
 by their source subsection.
 
+  -d, --details      show full status output for every package
+  -n, --no-color     disable ANSI colors
+  -c, --color=always force ANSI colors even when stdout is not a TTY
+
 Exit status: 0 if all Alive, 1 if any FAIL.
 EOF
 }
 
 NO_COLOR_OPT=""
 FORCE_COLOR=""
+DETAILS=""
 while [ $# -gt 0 ]; do
   case "$1" in
+    -d|--details)       DETAILS=1 ;;
     -n|--no-color)      NO_COLOR_OPT=1 ;;
     -c|--color=always)  FORCE_COLOR=1 ;;
     -h|--help)          usage; exit 0 ;;
@@ -81,6 +89,15 @@ fi
 print_pkg_row() {
   local pkg="$1" label="$2" color="$3"
   printf "  %-${NAME_COL_WIDTH}s %s%s%s\n" "$pkg" "$color" "$label" "$C_RESET"
+}
+
+# Re-indent full status output for --details display.
+# Prepends 4 spaces to every non-empty line so the block nests visually
+# under the package summary row.
+# stdin:  raw status output
+# stdout: re-indented output
+indent_output() {
+  sed 's/^/    /'
 }
 
 # Filter error lines from a sub-status output stream.
@@ -141,11 +158,19 @@ for script in "$BASE"/*/scripts/status.sh; do
 
   if [ "$rc" -eq 0 ]; then
     print_pkg_row "$pkg" "Alive" "$C_GREEN"
+    # --details: show full output even for healthy packages
+    if [ -n "$DETAILS" ] && [ -n "$output" ]; then
+      printf "%s\n" "$output" | indent_output
+    fi
   else
     OVERALL_RC=1
     print_pkg_row "$pkg" "FAIL" "$C_RED"
     if [ -n "$output" ]; then
-      printf "%s\n" "$output" | filter_errors
+      if [ -n "$DETAILS" ]; then
+        printf "%s\n" "$output" | indent_output
+      else
+        printf "%s\n" "$output" | filter_errors
+      fi
     else
       printf "    %s(no output, exit code %d)%s\n" "$C_DIM" "$rc" "$C_RESET"
     fi

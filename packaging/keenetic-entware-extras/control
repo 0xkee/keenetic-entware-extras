@@ -1,14 +1,14 @@
 Package: keenetic-entware-extras
-Version: 0.5.3
+Version: 0.5.5
 Architecture: all
 Maintainer: 0xkee
 Description: Shared shell libraries and CLI tools for keenetic-entware-extras.
- Provides common.sh (logging, validation), lists.sh (list processing with
- @include support, deduplication), and ip.sh (CIDR aggregation, ISP interface
- detection, DNS resolver auto-detection).
+ Provides common.sh (logging, validation, router IP detection), lists.sh
+ (list processing with @include support, deduplication), and ip.sh (CIDR
+ aggregation, ISP interface detection, DNS resolver auto-detection).
  Installs the `kee-status` command (/opt/bin/kee-status) — an aggregated
  diagnostic that runs every sub-package status.sh and reports Alive/FAIL
  plus filtered error lines grouped by subsection.
- Base package for geo-split, smartdns-ru, smartdns-redirect and others.
+ Base package for geo-split, smartdns-conf-ru-split, smartdns-redirect and others.
 Section: lib
 Priority: optional

@@ -1,4 +1,4 @@
-# smartdns-ru — План улучшений (Phase 3)
+# smartdns-conf-ru-split — План улучшений (Phase 3)
 
 **Version:** v1.1
 **Created:** 2026-04-16
@@ -30,7 +30,7 @@
 | ID | Описание | Статус | Workaround |
 |----|----------|--------|------------|
 | BUG-6 | `restart-on-crash yes` — SmartDNS execv() fails с relative argv[0] при запуске через S38/rc.func. Daemon не может перезапуститься. | ⚠️ Upstream bug | Закомментировано в конфиге. Перезапуск через cron или watchdog при необходимости. |
-| BUG-7 | Скрипты `packaging/smartdns-ru/postinst`, `prerm`, `postrm` не имели +x после сборки `.ipk` → `opkg install` не выполнял скрипты. | ✅ Исправлено | `build-ipk.sh` обновлён: `chmod +x` на все packaging-скрипты перед сборкой. |
+| BUG-7 | Скрипты `packaging/smartdns-conf-ru-split/postinst`, `prerm`, `postrm` не имели +x после сборки `.ipk` → `opkg install` не выполнял скрипты. | ✅ Исправлено | `build-ipk.sh` обновлён: `chmod +x` на все packaging-скрипты перед сборкой. |
 
 ---
 
@@ -38,7 +38,7 @@
 
 ### Цель
 
-Привести smartdns-ru к уровню зрелости geo-split: `.ipk` пакетирование, надёжный init-скрипт, актуальная конфигурация DNS, автоматизированный деплой.
+Привести smartdns-conf-ru-split к уровню зрелости geo-split: `.ipk` пакетирование, надёжный init-скрипт, актуальная конфигурация DNS, автоматизированный деплой.
 
 ### Принципы
 
@@ -72,16 +72,16 @@
 
 ## 3. Этап A: Packaging + Init (Critical Fixes)
 
-**Цель:** smartdns-ru собирается в `.ipk`, деплоится через `opkg install`, надёжно управляет S38/S60 конфликтом.
+**Цель:** smartdns-conf-ru-split собирается в `.ipk`, деплоится через `opkg install`, надёжно управляет S38/S60 конфликтом.
 
 **Оценка времени:** ~3ч
 
 ### 3.1 Новые файлы
 
-#### 3.1.1 `packaging/smartdns-ru/control`
+#### 3.1.1 `packaging/smartdns-conf-ru-split/control`
 
 ```
-Package: smartdns-ru
+Package: smartdns-conf-ru-split
 Version: 0.1.0
 Architecture: all
 Maintainer: 0xkee
@@ -98,9 +98,9 @@ Priority: optional
 - `Depends: smartdns` — opkg установит smartdns автоматически
 - `Depends: ca-certificates` — нужен для TLS verify (убираем `-k`)
 - `Version: 0.1.0` — первый релиз
-- Без `Recommends: geo-split` — smartdns-ru работает самостоятельно
+- Без `Recommends: geo-split` — smartdns-conf-ru-split работает самостоятельно
 
-#### 3.1.2 `packaging/smartdns-ru/conffiles`
+#### 3.1.2 `packaging/smartdns-conf-ru-split/conffiles`
 
 ```
 /opt/etc/smartdns/smartdns.conf
@@ -108,7 +108,7 @@ Priority: optional
 
 Защищает конфиг от перезаписи при `opkg upgrade`. opkg спросит пользователя при конфликте.
 
-#### 3.1.3 `packaging/smartdns-ru/postinst`
+#### 3.1.3 `packaging/smartdns-conf-ru-split/postinst`
 
 ```sh
 #!/opt/bin/sh
@@ -126,8 +126,8 @@ if [ -x "$S38" ]; then
     "$S38" restart || true
 fi
 
-echo "smartdns-ru installed. Config: /opt/etc/smartdns/smartdns.conf"
-echo "Status: /opt/keenetic-entware-extras/smartdns-ru/scripts/status.sh"
+echo "smartdns-conf-ru-split installed. Config: /opt/etc/smartdns/smartdns.conf"
+echo "Status: /opt/keenetic-entware-extras/smartdns-conf-ru-split/scripts/status.sh"
 ```
 
 **Решение: используем стоковый S38smartdns**
@@ -137,7 +137,7 @@ echo "Status: /opt/keenetic-entware-extras/smartdns-ru/scripts/status.sh"
 - Нет необходимости в guard-логике
 - opkg upgrade smartdns не ломает init
 
-#### 3.1.4 `packaging/smartdns-ru/prerm`
+#### 3.1.4 `packaging/smartdns-conf-ru-split/prerm`
 
 ```sh
 #!/opt/bin/sh
@@ -152,7 +152,7 @@ if [ -x "$S38" ]; then
 fi
 ```
 
-#### 3.1.5 `packaging/smartdns-ru/postrm`
+#### 3.1.5 `packaging/smartdns-conf-ru-split/postrm`
 
 ```sh
 #!/opt/bin/sh
@@ -166,12 +166,12 @@ rm -f /opt/var/cache/smartdns.cache
 
 # Remove empty directories left by opkg
 for d in config scripts docs; do
-    rmdir "/opt/keenetic-entware-extras/smartdns-ru/$d" 2>/dev/null || true
+    rmdir "/opt/keenetic-entware-extras/smartdns-conf-ru-split/$d" 2>/dev/null || true
 done
-rmdir "/opt/keenetic-entware-extras/smartdns-ru" 2>/dev/null || true
+rmdir "/opt/keenetic-entware-extras/smartdns-conf-ru-split" 2>/dev/null || true
 ```
 
-#### 3.1.5 `smartdns-ru/scripts/status.sh`
+#### 3.1.5 `smartdns-conf-ru-split/scripts/status.sh`
 
 Диагностический скрипт (по аналогии с geo-split).
 
@@ -258,28 +258,28 @@ fi
 
 ### 3.2 Изменения в существующих файлах
 
-#### 3.2.1 `scripts/build-ipk.sh` — добавить smartdns-ru
+#### 3.2.1 `scripts/build-ipk.sh` — добавить smartdns-conf-ru-split
 
 Добавить секцию `build_smartdns_ru()` по образцу `build_geo_split()`:
 
 ```
-# smartdns-ru → /opt/keenetic-entware-extras/smartdns-ru/
+# smartdns-conf-ru-split → /opt/keenetic-entware-extras/smartdns-conf-ru-split/
 SMARTDNS_DATA=(config scripts docs README.md)
 ```
 
 Функция `build_smartdns_ru`:
-- Копировать `SMARTDNS_DATA` в `data_dir/opt/keenetic-entware-extras/smartdns-ru/`
+- Копировать `SMARTDNS_DATA` в `data_dir/opt/keenetic-entware-extras/smartdns-conf-ru-split/`
 - Копировать `smartdns.conf` → `data_dir/opt/etc/smartdns/smartdns.conf`
-- Собрать control.tar.gz из `packaging/smartdns-ru/`
+- Собрать control.tar.gz из `packaging/smartdns-conf-ru-split/`
 
-Добавить в `case`: `smartdns-ru) build_smartdns_ru ;;` и в `all)`.
+Добавить в `case`: `smartdns-conf-ru-split) build_smartdns_ru ;;` и в `all)`.
 
 > **Реализация:** `install.sh` и `uninstall.sh` удалены — установка/удаление через `.ipk` (`opkg install`/`opkg remove`).
 
 ### 3.3 Структура файлов после Этапа A
 
 ```
-smartdns-ru/
+smartdns-conf-ru-split/
 ├── .project/
 │   ├── target-arch.md              # обновить Deploy Layout
 │   └── target-code.md
@@ -295,7 +295,7 @@ smartdns-ru/
 └── README.md
 
 packaging/
-└── smartdns-ru/                     # 🆕 весь каталог
+└── smartdns-conf-ru-split/                     # 🆕 весь каталог
     ├── control
     ├── conffiles
     ├── postinst
@@ -305,11 +305,11 @@ packaging/
 
 ### 3.4 Порядок действий Этапа A
 
-1. Создать `packaging/smartdns-ru/` (5 файлов)
-2. Создать `smartdns-ru/scripts/status.sh`
-3. Обновить `scripts/build-ipk.sh` (добавить smartdns-ru)
-4. Обновить `smartdns-ru/.project/target-arch.md` (Deploy Layout)
-5. Тест: `./scripts/build-ipk.sh smartdns-ru` — .ipk собирается
+1. Создать `packaging/smartdns-conf-ru-split/` (5 файлов)
+2. Создать `smartdns-conf-ru-split/scripts/status.sh`
+3. Обновить `scripts/build-ipk.sh` (добавить smartdns-conf-ru-split)
+4. Обновить `smartdns-conf-ru-split/.project/target-arch.md` (Deploy Layout)
+5. Тест: `./scripts/build-ipk.sh smartdns-conf-ru-split` — .ipk собирается
 
 ### 3.5 Init-скрипт: используем стоковый S38
 
@@ -317,7 +317,7 @@ packaging/
 
 ```mermaid
 flowchart TD
-    A["opkg install smartdns-ru"] --> B["opkg распаковывает файлы<br/>(smartdns.conf + scripts/)"]
+    A["opkg install smartdns-conf-ru-split"] --> B["opkg распаковывает файлы<br/>(smartdns.conf + scripts/)"]
     B --> C["postinst запускается"]
     C --> D["mkdir cache dir"]
     D --> E{"S38smartdns<br/>+x?"}
@@ -342,7 +342,7 @@ flowchart TD
 
 **Оценка времени:** ~1.5ч
 
-### 4.1 Изменения в `smartdns-ru/config/smartdns.conf`
+### 4.1 Изменения в `smartdns-conf-ru-split/config/smartdns.conf`
 
 Полностью заменить содержимое. Два режима foreign DNS (A: без VPN, B: через VPN) — оба в одном файле, Mode B закомментирован.
 
@@ -352,7 +352,7 @@ flowchart TD
 ############################################
 # SmartDNS — DNS-сервер с разделением по группам
 #
-# Проект: smartdns-ru (keenetic-entware-extras)
+# Проект: smartdns-conf-ru-split (keenetic-entware-extras)
 # Документация: https://pymumu.github.io/smartdns/
 # GitHub:       https://github.com/pymumu/smartdns
 ############################################
@@ -529,9 +529,9 @@ nameserver /tinkoff.com/ru
 
 ### 4.3 Порядок действий Этапа B
 
-1. Заменить содержимое `smartdns-ru/config/smartdns.conf`
+1. Заменить содержимое `smartdns-conf-ru-split/config/smartdns.conf`
 2. Проверить shellcheck скрипты (не затрагиваются, но на всякий случай)
-3. Пересобрать: `./scripts/build-ipk.sh smartdns-ru`
+3. Пересобрать: `./scripts/build-ipk.sh smartdns-conf-ru-split`
 4. Деплой + тест DNS (dig yandex.ru, dig google.com)
 
 ---
@@ -589,33 +589,33 @@ dig yandex.ru @127.0.0.1 -p 6053 +short
 
 | Файл | Этап | Описание |
 |------|------|----------|
-| `packaging/smartdns-ru/control` | A | Метаданные пакета |
-| `packaging/smartdns-ru/conffiles` | A | Защита smartdns.conf |
-| `packaging/smartdns-ru/postinst` | A | Создание cache dir, restart S38 |
-| `packaging/smartdns-ru/prerm` | A | Остановка SmartDNS |
-| `packaging/smartdns-ru/postrm` | A | Очистка runtime-файлов и директорий |
-| `smartdns-ru/scripts/status.sh` | A | Диагностика SmartDNS |
+| `packaging/smartdns-conf-ru-split/control` | A | Метаданные пакета |
+| `packaging/smartdns-conf-ru-split/conffiles` | A | Защита smartdns.conf |
+| `packaging/smartdns-conf-ru-split/postinst` | A | Создание cache dir, restart S38 |
+| `packaging/smartdns-conf-ru-split/prerm` | A | Остановка SmartDNS |
+| `packaging/smartdns-conf-ru-split/postrm` | A | Очистка runtime-файлов и директорий |
+| `smartdns-conf-ru-split/scripts/status.sh` | A | Диагностика SmartDNS |
 
 ### Изменяемые файлы (2)
 
 | Файл | Этап | Что меняется |
 |------|------|--------------|
 | `scripts/build-ipk.sh` | A | Добавить build_smartdns_ru() |
-| `smartdns-ru/config/smartdns.conf` | B | Полное обновление конфига |
+| `smartdns-conf-ru-split/config/smartdns.conf` | B | Полное обновление конфига |
 
 ### Удалённые файлы (3)
 
 | Файл | Причина |
 |------|---------|
-| `smartdns-ru/scripts/install.sh` | Заменён на `.ipk` установку через `opkg` |
-| `smartdns-ru/scripts/uninstall.sh` | Заменён на `opkg remove smartdns-ru` |
-| `smartdns-ru/rootfs/opt/etc/init.d/S60smartdns` | Используется стоковый S38 |
+| `smartdns-conf-ru-split/scripts/install.sh` | Заменён на `.ipk` установку через `opkg` |
+| `smartdns-conf-ru-split/scripts/uninstall.sh` | Заменён на `opkg remove smartdns-conf-ru-split` |
+| `smartdns-conf-ru-split/rootfs/opt/etc/init.d/S60smartdns` | Используется стоковый S38 |
 
 ### Обновляемые docs (1)
 
 | Файл | Этап | Что меняется |
 |------|------|--------------|
-| `smartdns-ru/.project/target-arch.md` | A | Deploy Layout + packaging |
+| `smartdns-conf-ru-split/.project/target-arch.md` | A | Deploy Layout + packaging |
 
 ---
 
@@ -646,7 +646,7 @@ dig yandex.ru @127.0.0.1 -p 6053 +short
 
 ### Этап A ✅
 
-- [x] `./scripts/build-ipk.sh smartdns-ru` — собирает .ipk без ошибок
+- [x] `./scripts/build-ipk.sh smartdns-conf-ru-split` — собирает .ipk без ошибок
 - [x] .ipk содержит: smartdns.conf, scripts/, packaging scripts
 - [x] `shellcheck -x -s sh` — чисто на всех .sh файлах
 - [x] S38smartdns (стоковый): start/stop/restart работают

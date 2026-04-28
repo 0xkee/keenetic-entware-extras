@@ -142,7 +142,7 @@ show_logrotate() {
 # Show installed package version.
 show_version() {
   local ver
-  ver="$(installed_pkg_version nginx-webui)"
+  ver="$(installed_pkg_version webui)"
   if [ -n "$ver" ]; then
     echo "    Version:     $ver"
   else
@@ -182,7 +182,7 @@ json_output() {
   [ -n "$listening" ] && port_ok="true"
 
   # Version
-  version_val="$(installed_pkg_version nginx-webui)"
+  version_val="$(installed_pkg_version webui)"
 
   # Config file presence
   local config_ok_val=1

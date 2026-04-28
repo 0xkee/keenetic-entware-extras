@@ -3,7 +3,7 @@
 Веб-панель мониторинга для Keenetic/Entware — дашборд статуса сервисов + прокси штатного WebUI с инъекцией кастомного меню.
 
 Типичные сценарии:
-- 📊 **Мониторинг:** единый дашборд статуса geo-split, smartdns-ru, smartdns-redirect, систематики (uptime, RAM, диск)
+- 📊 **Мониторинг:** единый дашборд статуса geo-split, smartdns-conf-ru-split, smartdns-redirect, систематики (uptime, RAM, диск)
 - 🎨 **Интеграция:** карточка Entware Extras на стоковом дашборде Keenetic + Cards Position dialog через inject.js
 - 🔌 **API:** JSON-эндпоинты для автоматизации и мониторинга через Lua
 
@@ -54,7 +54,7 @@ Browser → nginx :8080
 
 ### Stock CSS auto-detection
 
-При старте nginx Lua-скрипт `stock-css-init.lua` парсит `/usr/share/htdocs_/index.html` и определяет хеш `styles-{HASH}.css` текущей прошивки. При `nginx -s reload` хеш обновляется — дашборд автоматически подхватывает стили после обновления прошивки.
+При старте nginx Lua-скрипт `stock-css-init.lua` сканирует файловую систему `/usr/share/htdocs_/*.css` (без рекурсии — `wizards/` содержит свой отдельный CSS). Найденные CSS-файлы подставляются в `index.html` через `serve-index.lua`. При `nginx -s reload` список обновляется — дашборд автоматически подхватывает стили после обновления прошивки.
 
 ### Inject.js + CDK DragDrop патчи
 
@@ -109,7 +109,7 @@ Browser → nginx :8080
 |-------|----------|----------|
 | GET | `/api/system/info` | Системная информация (hostname, uptime, RAM, диск) |
 | GET | `/api/geo-split/status` | Статус geo-split (`status.sh --json`) |
-| GET | `/api/smartdns/status` | Статус smartdns-ru |
+| GET | `/api/smartdns/status` | Статус smartdns-conf-ru-split |
 | GET | `/api/smartdns-redirect/status` | Статус smartdns-redirect |
 | GET | `/api/webui/status` | Самодиагностика webui |
 
@@ -161,8 +161,8 @@ nginx-webui:
 | `config/nginx.conf` | Конфигурация nginx (listen, proxy, sub_filter, lua paths) |
 | `config/logrotate.conf` | Logrotate: ротация error-лога nginx-webui |
 | `lua/api-router.lua` | Lua-роутер: /api/* → shell commands → JSON |
-| `lua/serve-index.lua` | Lua: подстановка stock CSS hash в index.html |
-| `lua/stock-css-init.lua` | Lua: определение `styles-{HASH}.css` при старте nginx |
+| `lua/serve-index.lua` | Lua: подстановка stock CSS ссылок в index.html |
+| `lua/stock-css-init.lua` | Lua: сканирование `/usr/share/htdocs_/*.css` при старте nginx |
 | `static/index.html` | Кастомный дашборд — HTML |
 | `static/app.js` | Кастомный дашборд — JS (карточки статуса, API-запросы) |
 | `static/inject.js` | Инъекция в штатный WebUI (меню, карточка Entware Extras) |

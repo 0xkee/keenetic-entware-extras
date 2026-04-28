@@ -1,4 +1,4 @@
-# smartdns-ru — TODO
+# smartdns-conf-ru-split — TODO
 
 **Updated:** 2026-04-16
 
@@ -8,9 +8,9 @@
 
 ### Packaging + Init (Этап A)
 
-- [x] `packaging/smartdns-ru/` — control, conffiles, postinst, prerm, postrm
-- [x] `scripts/build-ipk.sh` — поддержка `smartdns-ru`
-- [x] `smartdns-ru/scripts/status.sh` — диагностика (процесс, порты, DNS-тесты)
+- [x] `packaging/smartdns-conf-ru-split/` — control, conffiles, postinst, prerm, postrm
+- [x] `scripts/build-ipk.sh` — поддержка `smartdns-conf-ru-split`
+- [x] `smartdns-conf-ru-split/scripts/status.sh` — диагностика (процесс, порты, DNS-тесты)
 - [x] `.ipk` собирается и устанавливается через `opkg install`
 - [x] Используется стоковый `S38smartdns` (вместо кастомного S60)
 - [x] postinst перезапускает SmartDNS после установки

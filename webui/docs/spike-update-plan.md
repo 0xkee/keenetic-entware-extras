@@ -239,7 +239,7 @@ fi
 
 Затронутые файлы:
 - `geo-split/scripts/status.sh`
-- `smartdns-ru/scripts/status.sh`
+- `smartdns-conf-ru-split/scripts/status.sh`
 - `smartdns-redirect/scripts/status.sh`
 - `webui/scripts/status.sh`
 
@@ -249,7 +249,7 @@ fi
 -- Изменить status_routes: добавить --json
 local status_routes = {
     ["/api/geo-split/status"]        = base .. "/geo-split/scripts/status.sh --json 2>&1",
-    ["/api/smartdns/status"]          = base .. "/smartdns-ru/scripts/status.sh --json 2>&1",
+    ["/api/smartdns/status"]          = base .. "/smartdns-conf-ru-split/scripts/status.sh --json 2>&1",
     ["/api/smartdns-redirect/status"] = base .. "/smartdns-redirect/scripts/status.sh --json 2>&1",
 }
 
@@ -410,7 +410,7 @@ function showToast(message, type) {
 | `webui/static/app.js` | **Переписать** (structured rendering, убрать system info, adaptive polling) | 2 + 4 |
 | `webui/lua/api-router.lua` | **Изменить** (--json, passthrough JSON) | 2 |
 | `geo-split/scripts/status.sh` | **Добавить** --json flag | 2 |
-| `smartdns-ru/scripts/status.sh` | **Добавить** --json flag | 2 |
+| `smartdns-conf-ru-split/scripts/status.sh` | **Добавить** --json flag | 2 |
 | `smartdns-redirect/scripts/status.sh` | **Добавить** --json flag | 2 |
 | `webui/static/inject.js` | **Переработать** (stock classes, dashboard card, svg icons) | 3 |
 | `webui/config/nginx.conf` | **Добавить** CSS fallback rewrite | 4 |

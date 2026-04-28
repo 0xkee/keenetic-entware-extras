@@ -1,13 +1,15 @@
-#!/bin/sh
+#!/opt/bin/sh
 # nginx-webui init script for Entware.
 # Standalone init (no rc.func) — safe alongside stock nginx.
 # Config: /opt/keenetic-entware-extras/webui/config/nginx.conf (separate instance on port 8080).
+set -eu
 
 ENABLED=yes
 DESC="nginx WebUI dashboard"
 CONF="/opt/keenetic-entware-extras/webui/config/nginx.conf"
 PIDFILE="/opt/var/run/nginx-webui.pid"
 NGINX="/opt/sbin/nginx"
+PATCH="/opt/keenetic-entware-extras/webui/scripts/patch-stock-ui.sh"
 PATH="/opt/sbin:/opt/bin:/sbin:/bin:/usr/sbin:/usr/bin"
 
 is_running() {
@@ -21,6 +23,8 @@ start() {
         echo "already running."
         return 0
     fi
+    # Patch stock UI into tmpfs
+    "$PATCH"
     $NGINX -c "$CONF" 2>&1
     if is_running; then
         echo "done. PID=$(cat "$PIDFILE")"
@@ -34,6 +38,7 @@ stop() {
     printf " Stopping %s... " "$DESC"
     if ! is_running; then
         echo "not running."
+        rm -rf /tmp/ew-webui
         return 0
     fi
     $NGINX -c "$CONF" -s stop 2>&1
@@ -49,6 +54,8 @@ stop() {
     else
         echo "done."
     fi
+    # Clean up tmpfs
+    rm -rf /tmp/ew-webui
 }
 
 case "${1:-}" in
@@ -64,6 +71,8 @@ case "${1:-}" in
         fi
         ;;
     reload)
+        # Re-patch stock UI and reload nginx
+        "$PATCH"
         $NGINX -c "$CONF" -s reload 2>&1
         echo "$DESC reloaded."
         ;;

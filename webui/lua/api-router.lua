@@ -119,7 +119,7 @@ end
 -- JSON routes call status.sh --json → output is already valid JSON
 local json_routes = {
     ["/api/geo-split/status"]        = base .. "/geo-split/scripts/status.sh --json 2>&1",
-    ["/api/smartdns/status"]          = base .. "/smartdns-ru/scripts/status.sh --json 2>&1",
+    ["/api/smartdns/status"]          = base .. "/smartdns-conf-ru-split/scripts/status.sh --json 2>&1",
     ["/api/smartdns-redirect/status"] = base .. "/smartdns-redirect/scripts/status.sh --json 2>&1",
     ["/api/webui/status"]             = base .. "/webui/scripts/status.sh --json 2>&1",
 }
@@ -133,8 +133,8 @@ local action_routes = {
     -- Start/Stop
     ["/api/geo-split/start"]           = "/opt/etc/init.d/S99geo-split start 2>&1",
     ["/api/geo-split/stop"]            = "/opt/etc/init.d/S99geo-split stop 2>&1",
-    ["/api/smartdns/start"]            = "/opt/etc/init.d/S38smartdns start 2>&1",
-    ["/api/smartdns/stop"]             = "/opt/etc/init.d/S38smartdns stop 2>&1",
+    ["/api/smartdns/start"]            = base .. "/smartdns-conf-ru-split/scripts/toggle.sh enable 2>&1",
+    ["/api/smartdns/stop"]             = base .. "/smartdns-conf-ru-split/scripts/toggle.sh disable 2>&1",
     ["/api/smartdns-redirect/start"]   = "/opt/etc/init.d/S39smartdns-redirect start 2>&1",
     ["/api/smartdns-redirect/stop"]    = "/opt/etc/init.d/S39smartdns-redirect stop 2>&1",
     -- Update (geo-split only, runs in background)

@@ -1,4 +1,4 @@
-# Architecture Targets — smartdns-ru
+# Architecture Targets — smartdns-conf-ru-split
 
 ## Purpose
 
@@ -48,7 +48,7 @@ Diagnostics via standalone `scripts/status.sh`.
 ## Project Structure
 
 ```
-smartdns-ru/
+smartdns-conf-ru-split/
 ├── .project/
 │   ├── target-arch.md       # this file
 │   └── target-code.md       # code standards
@@ -62,7 +62,7 @@ smartdns-ru/
 │   └── improvement-plan.md
 └── README.md
 
-packaging/smartdns-ru/
+packaging/smartdns-conf-ru-split/
 ├── control                  # package metadata (Version, Depends)
 ├── conffiles                # protected config paths
 ├── postinst                 # create cache dir, restart smartdns
@@ -75,9 +75,9 @@ packaging/smartdns-ru/
 ```
 /opt/etc/smartdns/smartdns.conf                              # configuration (conffiles-protected)
 /opt/etc/init.d/S38smartdns                                  # stock init (from smartdns package)
-/opt/keenetic-entware-extras/smartdns-ru/scripts/status.sh   # diagnostic script
-/opt/keenetic-entware-extras/smartdns-ru/README.md           # readme
-/opt/keenetic-entware-extras/smartdns-ru/LICENSE              # license
+/opt/keenetic-entware-extras/smartdns-conf-ru-split/scripts/status.sh   # diagnostic script
+/opt/keenetic-entware-extras/smartdns-conf-ru-split/README.md           # readme
+/opt/keenetic-entware-extras/smartdns-conf-ru-split/LICENSE              # license
 /opt/sbin/smartdns                                            # binary (from smartdns package)
 /opt/var/run/smartdns.pid                                     # PID file (runtime)
 /opt/var/cache/smartdns.cache                                 # persistent cache (runtime)

@@ -4,16 +4,34 @@
 set -eu
 
 INSTALL_DIR="/opt/keenetic-entware-extras/webui"
+LISTEN_CONF="$INSTALL_DIR/config/listen.conf"
 S80="/opt/etc/init.d/S80nginx-webui"
 
-# 1. Deploy logrotate config
+# 1. Auto-detect router LAN IP and generate listen.conf (included by nginx.conf).
+# Separate file avoids conffile conflicts on upgrade: nginx.conf stays untouched,
+# listen.conf is regenerated every install/upgrade.
+# Method: br0 is the standard LAN bridge on Keenetic routers.
+# Fallback: ip route get → source IP (may return VPN/WAN on tunneled setups).
+ROUTER_IP=$(ip -4 addr show br0 2>/dev/null | awk '/inet / {split($2, a, "/"); print a[1]; exit}')
+if [ -z "$ROUTER_IP" ]; then
+    ROUTER_IP=$(ip route get 1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}')
+fi
+if [ -n "$ROUTER_IP" ]; then
+    echo "listen ${ROUTER_IP}:8080;" > "$LISTEN_CONF"
+    echo "nginx listen IP set to $ROUTER_IP:8080"
+else
+    echo "listen 0.0.0.0:8080;" > "$LISTEN_CONF"
+    echo "WARNING: could not detect router IP, using 0.0.0.0:8080"
+fi
+
+# 2. Deploy logrotate config
 LOGROTATE_DIR="/opt/etc/logrotate.d"
 if [ -d "$LOGROTATE_DIR" ]; then
     cp "$INSTALL_DIR/config/logrotate.conf" "$LOGROTATE_DIR/nginx-webui"
     echo "logrotate config deployed: $LOGROTATE_DIR/nginx-webui"
 fi
 
-# 2. Ensure logrotate runs via cron.daily
+# 3. Ensure logrotate runs via cron.daily
 CRON_DAILY="/opt/etc/cron.daily"
 CRON_LOGROTATE="$CRON_DAILY/logrotate"
 if [ ! -f "$CRON_LOGROTATE" ]; then
@@ -27,13 +45,13 @@ EOF
     echo "cron.daily/logrotate wrapper created"
 fi
 
-# 3. Deploy init script
+# 4. Deploy init script
 cp "$INSTALL_DIR/rootfs/opt/etc/init.d/S80nginx-webui" "$S80"
 chmod 755 "$S80"
 
-# 4. (Re)start nginx-webui
+# 5. (Re)start nginx-webui
 "$S80" restart || true
 
-echo "webui installed. Dashboard: http://<router-ip>:8080/custom/"
+echo "webui installed. Dashboard: http://${ROUTER_IP:-<router-ip>}:8080/custom/"
 echo "Config: $INSTALL_DIR/config/nginx.conf"
 echo "Status: $INSTALL_DIR/scripts/status.sh"

@@ -1,4 +1,4 @@
-# smartdns-ru
+# smartdns-conf-ru-split
 
 SmartDNS split-DNS конфигурация для российского интернета на Keenetic/Entware.
 
@@ -26,17 +26,17 @@ Split DNS: разделение DNS-запросов по зонам.
 
 ```sh
 # Скопировать на роутер
-scp -O smartdns-ru_0.1.2_all.ipk root@<router-ip>:/tmp/
+scp -O smartdns-conf-ru-split_0.1.2_all.ipk root@<router-ip>:/tmp/
 
 # Установить
-opkg install /tmp/smartdns-ru_0.1.2_all.ipk
+opkg install /tmp/smartdns-conf-ru-split_0.1.2_all.ipk
 ```
 
 ### Из репозитория (для разработчиков)
 
 ```sh
-./scripts/build-ipk.sh smartdns-ru
-# Результат: dist/smartdns-ru_0.1.2_all.ipk
+./scripts/build-ipk.sh smartdns-conf-ru-split
+# Результат: dist/smartdns-conf-ru-split_0.1.2_all.ipk
 ```
 
 ## Настройка Keenetic
@@ -108,7 +108,7 @@ nameserver /example.com/ru
 /opt/etc/init.d/S38smartdns start|stop|restart
 
 # Диагностика
-/opt/keenetic-entware-extras/smartdns-ru/scripts/status.sh
+/opt/keenetic-entware-extras/smartdns-conf-ru-split/scripts/status.sh
 ```
 
 [`scripts/status.sh`](scripts/status.sh) показывает: процесс, порты, конфиг, кэш, uptime, DNS-тесты.
@@ -116,7 +116,7 @@ nameserver /example.com/ru
 Пример вывода:
 
 ```
-smartdns-ru status:
+smartdns-conf-ru-split status:
   Service:
     Process:     running (pid 4921 via pidfile, RSS 5764kB) ✓
     Ports:       0.0.0.0:6053 ✓
@@ -148,7 +148,7 @@ smartdns-ru status:
 ## Структура
 
 ```
-smartdns-ru/
+smartdns-conf-ru-split/
 ├── config/smartdns.conf   # конфигурация SmartDNS
 ├── scripts/
 │   └── status.sh          # диагностика
@@ -161,4 +161,4 @@ smartdns-ru/
 
 ## Версионирование
 
-Текущая версия: **0.1.2** ([packaging/smartdns-ru/control](../packaging/smartdns-ru/control))
+Текущая версия: **0.1.2** ([packaging/smartdns-conf-ru-split/control](../packaging/smartdns-conf-ru-split/control))

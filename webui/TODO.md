@@ -43,7 +43,7 @@
 
 ## 🟡 Средние
 
-- [ ] **postinst: автоопределение listen IP** — `nginx.conf` line 49 содержит захардкоженный `listen 10.0.0.1:8080`. При установке на другой роутер — bind fail. Решение: в `postinst` определять IP роутера (через `ip route get 1 | awk '{print $7}'` или наследовать от стокового веб-сервера `ndnproxy` listen address) и подставлять `sed -i` в nginx.conf. Conffile — обновляется только при первой установке.
+- [x] **postinst: автоопределение listen IP** ✅ — `postinst` определяет IP через `ip route get 1 | awk src`, `sed -i` заменяет non-loopback listen в `nginx.conf`. Safe on upgrade (conffile preserved).
 - [ ] **Init script: AGENTS.md compliance** — `S80nginx-webui` использует `#!/bin/sh` (нужно `#!/opt/bin/sh`) и нет `set -eu`
 - [ ] **nginx: user root → privilege separation** — `config/nginx.conf:11` — io.popen() от root = RCE risk
 - [x] **inject.js: window.showInContent утечка** — заменено на addEventListener

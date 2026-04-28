@@ -1,15 +1,15 @@
-# Code Quality Targets — smartdns-ru
+# Code Quality Targets — smartdns-conf-ru-split
 
 Inherits all rules from root [`.project/target-code.md`](../../.project/target-code.md).
 
 ## Additional Constraints
 
 ### Shebang
-- `#!/opt/bin/sh` — all smartdns-ru scripts use POSIX sh only
+- `#!/opt/bin/sh` — all smartdns-conf-ru-split scripts use POSIX sh only
 
 ### No lib/common.sh
 - `lib/common.sh` uses `#!/opt/bin/bash` with bash-specific features (`local`, `&>/dev/null`)
-- Since smartdns-ru scripts use POSIX sh, they MUST NOT source `lib/common.sh`
+- Since smartdns-conf-ru-split scripts use POSIX sh, they MUST NOT source `lib/common.sh`
 - Define local `log()` / `log_error()` helpers directly in each script
 
 ### Available Entware Tools

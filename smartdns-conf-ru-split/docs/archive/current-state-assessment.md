@@ -1,16 +1,16 @@
-# smartdns-ru — Assessment текущего состояния
+# smartdns-conf-ru-split — Assessment текущего состояния
 
 **Version:** v1.1  
 **Created:** 2026-04-16  
 **Status:** ✅ Final  
-**Scope:** Полный анализ подпроекта smartdns-ru — скрипты, конфигурация, архитектура, gap analysis  
+**Scope:** Полный анализ подпроекта smartdns-conf-ru-split — скрипты, конфигурация, архитектура, gap analysis  
 **Источники:** Репозиторий + live-данные с роутера router-1 (ssh, 2026-04-16)
 
 ---
 
 ## 1. Executive Summary
 
-Подпроект `smartdns-ru` находится в **рабочем, но разрозненном** состоянии. SmartDNS работает на роутере router-1 (PID 820, 12MB RSS, v46.1-1), обрабатывает DNS на портах 6053/6153, но **конфигурация на роутере управляется вручную** — проект как единица никогда не деплоился (`/opt/keenetic-entware-extras/smartdns-ru/` отсутствует на роутере).
+Подпроект `smartdns-conf-ru-split` находится в **рабочем, но разрозненном** состоянии. SmartDNS работает на роутере router-1 (PID 820, 12MB RSS, v46.1-1), обрабатывает DNS на портах 6053/6153, но **конфигурация на роутере управляется вручную** — проект как единица никогда не деплоился (`/opt/keenetic-entware-extras/smartdns-conf-ru-split/` отсутствует на роутере).
 
 ### Ключевые находки с роутера
 
@@ -23,7 +23,7 @@
 | **Лог: "Server is already running"** | 6 записей подряд | 🔴 Подтверждает конфликт S38/S60 |
 | ndnproxy → SmartDNS | `dns_server = 10.0.0.1:6053 .` | ✅ Все DNS через SmartDNS |
 | Нет DNAT redirect | iptables PREROUTING — только NDM chains | ⚠️ DNS идёт через ndnproxy |
-| **Проект не деплоен** | `/opt/keenetic-entware-extras/smartdns-ru/` — **NOT FOUND** | 🔴 Конфиг/init управляются вручную |
+| **Проект не деплоен** | `/opt/keenetic-entware-extras/smartdns-conf-ru-split/` — **NOT FOUND** | 🔴 Конфиг/init управляются вручную |
 | `/opt/etc/unblock/` удалён | Чисто — legacy убран | ✅ |
 | geo-split деплоен | Скрипты от 15 апреля | ✅ |
 | Конфиг — гибрид | Комментарии "geo-bypass" (не "geo-split"), но функции как в репо | ⚠️ Ручная правка |
@@ -46,7 +46,7 @@
 | `smartdns.conf` | v3: header с документацией, "geo-split" | v2: "geo-bypass", bind :6153, max-reply-ip-num | v1: нет bind :6153, нет max-reply-ip-num | 🔴 Три разных версии |
 | `S60smartdns` | Внутри heredoc install.sh (v2: `|| true`, кавычки) | v1: `kill $PID` без кавычек | v1: идентичен live | ⚠️ Repo ahead |
 | `S38smartdns` | install.sh делает `chmod -x` | **Всё ещё +x** (`-rwxr-xr-x`) | `-rwxr-xr-x` | 🔴 Не отключён! |
-| Project dir | `smartdns-ru/` полный | **НЕ СУЩЕСТВУЕТ** | — | 🔴 Не деплоен |
+| Project dir | `smartdns-conf-ru-split/` полный | **НЕ СУЩЕСТВУЕТ** | — | 🔴 Не деплоен |
 | `/opt/etc/unblock/` | — | **Удалён** (чисто) | Существовал | ✅ Убран |
 
 ### 2.2 Конфиг: подробный diff (repo vs live)
@@ -297,8 +297,8 @@ Latency приемлема (мс), но DNAT убирает лишний хоп.
 | # | Пробел | Текущее | Целевое | Gap | Приоритет |
 |---|--------|---------|---------|-----|-----------|
 | G1 | **S38/S60 конфликт** | Оба +x, лог "already running" | S38 отключён надёжно (переименование или prerm hook) | 100% | 🔴 Critical |
-| G2 | **Проект не деплоен** | `/opt/.../smartdns-ru/` не существует | Полный деплой как пакет | 100% | 🔴 Critical |
-| G3 | **.ipk пакетирование** | Нет `packaging/smartdns-ru/` | control, conffiles, postinst, prerm, postrm | 100% | 🔴 Critical |
+| G2 | **Проект не деплоен** | `/opt/.../smartdns-conf-ru-split/` не существует | Полный деплой как пакет | 100% | 🔴 Critical |
+| G3 | **.ipk пакетирование** | Нет `packaging/smartdns-conf-ru-split/` | control, conffiles, postinst, prerm, postrm | 100% | 🔴 Critical |
 | G4 | **rootfs/ layout** | Init в heredoc | `rootfs/opt/etc/init.d/S60smartdns` отдельный файл | 100% | 🔴 Critical |
 | G5 | **Диагностика** | Нет | `scripts/status.sh` (процесс, порты, DNS тест, cache) | 100% | 🟡 High |
 | G6 | DNS DNAT redirect | Нет (ndnproxy форвардит) | iptables DNAT для bypassing ndnproxy | 100% | 🟡 Medium* |
@@ -312,7 +312,7 @@ Latency приемлема (мс), но DNAT убирает лишний хоп.
 
 ### 6.2 Сравнение с geo-split (эталон зрелости)
 
-| Аспект | geo-split | smartdns-ru | Gap |
+| Аспект | geo-split | smartdns-conf-ru-split | Gap |
 |--------|-----------|-------------|-----|
 | `packaging/<pkg>/` | ✅ control, conffiles, postinst, prerm, postrm | ❌ | 🔴 |
 | `rootfs/` | ✅ S99geo-split | ❌ | 🔴 |
@@ -334,7 +334,7 @@ Latency приемлема (мс), но DNAT убирает лишний хоп.
 |---|---------|---------|--------|----------|
 | TD1 | **S38/S60 конфликт на роутере** | Оба init +x, дублирование start | 1ч | S38 восстанавливается при opkg upgrade. Решение: prerm hook в packaging или rename S38→S38smartdns.disabled |
 | TD2 | **Init в heredoc install.sh** | Невозможно упаковать/тестировать S60 отдельно | 1ч | Вынести в `rootfs/opt/etc/init.d/S60smartdns` |
-| TD3 | **Нет packaging/smartdns-ru/** | Невозможно собрать .ipk | 2ч | Создать control, conffiles, postinst, prerm, postrm |
+| TD3 | **Нет packaging/smartdns-conf-ru-split/** | Невозможно собрать .ipk | 2ч | Создать control, conffiles, postinst, prerm, postrm |
 | TD4 | **Проект не деплоен** | Конфиг на роутере дрейфует (ручное управление) | 0.5ч | Деплой через .ipk или scp -R |
 
 ### 🟡 High
@@ -377,7 +377,7 @@ Latency приемлема (мс), но DNAT убирает лишний хоп.
 ### Немедленные действия (блокеры для .ipk)
 
 1. **Вынести S60smartdns** из heredoc в `rootfs/opt/etc/init.d/S60smartdns`
-2. **Создать `packaging/smartdns-ru/`** с prerm-хуком который `chmod -x S38smartdns` (или rename)
+2. **Создать `packaging/smartdns-conf-ru-split/`** с prerm-хуком который `chmod -x S38smartdns` (или rename)
 3. **Решить конфликт S38/S60** — в postinst/prerm надёжно отключать S38 (rename → `.disabled`, не chmod)
 4. **Синхронизировать конфиг** — деплой актуальной версии из репо на роутер
 
@@ -400,7 +400,7 @@ Latency приемлема (мс), но DNAT убирает лишний хоп.
 ## Appendix A: Методология
 
 ### Источники данных
-- **Репозиторий**: 7 файлов smartdns-ru/ + 3 файла .project/
+- **Репозиторий**: 7 файлов smartdns-conf-ru-split/ + 3 файла .project/
 - **Live-данные с роутера** (SSH, 2026-04-16): ps, netstat, cat configs, iptables, opkg info, dig tests, /tmp/ndnproxymain.conf, ls -la init scripts, /proc/PID/status
 - **Бэкап 2026-04-07**: 7 файлов (smartdns.conf, init scripts, unblock/)
 - **Бэкап 2026-04-10**: dns-config.txt (Keenetic DNS settings)

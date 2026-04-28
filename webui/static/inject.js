@@ -6,68 +6,17 @@
 (function() {
     'use strict';
 
-    // ── Sync position from localStorage for set order() patch ────────────────
-    // Must be sync, before Angular renders — set order() reads window.__ewPos
-    try {
-        var _p = localStorage.getItem('ew-card-pos');
-        if (_p) window.__ewPos = JSON.parse(_p);
-        else window.__ewPos = { c: 0, i: 999 };
-    } catch(_e) {
-        window.__ewPos = { c: 0, i: 999 };
-    }
-
-    // ── Card ID for RCI ndw4_settings integration ────────────────────────────
-    var ENTWARE_CARD_ID = 'ENTWARE_EXTRAS';
-
-    // ── XHR interceptor — re-inject ENTWARE_EXTRAS into ndw4_settings on save ─
-    // Angular uses XMLHttpRequest (not fetch) for RCI API.  When user saves
-    // via Cards Position dialog, Angular strips unknown card IDs.  This
-    // monkey-patch intercepts the outgoing request and re-inserts our card.
-    var _origXhrSend = XMLHttpRequest.prototype.send;
-    XMLHttpRequest.prototype.send = function(body) {
-        if (body && typeof body === 'string' && body.indexOf('ndw4_settings') !== -1) {
-            try {
-                var parsed = JSON.parse(body);
-                for (var i = 0; i < parsed.length; i++) {
-                    var cmd = parsed[i];
-                    if (cmd && cmd.system && cmd.system.environment && cmd.system.environment.set &&
-                        cmd.system.environment.set.name === 'ndw4_settings') {
-                        var ndw4 = JSON.parse(cmd.system.environment.set.value);
-                        var cfg = ndw4.dashboardCardsConfiguration;
-                        if (cfg && [].concat.apply([], cfg.desktop).indexOf(ENTWARE_CARD_ID) === -1) {
-                            var wp = window.__ewPos;
-                            var pos = wp ? { column: wp.c, position: wp.i } : getEntwareCardPosition();
-                            var col = pos ? pos.column : 0;
-                            var idx = pos ? pos.position : cfg.desktop[col].length;
-                            if (col >= cfg.desktop.length) col = 0;
-                            if (idx > cfg.desktop[col].length) idx = cfg.desktop[col].length;
-                            cfg.desktop[col].splice(idx, 0, ENTWARE_CARD_ID);
-                            if (cfg.mobile && cfg.mobile[0] &&
-                                cfg.mobile[0].indexOf(ENTWARE_CARD_ID) === -1) {
-                                cfg.mobile[0].push(ENTWARE_CARD_ID);
-                            }
-                            cfg.cardStates[ENTWARE_CARD_ID] = pos ? pos.visible !== false : true;
-                            cmd.system.environment.set.value = JSON.stringify(ndw4);
-                            body = JSON.stringify(parsed);
-                        }
-                    }
-                }
-            } catch(e) { /* don't break Angular */ }
-        }
-        return _origXhrSend.call(this, body);
-    };
-
     var CUSTOM_ITEMS = [
         { id: 'dashboard',          label: 'Dashboard',    url: '/custom/' },
         { id: 'geo-split',          label: 'Geo Split',    url: '/custom/#geo-split' },
-        { id: 'smartdns',           label: 'SmartDNS',     url: '/custom/#smartdns' },
+        { id: 'smartdns',           label: 'SmartDNS Config', url: '/custom/#smartdns' },
         { id: 'smartdns-redirect',  label: 'DNS Redirect', url: '/custom/#smartdns-redirect' },
         { id: 'webui',              label: 'WebUI',        url: '/custom/#webui' },
     ];
 
     var SERVICE_APIS = [
         { id: 'geo-split',         label: 'Geo-Split',    desc: 'Policy-based geographic split routing',     url: '/custom/#geo-split',         api: '/api/geo-split/status' },
-        { id: 'smartdns',          label: 'SmartDNS',     desc: 'DNS resolver with geographic routing rules', url: '/custom/#smartdns',           api: '/api/smartdns/status' },
+        { id: 'smartdns',          label: 'SmartDNS Config', desc: 'RU zone DNS splitting (.ru/.рф/.su)',        url: '/custom/#smartdns',           api: '/api/smartdns/status' },
         { id: 'smartdns-redirect', label: 'DNS Redirect', desc: 'Transparent DNS redirect for local networks', url: '/custom/#smartdns-redirect',  api: '/api/smartdns-redirect/status' },
         { id: 'webui',             label: 'WebUI',        desc: 'Entware Extras web dashboard',               url: '/custom/#webui',              api: '/api/webui/status' },
     ];
@@ -79,7 +28,6 @@
 
     var injected = false;
     var dashboardInjected = false;
-    var dashboardPending = false;  // guard against multiple setTimeout queues
     var activeItem = null;
     var insertingIframe = false;
     var dashboardTimer = null;
@@ -88,93 +36,6 @@
     var uptimeBaselines = {};  // { 'geo-split': { seconds: 12345, timestamp: Date.now() }, ... }
     var freshnessBaselines = {};  // { 'subnet_freshness': {seconds, timestamp}, 'domain_freshness': ... }
     var uptimeTickTimer = null;
-
-    // ── RCI card position tracking ───────────────────────────────────────────
-    // Card position is stored in RCI env variable "entware_extras_dashboard"
-    // as JSON: { column: 0, position: 2, visible: true }
-    var _entwareCardPos = null;
-    var _entwareCardPosRead = false;
-
-    /** @returns {{column:number, position:number, visible:boolean}|null} */
-    function getEntwareCardPosition() { return _entwareCardPos; }
-
-    /**
-     * Read card position from RCI env variables.
-     * Also triggers first-run registration in ndw4_settings if needed.
-     * @param {function} callback - called with position or null
-     */
-    function readEntwarePosition(callback) {
-        _entwareCardPosRead = true;
-        var xhr = new XMLHttpRequest();
-        xhr.open('POST', '/rci/', true);
-        xhr.setRequestHeader('Content-Type', 'application/json');
-        xhr.onload = function() {
-            try {
-                var resp = JSON.parse(xhr.responseText);
-                var env = resp[0] && resp[0].show && resp[0].show.environment;
-                if (env) {
-                    if (env.entware_extras_dashboard) {
-                        _entwareCardPos = JSON.parse(env.entware_extras_dashboard);
-                    }
-                    // First-run: register in ndw4_settings if not present
-                    if (env.ndw4_settings) {
-                        registerEntwareCard(env.ndw4_settings);
-                    }
-                }
-            } catch(e) {}
-            callback(_entwareCardPos);
-        };
-        xhr.onerror = function() { callback(null); };
-        xhr.send(JSON.stringify([{"show":{"environment":{}}}]));
-    }
-
-    /**
-     * Persist card position to RCI env variable + sync to localStorage
-     * for next page load (sync read by set order() nginx patch).
-     * @param {{column:number, position:number, visible:boolean}} pos
-     */
-    function saveEntwarePosition(pos) {
-        _entwareCardPos = pos;
-        // Sync to localStorage for set order() patch (sync read on page load)
-        try { localStorage.setItem('ew-card-pos', JSON.stringify({c: pos.column, i: pos.position})); } catch(e) {}
-        window.__ewPos = { c: pos.column, i: pos.position };
-        // Async to RCI for cross-device persistence
-        var xhr = new XMLHttpRequest();
-        xhr.open('POST', '/rci/', true);
-        xhr.setRequestHeader('Content-Type', 'application/json');
-        xhr.send(JSON.stringify([{"system":{"environment":{"set":{
-            "name": "entware_extras_dashboard",
-            "value": JSON.stringify(pos)
-        }}}}]));
-    }
-
-    /**
-     * First-run: add ENTWARE_EXTRAS to ndw4_settings if not yet present.
-     * @param {string} ndw4settings - raw JSON string from RCI env
-     */
-    function registerEntwareCard(ndw4settings) {
-        try {
-            var ndw4 = JSON.parse(ndw4settings);
-            var cfg = ndw4.dashboardCardsConfiguration;
-            if (!cfg || !cfg.desktop) return;
-            if ([].concat.apply([], cfg.desktop).indexOf(ENTWARE_CARD_ID) !== -1) return;
-            cfg.desktop[0].push(ENTWARE_CARD_ID);
-            if (cfg.mobile && cfg.mobile[0]) {
-                cfg.mobile[0].push(ENTWARE_CARD_ID);
-            }
-            cfg.cardStates[ENTWARE_CARD_ID] = true;
-            var xhr = new XMLHttpRequest();
-            xhr.open('POST', '/rci/', true);
-            xhr.setRequestHeader('Content-Type', 'application/json');
-            xhr.send(JSON.stringify([{"system":{"environment":{"set":{
-                "name": "ndw4_settings",
-                "value": JSON.stringify(ndw4)
-            }}}}]));
-            if (!_entwareCardPos) {
-                saveEntwarePosition({ column: 0, position: cfg.desktop[0].length - 1, visible: true });
-            }
-        } catch(e) {}
-    }
 
     // ── Reconciler: patch Angular-created rows by order index ─────────
     var EW_KEY = 'ENTWARE_EXTRAS';
@@ -210,11 +71,9 @@
                !!el.closest('.cdk-drag-placeholder');
     }
 
-    /** Find the panel root — Cards Position dialog overlay OR dashboard panel. */
+    /** Find the dashboard drag panel root. */
     function ewFindPanelRoot() {
-        return document.querySelector('.cdk-overlay-pane ndw-cards-position-dialog') ||
-               document.querySelector('ndw-drag-panel') ||
-               null;
+        return document.querySelector('ndw-drag-panel');
     }
 
     /** Get live Angular-created rows in a column, excluding CDK noise. */
@@ -291,13 +150,21 @@
             }
         }
 
+        // ── Card visibility: respect cardStates toggle from Cards Position dialog.
+        // Angular applies ndw-drag-panel__row--hidden when cardStates.ENTWARE_EXTRAS = false.
+        // We must honour this — unpatch our content and stop polling.
+        if (targetRow.classList.contains('ndw-drag-panel__row--hidden')) {
+            if (targetRow.hasAttribute(EW_ATTR)) {
+                ewUnpatchRow(targetRow);
+            }
+            ewStopDashboardPolling();
+            return;
+        }
+
         // Patch the target row
         var patched = ewPatchDashboardRow(targetRow);
 
         if (patched) {
-            // Track position for saveEntwarePosition
-            ewTrackPosition(entwareCol, entwareIdx);
-
             // Ensure dashboard polling is started
             if (!dashboardInjected && window.location.pathname === '/dashboard') {
                 dashboardInjected = true;
@@ -306,9 +173,6 @@
                     dashboardTimer = setInterval(fetchDashboardStatuses, DASH_POLL_INTERVAL);
                 }
                 startUptimeTicker();
-                if (!_entwareCardPosRead) {
-                    readEntwarePosition(function() {});
-                }
             }
         }
     }
@@ -337,14 +201,6 @@
         // Mark the row
         row.setAttribute(EW_ATTR, 'entware-extras');
         row.classList.add('ew-row');
-
-        // Apply visibility from saved position
-        var pos = getEntwareCardPosition();
-        if (pos && pos.visible === false) {
-            row.style.display = 'none';
-        } else {
-            row.style.display = '';
-        }
 
         // Already patched — nothing to do (idempotent)
         if (row.querySelector('.ew-dash-card') &&
@@ -414,287 +270,6 @@
             wrapper.appendChild(buildServiceRow(svc));
         });
         return wrapper;
-    }
-
-    /** Track position changes and persist to RCI. */
-    function ewTrackPosition(colIdx, posIdx) {
-        var p = getEntwareCardPosition() || { column: 0, position: 0, visible: true };
-        if (p.column !== colIdx || p.position !== posIdx) {
-            p.column = colIdx;
-            p.position = posIdx;
-            saveEntwarePosition(p);
-        }
-    }
-
-    // ── Cards Position dialog integration ────────────────────────────────────
-
-    /**
-     * Watch for Cards Position dialog opening via CDK overlay container.
-     * Injects ENTWARE EXTRAS row with show/hide toggle into the dialog.
-     */
-    var _cardsDialogObserverSet = false;
-    function setupCardsPositionDialog() {
-        if (_cardsDialogObserverSet) return;
-        _cardsDialogObserverSet = true;
-        var container = document.querySelector('.cdk-overlay-container') || document.body;
-        new MutationObserver(function(mutations) {
-            for (var mi = 0; mi < mutations.length; mi++) {
-                // Detect dialog CLOSE: overlay pane removed → clear flag
-                var removed = mutations[mi].removedNodes;
-                for (var ri = 0; ri < removed.length; ri++) {
-                    var rn = removed[ri];
-                    if (rn.nodeType === 1 && rn.classList &&
-                        rn.classList.contains('cdk-overlay-pane') &&
-                        rn.querySelector && rn.querySelector('.ndw-drag-panel__column-wrapper')) {
-                        window.__ewDialogOpen = false;
-                        _dialogRepatchObservers.forEach(function(o) { o.disconnect(); });
-                        _dialogRepatchObservers = [];
-                    }
-                }
-                // Detect dialog OPEN: new nodes → poll for column-wrapper
-                var added = mutations[mi].addedNodes;
-                for (var ni = 0; ni < added.length; ni++) {
-                    var node = added[ni];
-                    if (node.nodeType !== 1) continue;
-                    _tryInjectCardsDialog();
-                    return; // one fire per batch is enough
-                }
-            }
-        }).observe(container, { childList: true, subtree: true });
-    }
-
-    var _cardsDialogPending = false;
-    /**
-     * Poll overlay panes for Cards Position dialog and inject our row.
-     * Retries if injectIntoCardsDialog cannot reliably identify the ENTWARE row
-     * (e.g. __ewLastOrder still stale from dashboard's set order() call).
-     */
-    function _tryInjectCardsDialog() {
-        if (_cardsDialogPending) return;
-        _cardsDialogPending = true;
-        var attempts = 0;
-        var timer = setInterval(function() {
-            attempts++;
-            // Dialog has SEPARATE column-wrapper per column, possibly in same pane.
-            // Use querySelectorAll to find ALL wrappers across ALL panes.
-            var allWrappers = document.querySelectorAll('.cdk-overlay-pane .ndw-drag-panel__column-wrapper');
-            var anyPatched = false;
-            for (var i = 0; i < allWrappers.length; i++) {
-                var wrapper = allWrappers[i];
-                if (wrapper.querySelector('.entware-dialog-patched')) {
-                    anyPatched = true;
-                    continue;
-                }
-                var isLastAttempt = attempts > 15;
-                if (injectIntoCardsDialog(wrapper, isLastAttempt)) {
-                    anyPatched = true;
-                }
-            }
-            if (anyPatched) {
-                window.__ewDialogOpen = true;
-                clearInterval(timer);
-                _cardsDialogPending = false;
-                return;
-            }
-            if (attempts > 15) {
-                clearInterval(timer);
-                _cardsDialogPending = false;
-            }
-        }, 200);
-    }
-
-    /**
-     * Inject ENTWARE EXTRAS content into the Cards Position dialog.
-     * Uses __ewLastOrder key→DOM mapping to reliably identify the ENTWARE row
-     * by card ID name (not position or text matching).
-     *
-     * Returns false if the ENTWARE row cannot be reliably identified
-     * (e.g. __ewLastOrder is stale from dashboard) — caller should retry.
-     *
-     * @param {HTMLElement} dialogWrapper - .ndw-drag-panel__column-wrapper element
-     * @param {boolean} lastAttempt - if true, use DOM fallback instead of retrying
-     * @returns {boolean} true if patched (or already patched), false to retry
-     */
-    function injectIntoCardsDialog(dialogWrapper, lastAttempt) {
-        if (dialogWrapper.querySelector('.entware-dialog-patched')) return true;
-        var pos = getEntwareCardPosition();
-        var colIdx = pos ? pos.column : 0;
-        var isVisible = pos ? pos.visible !== false : true;
-        var cols = dialogWrapper.querySelectorAll('.ndw-drag-panel__column');
-        var col = cols[colIdx] || cols[0];
-        if (!col) return false;
-
-        // ── Primary: find ENTWARE row via __ewLastOrder key→DOM mapping ───────
-        // __ewLastOrder stores full order arrays with card ID strings, set by
-        // each NdwDragPanel's set order() nginx patch.  We search for
-        // ENTWARE_CARD_ID by KEY NAME — no position guessing.
-        // Validation: DOM row count must equal order column length to confirm
-        // __ewLastOrder belongs to THIS dialog panel (not stale dashboard data).
-        // If validation fails → return false → caller retries on next poll
-        // (dialog's set order() will have updated __ewLastOrder by then).
-        var targetRow = null;
-        var order = window.__ewLastOrder;
-        // Dialog uses SEPARATE column-wrapper per column (cols.length always 1).
-        // Search ALL order columns; validate by matching row count with cols[0].
-        if (order && cols[0]) {
-            var wrapperRows = cols[0].querySelectorAll(
-                ':scope > .cdk-drag.ndw-drag-panel__row:not(.cdk-drag-placeholder):not(.cdk-drag-preview)'
-            );
-            for (var oi = 0; oi < order.length; oi++) {
-                var ewIdx = order[oi].indexOf(ENTWARE_CARD_ID);
-                if (ewIdx < 0) continue;
-                // Validate: this wrapper's row count must match this order column
-                if (wrapperRows.length === order[oi].length && ewIdx < wrapperRows.length) {
-                    targetRow = wrapperRows[ewIdx];
-                    col = cols[0];
-                }
-                break;
-            }
-        }
-
-        // If __ewLastOrder lookup failed and this is NOT the last attempt,
-        // signal caller to retry — __ewLastOrder will update on next cycle.
-        if (!targetRow && !lastAttempt) {
-            return false;
-        }
-
-        // Strategy: duplicate header-text detection — ENTWARE row uses stub
-        // template that duplicates another card's name (e.g. "INTERNET")
-        if (!targetRow) {
-            var allDialogRows = [].slice.call(
-                dialogWrapper.querySelectorAll('.cdk-drag.ndw-drag-panel__row:not(.cdk-drag-placeholder):not(.cdk-drag-preview)')
-            );
-            var textCounts = {};
-            for (var dri = 0; dri < allDialogRows.length; dri++) {
-                var h = allDialogRows[dri].querySelector('.dashboard-card__header-text');
-                if (!h) continue;
-                var t = h.textContent.trim();
-                if (!textCounts[t]) textCounts[t] = [];
-                textCounts[t].push(allDialogRows[dri]);
-            }
-            for (var tk in textCounts) {
-                if (textCounts[tk].length > 1) {
-                    targetRow = textCounts[tk][textCounts[tk].length - 1];
-                    break;
-                }
-            }
-        }
-
-        if (!targetRow) return false;
-
-        // Mark row with data attribute for idempotent identity
-        targetRow.dataset.ewKey = ENTWARE_CARD_ID;
-        targetRow.classList.add('entware-dialog-patched', 'entware-dialog-row');
-        if (!isVisible) targetRow.classList.add('entware-dialog-row--off');
-
-        // ── Spike A: header + toggle are now Angular-native ──────────────
-        // dXe patch (#7) gives Angular the correct title "ENTWARE EXTRAS".
-        // Angular FormControl handles toggle state via cardStates.
-        // We only add a change listener for dashboard card real-time sync.
-        var toggle = targetRow.querySelector('input[role="switch"]');
-        if (toggle && !toggle._ewHandlerSet) {
-            toggle._ewHandlerSet = true;
-            toggle.addEventListener('change', function(e) {
-                var visible = e.target.checked;
-                targetRow.classList.toggle('entware-dialog-row--off', !visible);
-                var p = getEntwareCardPosition() || { column: 0, position: 999, visible: true };
-                p.visible = visible;
-                saveEntwarePosition(p);
-                var ewRow = document.querySelector('[' + EW_ATTR + '="entware-extras"]');
-                if (ewRow) ewRow.style.display = visible ? '' : 'none';
-            });
-        }
-
-        // ── MutationObserver: re-patch after Angular re-renders (CDK drag/drop) ──
-        _setupDialogRepatcher(dialogWrapper);
-
-        return true;
-    }
-
-    /** @type {MutationObserver[]} */
-    var _dialogRepatchObservers = [];
-
-    /**
-     * Set up MutationObserver on dialog wrapper to re-patch ENTWARE row
-     * when Angular re-renders it (CDK drag/drop, change detection).
-     * Uses array instead of singleton — each column-wrapper gets its own
-     * observer (dialog has 2 wrappers, one per column).
-     * Patches in microtask (no rAF) to minimize flicker.
-     * @param {HTMLElement} dialogWrapper
-     */
-    function _setupDialogRepatcher(dialogWrapper) {
-        var obs = new MutationObserver(function() {
-            var curPos = getEntwareCardPosition();
-            var curVisible = curPos ? curPos.visible !== false : true;
-            _repatchDialogEntwareRow(dialogWrapper, curVisible);
-        });
-        obs.observe(dialogWrapper, { childList: true, subtree: true });
-        _dialogRepatchObservers.push(obs);
-    }
-
-    /**
-     * Minimal re-patch: fix header-text and aria-label on the ENTWARE row
-     * if Angular reverted them to fallback template content.
-     * @param {HTMLElement} dialogWrapper
-     * @param {boolean} isVisible
-     */
-    function _repatchDialogEntwareRow(dialogWrapper, isVisible) {
-        // Strategy 1: find by data-ew-key (survives Angular inner re-render)
-        var row = dialogWrapper.querySelector('[data-ew-key="' + ENTWARE_CARD_ID + '"]');
-
-        // Strategy 2: if row lost data-ew-key (full Angular re-create),
-        // re-map via __ewLastOrder
-        // Strategy 2: re-map via __ewLastOrder (separate wrapper per column)
-        if (!row) {
-            var cols = dialogWrapper.querySelectorAll('.ndw-drag-panel__column');
-            var order = window.__ewLastOrder;
-            if (order && cols[0]) {
-                var wRows = cols[0].querySelectorAll(
-                    ':scope > .cdk-drag.ndw-drag-panel__row:not(.cdk-drag-placeholder):not(.cdk-drag-preview)'
-                );
-                for (var oi = 0; oi < order.length; oi++) {
-                    var ewIdx = order[oi].indexOf(ENTWARE_CARD_ID);
-                    if (ewIdx < 0) continue;
-                    if (wRows.length === order[oi].length && ewIdx < wRows.length) {
-                        row = wRows[ewIdx];
-                        row.dataset.ewKey = ENTWARE_CARD_ID;
-                    }
-                    break;
-                }
-            }
-        }
-
-        // Strategy 3: duplicate header-text detection (stub template duplicates another card)
-        if (!row) {
-            var allDialogRows2 = [].slice.call(
-                dialogWrapper.querySelectorAll('.cdk-drag.ndw-drag-panel__row:not(.cdk-drag-placeholder):not(.cdk-drag-preview)')
-            );
-            var textCounts2 = {};
-            for (var dri2 = 0; dri2 < allDialogRows2.length; dri2++) {
-                var h2 = allDialogRows2[dri2].querySelector('.dashboard-card__header-text');
-                if (!h2) continue;
-                var t2 = h2.textContent.trim();
-                if (!textCounts2[t2]) textCounts2[t2] = [];
-                textCounts2[t2].push(allDialogRows2[dri2]);
-            }
-            for (var tk2 in textCounts2) {
-                if (textCounts2[tk2].length > 1) {
-                    row = textCounts2[tk2][textCounts2[tk2].length - 1];
-                    row.dataset.ewKey = ENTWARE_CARD_ID;
-                    break;
-                }
-            }
-        }
-        if (!row) return;
-
-        // Spike A: header + aria-label are now Angular-native (dXe + Bli template).
-        // No patching needed — Angular renders "ENTWARE EXTRAS" and sets
-        // aria-label="ENTWARE_EXTRAS" from Po enum via Bli template binding.
-
-        // Ensure patched classes are present
-        if (!row.classList.contains('entware-dialog-patched')) {
-            row.classList.add('entware-dialog-patched', 'entware-dialog-row');
-        }
     }
 
     // ── Inject dashboard card CSS ────────────────────────────────────────────
@@ -1013,18 +588,6 @@
         return frag;
     }
 
-
-    // ── Dashboard card injection (reconciler-driven) ─────────────────────────
-
-    /**
-     * Trigger reconciler to patch Angular-created ENTWARE_EXTRAS row.
-     * All CDK row management removed — reconciler finds row by order index.
-     */
-    function injectDashboardCard() {
-        dashboardPending = false;
-        ewScheduleReconcile('injectDashboardCard');
-    }
-
     /**
      * Format seconds as stock Keenetic uptime: "N DAYS HH:MM:SS" or "HH:MM:SS"
      * @param {number} totalSeconds
@@ -1082,6 +645,24 @@
         }
         uptimeBaselines = {};
         freshnessBaselines = {};
+    }
+
+    /**
+     * Stop all dashboard polling (status, geo fast-poll, uptime ticker).
+     * Called when the card is hidden via Cards Position toggle.
+     * Resets dashboardInjected so polling restarts if card becomes visible again.
+     */
+    function ewStopDashboardPolling() {
+        dashboardInjected = false;
+        if (dashboardTimer) {
+            clearInterval(dashboardTimer);
+            dashboardTimer = null;
+        }
+        if (geoFastPollTimer) {
+            clearInterval(geoFastPollTimer);
+            geoFastPollTimer = null;
+        }
+        stopUptimeTicker();
     }
 
     /** Format detail key: snake_case → Title Case. */
@@ -1226,7 +807,14 @@
         if (data.running && hasFailField(data.details)) {
             state = 'caution';
         }
+        // Services with "enabled" field: running but disabled → "default mode" (yellow)
+        if (data.running && typeof data.enabled === 'boolean' && !data.enabled) {
+            state = 'caution';
+        }
         var text = data.running ? 'RUNNING' : 'STOPPED';
+        if (data.running && typeof data.enabled === 'boolean' && !data.enabled) {
+            text = 'DEFAULT MODE';
+        }
         if (data.running && data.details && data.details.uptime) {
             text += ' ' + formatUptimeStock(data.details.uptime);
         }
@@ -1248,8 +836,10 @@
         var detailsEl = document.getElementById('ew-details-' + svc.id);
         var s = parseServiceStatus(data);
 
-        // Update toggle
-        if (toggle) toggle.checked = data.running;
+        // Update toggle: services with "enabled" field use it; others use "running"
+        if (toggle) {
+            toggle.checked = (typeof data.enabled === 'boolean') ? data.enabled : data.running;
+        }
 
         // Update chip
         if (chip) {
@@ -1333,7 +923,6 @@
         injected = true;
         injectDashStyles();
         setupRestore();
-        setupCardsPositionDialog();
         ewScheduleReconcile('after-sidebar');
         return true;
     }
@@ -1373,7 +962,10 @@
         // Dashboard reconcile (coalesced via ewScheduled flag)
         ewScheduleReconcile('mutation');
     });
-    observer.observe(document.documentElement, { childList: true, subtree: true });
+    observer.observe(document.documentElement, {
+        childList: true, subtree: true,
+        attributes: true, attributeFilter: ['class']
+    });
 
     // ── Route change watcher ─────────────────────────────────────────
     var lastPath = window.location.pathname;
@@ -1390,7 +982,6 @@
         if (currentPath !== lastPath) {
             lastPath = currentPath;
             dashboardInjected = false;
-            dashboardPending = false;
             if (dashboardTimer) {
                 clearInterval(dashboardTimer);
                 dashboardTimer = null;

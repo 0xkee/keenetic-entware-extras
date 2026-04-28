@@ -7,9 +7,9 @@ set -eu
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/common.sh"
 
-PIDFILE="/opt/var/run/smartdns.pid"
-CONF="/opt/etc/smartdns/smartdns.conf"
-CACHE_FILE="/opt/var/cache/smartdns.cache"
+_CONFIG_DIR="${SCRIPT_DIR%/*}/config"
+# shellcheck source=/dev/null
+. "$_CONFIG_DIR/config.sh"
 
 STATUS_OK=0
 
@@ -78,8 +78,8 @@ show_ports() {
 show_config() {
   if [ -f "$CONF" ]; then
     local servers rules
-    servers="$(grep -c '^server' "$CONF" 2>/dev/null || echo 0)"
-    rules="$(grep -c '^nameserver' "$CONF" 2>/dev/null || echo 0)"
+    servers="$(grep -c '^server' "$CONF" 2>/dev/null || true)"
+    rules="$(grep -c '^nameserver' "$CONF" 2>/dev/null || true)"
     echo "    Config:      $CONF ($servers servers, $rules rules) ✓"
   else
     echo "    Config:      NOT found ✗"; STATUS_OK=1
@@ -100,7 +100,7 @@ show_cache() {
 # Show installed package version.
 show_version() {
   local ver
-  ver="$(installed_pkg_version smartdns-ru)"
+  ver="$(installed_pkg_version smartdns-conf-ru-split)"
   if [ -n "$ver" ]; then
     echo "    Version:     $ver"
   else
@@ -165,8 +165,8 @@ json_output() {
 
   # Config
   if [ -f "$CONF" ]; then
-    servers="$(grep -c '^server' "$CONF" 2>/dev/null || echo 0)"
-    rules="$(grep -c '^nameserver' "$CONF" 2>/dev/null || echo 0)"
+    servers="$(grep -c '^server' "$CONF" 2>/dev/null || true)"
+    rules="$(grep -c '^nameserver' "$CONF" 2>/dev/null || true)"
   fi
 
   # Cache (formatted via format_size_kb)
@@ -175,10 +175,18 @@ json_output() {
   fi
 
   # Version
-  version_val="$(installed_pkg_version smartdns-ru)"
+  version_val="$(installed_pkg_version smartdns-conf-ru-split)"
+
+  # Enabled state (split-DNS active?)
+  local enabled="false"
+  if [ -f "$STATE_FILE" ]; then
+    enabled="true"
+  fi
 
   printf '{'
   json_kv_bool "running" "$([ "$running" = "true" ] && echo 0 || echo 1)"
+  printf ','
+  json_kv_bool "enabled" "$([ "$enabled" = "true" ] && echo 0 || echo 1)"
   printf ','
   json_kv_bool "ok" "$STATUS_OK"
   printf ',"details":{'
@@ -213,8 +221,13 @@ if [ "${1:-}" = "--json" ]; then
   exit "$STATUS_OK"
 fi
 
-echo "smartdns-ru status:"
+echo "smartdns-conf-ru-split status:"
 echo "  Service:"
+if [ -f "$STATE_FILE" ]; then
+  echo "    Mode:        split-DNS (enabled) ✓"
+else
+  echo "    Mode:        default (simple forwarder)"
+fi
 show_process
 show_ports
 show_config

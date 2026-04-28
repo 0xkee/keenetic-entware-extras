@@ -3,7 +3,7 @@
 **Version:** v1.0  
 **Created:** 2026-04-16  
 **Status:** ✅ Final  
-**Scope:** Исследование DNS-блокировок в РФ, обзор DNS-серверов, SmartDNS best practices, рекомендации для smartdns-ru  
+**Scope:** Исследование DNS-блокировок в РФ, обзор DNS-серверов, SmartDNS best practices, рекомендации для smartdns-conf-ru-split  
 **Источники:** Yandex DNS (dns.yandex.ru), SmartDNS docs (pymumu.github.io/smartdns), OONI reports, ntc.party community data, профильные Habr-статьи, собственный опыт
 
 ---
@@ -277,7 +277,7 @@ server-tls 77.88.8.8:853 -group ru -exclude-default-group \
 
 ---
 
-## 4. Рекомендации для проекта smartdns-ru
+## 4. Рекомендации для проекта smartdns-conf-ru-split
 
 ### 4.1 Upstream серверы для ru-группы
 

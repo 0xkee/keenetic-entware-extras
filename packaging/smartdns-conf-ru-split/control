@@ -1,11 +1,12 @@
-Package: smartdns-ru
-Version: 0.1.4
+Package: smartdns-conf-ru-split
+Version: 0.3.1
 Architecture: all
 Maintainer: 0xkee
 Depends: keenetic-entware-extras, smartdns, ca-certificates
 Description: SmartDNS configuration for RU zone DNS splitting on Keenetic/Entware.
  Routes .ru/.рф/.su through Russian DNS (Yandex, AdGuard),
  everything else through international DNS (Google, Cloudflare).
+ Toggle: enable/disable split-DNS via WebUI (default-mode fallback).
  Uses stock S38smartdns init script.
 Section: net
 Priority: optional

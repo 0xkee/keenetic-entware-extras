@@ -68,38 +68,11 @@ function setStatus(id, state, text) {
 
 // ── Details rendering ────────────────────────────────────────────────────────
 
-/**
- * Format a snake_case key as Title Case label.
- * Strips _ok and _listening suffixes (state shown in value).
- * @param {string} key
- * @returns {string}
- */
-function formatKey(key) {
-    return key.replace(/_/g, " ").replace(/\b\w/g, function(c) { return c.toUpperCase(); });
-}
-
-/**
- * Format a boolean value: true → "Ok", false → "Fail".
- * @param {boolean} val
- * @returns {string}
- */
-function formatBool(val) {
-    return val ? "Ok" : "Fail";
-}
-
-// Updatable detail keys → POST action URL (only for geo-split)
-var GEO_UPDATE_ACTIONS = {
-    'geo_zone':       '/api/geo-split/update-subnets',
-    'domain_sources': '/api/geo-split/update-domains'
-};
-
 var geoFastPollTimer = null;
 var GEO_FAST_POLL = 1000;  // 1s when background update is running
 var uptimeBaselines = {};  // { 'geo-split': { seconds: 12345, timestamp: Date.now() } }
 var freshnessBaselines = {};  // { 'subnet_freshness': {seconds, timestamp}, ... }
 var uptimeTickTimer = null;
-/** Detail keys whose numeric values are seconds — formatted via formatUptimeStock() and live-ticked. */
-var TIMER_KEYS = { subnet_freshness: 1, domain_freshness: 1 };
 
 /**
  * Set structured details for a service card.
@@ -125,11 +98,11 @@ function setDetails(id, data) {
         var valColor = "var(--primary-text)";
         if (typeof val === "boolean") {
             if (!val) valColor = "var(--error, #f44336)";
-            val = formatBool(val);
+            val = EW.formatBool(val);
         }
         // Timer fields: numeric seconds → formatted string
-        if (typeof val === 'number' && TIMER_KEYS[key]) {
-            val = formatUptimeStock(val);
+        if (typeof val === 'number' && EW.TIMER_KEYS[key]) {
+            val = EW.formatUptimeStock(val);
         }
         var valHtml;
         var strVal = String(val);
@@ -144,18 +117,18 @@ function setDetails(id, data) {
         }
         // Add update button for updatable geo-split fields
         var updateBtn = '';
-        if (id === 'geo-split' && GEO_UPDATE_ACTIONS[key]) {
-            updateBtn = ' <button class="ew-update-btn" data-action="' + GEO_UPDATE_ACTIONS[key] + '" data-tooltip="Force Reload">' +
+        if (id === 'geo-split' && EW.GEO_UPDATE_ACTIONS[key]) {
+            updateBtn = ' <button class="ew-update-btn" data-action="' + EW.GEO_UPDATE_ACTIONS[key] + '" data-tooltip="Force Reload">' +
                 '<svg class="ndw-svg-icon svg-restart-dims" style="width:14px;height:14px;fill:currentColor"><use href="/assets/sprite/sprite.svg#restart"></use></svg></button>';
         }
         // Add data-freshness-key for live ticker on freshness fields
         var dataAttr = '';
-        if (TIMER_KEYS[key]) {
+        if (EW.TIMER_KEYS[key]) {
             dataAttr = ' data-freshness-key="' + key + '"';
         }
         html += '<div class="ew-service-row">' +
             '<div class="ew-service-info">' +
-            '<span style="color:var(--text-gray)">' + escapeHtml(formatKey(key)) + '</span>' +
+            '<span style="color:var(--text-gray)">' + escapeHtml(EW.formatKey(key)) + '</span>' +
             '</div>' +
             '<span' + dataAttr + '>' + valHtml + '</span>' + updateBtn +
             '</div>';
@@ -184,7 +157,7 @@ function switchTab(tabId) {
         }
     }
 
-    var serviceIds = ["geo-split", "smartdns", "smartdns-redirect", "webui"];
+    var serviceIds = EW.SERVICE_APIS.map(function(svc) { return svc.id; });
     for (var j = 0; j < serviceIds.length; j++) {
         var card = document.getElementById("card-" + serviceIds[j]);
         if (!card) continue;
@@ -236,7 +209,7 @@ function fetchStatus(url, id) {
                     var badgeState = hasFail ? "caution" : "ok";
                     var uptimeSecs = data.details && data.details.uptime;
                     if (uptimeSecs) {
-                        setStatus(id, badgeState, "Running " + formatUptimeStock(uptimeSecs));
+                        setStatus(id, badgeState, "Running " + EW.formatUptimeStock(uptimeSecs));
                     } else {
                         setStatus(id, badgeState, "Running");
                     }
@@ -252,7 +225,7 @@ function fetchStatus(url, id) {
                 }
                 // Update freshness baselines (timer keys)
                 if (data.details) {
-                    for (var tk in TIMER_KEYS) {
+                    for (var tk in EW.TIMER_KEYS) {
                         if (data.details[tk]) {
                             freshnessBaselines[tk] = { seconds: data.details[tk], timestamp: Date.now() };
                         }
@@ -293,25 +266,6 @@ function fetchStatus(url, id) {
 
 // ── Live uptime ticker ───────────────────────────────────────────────────────
 
-/**
- * Format seconds as stock Keenetic uptime: "N DAYS HH:MM:SS" or "HH:MM:SS"
- * @param {number} totalSeconds
- * @returns {string}
- */
-function formatUptimeStock(totalSeconds) {
-    var days = Math.floor(totalSeconds / 86400);
-    var hours = Math.floor((totalSeconds % 86400) / 3600);
-    var mins = Math.floor((totalSeconds % 3600) / 60);
-    var secs = Math.floor(totalSeconds % 60);
-    var hms = ('0' + hours).slice(-2) + ':' +
-              ('0' + mins).slice(-2) + ':' +
-              ('0' + secs).slice(-2);
-    if (days > 0) {
-        return days + (days === 1 ? ' DAY ' : ' DAYS ') + hms;
-    }
-    return hms;
-}
-
 /** Start 1s ticker that updates all running status badges with live uptime + freshness. */
 function startUptimeTicker() {
     if (uptimeTickTimer) return;
@@ -322,7 +276,7 @@ function startUptimeTicker() {
             var bl = uptimeBaselines[id];
             var elapsed = Math.floor((now - bl.timestamp) / 1000);
             var currentSeconds = bl.seconds + elapsed;
-            setStatus(id, bl.state || "ok", "Running " + formatUptimeStock(currentSeconds));
+            setStatus(id, bl.state || "ok", "Running " + EW.formatUptimeStock(currentSeconds));
         }
         // Update freshness counters
         for (var fkey in freshnessBaselines) {
@@ -330,7 +284,7 @@ function startUptimeTicker() {
             var fcurrent = fbl.seconds + Math.floor((now - fbl.timestamp) / 1000);
             var fEl = document.querySelector('[data-freshness-key="' + fkey + '"]');
             if (fEl) {
-                fEl.textContent = formatUptimeStock(fcurrent);
+                fEl.textContent = EW.formatUptimeStock(fcurrent);
             }
         }
     }, 1000);
@@ -378,10 +332,9 @@ function stopGeoFastPolling() {
  * Refresh all service cards.
  */
 function refreshAll() {
-    fetchStatus("/api/geo-split/status", "geo-split");
-    fetchStatus("/api/smartdns/status", "smartdns");
-    fetchStatus("/api/smartdns-redirect/status", "smartdns-redirect");
-    fetchStatus("/api/webui/status", "webui");
+    EW.SERVICE_APIS.forEach(function(svc) {
+        fetchStatus(svc.api, svc.id);
+    });
 }
 
 // ── Auto-refresh ─────────────────────────────────────────────────────────────

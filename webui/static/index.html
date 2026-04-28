@@ -100,33 +100,33 @@
           </div>
           <div id="details-smartdns"></div>
         </div>
-  
-        <!-- WebUI card -->
-        <div class="dashboard-card" id="card-webui">
-          <div class="dashboard-card__header">
-            <span class="text-card-heading">WEBUI</span>
-            <div class="dashboard-card__header-buttons">
-              <button class="ndw-button ndw-button--toggle ndw-button--toggle-enabled ndw-button--small ndw-button--no-text"
-                      onclick="fetchStatus('/api/webui/status', 'webui')" title="Refresh">
-                ⟳
-              </button>
-            </div>
+      </div>
+
+      <!-- WebUI card -->
+      <div class="dashboard-card" id="card-webui">
+        <div class="dashboard-card__header">
+          <span class="text-card-heading">WEBUI</span>
+          <div class="dashboard-card__header-buttons">
+            <button class="ndw-button ndw-button--toggle ndw-button--toggle-enabled ndw-button--small ndw-button--no-text"
+                    onclick="fetchStatus('/api/webui/status', 'webui')" title="Refresh">
+              ⟳
+            </button>
           </div>
-          <div class="dashboard-card__content" id="content-webui">
-            <div class="ew-service-row">
-              <div class="ew-service-info">
-                <div class="ndw-status ndw-status--chip" id="status-webui">
-                  <div class="status">
-                    <div class="status__text">Loading...</div>
-                  </div>
+        </div>
+        <div class="dashboard-card__content" id="content-webui">
+          <div class="ew-service-row">
+            <div class="ew-service-info">
+              <div class="ndw-status ndw-status--chip" id="status-webui">
+                <div class="status">
+                  <div class="status__text">Loading...</div>
                 </div>
               </div>
             </div>
-            <div id="details-webui"></div>
           </div>
+          <div id="details-webui"></div>
         </div>
-  
       </div>
+
       <!-- SmartDNS Redirect card -->
       <div class="dashboard-card" id="card-smartdns-redirect">
         <div class="dashboard-card__header">
@@ -155,6 +155,7 @@
     </div>
   </div>
 
+  <script src="shared.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

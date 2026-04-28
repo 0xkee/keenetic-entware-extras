@@ -623,7 +623,9 @@
                 if (!chip) continue;
                 // Tick both running and caution chips (both show uptime)
                 if (!chip.classList.contains('ew-chip--running') && !chip.classList.contains('ew-chip--caution')) continue;
-                chip.innerHTML = '<span class="ew-chip__dot"></span> RUNNING ' + formatUptimeStock(currentSeconds);
+                // Preserve chip prefix: "DEFAULT MODE" for caution (disabled service), "RUNNING" otherwise
+                var chipPrefix = chip.classList.contains('ew-chip--caution') && chip.textContent.indexOf('DEFAULT') !== -1 ? 'DEFAULT MODE' : 'RUNNING';
+                chip.innerHTML = '<span class="ew-chip__dot"></span> ' + chipPrefix + ' ' + formatUptimeStock(currentSeconds);
             }
             // Update freshness counters
             for (var fkey in freshnessBaselines) {
@@ -720,7 +722,7 @@
                     if (line.charAt(0) === '!') return line.substring(1);
                     return line;
                 }).join('<br>');
-            } else if (val.indexOf(' ') !== -1 && val.indexOf(':') !== -1) {
+            } else if (val.indexOf(' ') !== -1 && val.indexOf(':') !== -1 && !TIMER_KEYS[key]) {
                 // Space-separated multi-values (e.g. ports)
                 val = val.split(' ').join('<br>');
             }

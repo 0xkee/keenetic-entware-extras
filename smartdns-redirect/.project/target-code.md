@@ -11,7 +11,7 @@ Inherits all rules from root [`.project/target-code.md`](../../.project/target-c
 
 ### Sourcing lib/common.sh
 
-В отличие от smartdns-ru (который использует inline helpers), smartdns-redirect **source'ит** [`lib/common.sh`](../../lib/common.sh) для `log`, `log_error`, `require_cmd`, `file_mtime`.
+В отличие от smartdns-conf-ru-split (который использует inline helpers), smartdns-redirect **source'ит** [`lib/common.sh`](../../lib/common.sh) для `log`, `log_error`, `require_cmd`, `file_mtime`.
 
 Паттерн (как в [`geo-split/scripts/attach-rules.sh`](../../geo-split/scripts/attach-rules.sh)):
 

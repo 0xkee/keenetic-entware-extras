@@ -12,7 +12,7 @@ iptables REDIRECT на `PREROUTING` для интерфейса `br0` (LAN): в�
 - **Keenetic integrity** — ndnproxy не ломается, webui/diagnostics не страдают.
 
 **Совместимо с:**
-- [`smartdns-ru`](../smartdns-ru) (default upstream `:6053`)
+- [`smartdns-conf-ru-split`](../smartdns-conf-ru-split) (default upstream `:6053`)
 - AdGuard Home (`UPSTREAM_PORT=5353`)
 - Unbound (`UPSTREAM_PORT=5335`)
 - dnsmasq (любой порт)

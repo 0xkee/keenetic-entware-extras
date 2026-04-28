@@ -6,7 +6,7 @@ Inherits all rules from root [`.project/target-arch.md`](../../.project/target-a
 
 Universal DNS DNAT overlay для Keenetic/Entware: перехват LAN `:53` (br0) и редирект на локальный DNS-резолвер через `iptables -t nat -I PREROUTING 1 ... REDIRECT --to-ports <UPSTREAM_PORT>`.
 
-**Независимый пакет** — работает с любым local DNS (SmartDNS, AdGuard Home, Unbound, dnsmasq) через параметр `UPSTREAM_PORT` в конфиге. Не зависит от [`smartdns-ru/`](../../smartdns-ru/).
+**Независимый пакет** — работает с любым local DNS (SmartDNS, AdGuard Home, Unbound, dnsmasq) через параметр `UPSTREAM_PORT` в конфиге. Не зависит от [`smartdns-conf-ru-split/`](../../smartdns-conf-ru-split/).
 
 **Измеренный выигрыш** на router-1 (2026-04-17): latency `~130ms → <80ms` для LAN-клиентов (минус hop через ndnproxy).
 
@@ -18,13 +18,13 @@ Keenetic NDM активно использует `fwmark` для per-policy rout
 
 Решение: **stateless REDIRECT** на `PREROUTING` с индексом 1 (ДО `_NDM_DNS_REDIRECT`). Это исключает конфликт с NDM и перехватывает трафик раньше.
 
-### Независимость от smartdns-ru
+### Независимость от smartdns-conf-ru-split
 
-Пакет может работать с любым local DNS. По умолчанию `UPSTREAM_PORT=6053` (совпадает с [`smartdns-ru`](../../smartdns-ru/)), но пользователь может указать любой порт:
+Пакет может работать с любым local DNS. По умолчанию `UPSTREAM_PORT=6053` (совпадает с [`smartdns-conf-ru-split`](../../smartdns-conf-ru-split/)), но пользователь может указать любой порт:
 
 | Upstream | `UPSTREAM_PORT` | `WATCHDOG_SERVICE` |
 |----------|-----------------|---------------------|
-| SmartDNS (smartdns-ru) | `6053` | `S38smartdns` |
+| SmartDNS (smartdns-conf-ru-split) | `6053` | `S38smartdns` |
 | AdGuard Home | `5353` | `S80adguardhome` (пример) |
 | Unbound | `5335` | `S60unbound` (пример) |
 | dnsmasq | свободный | `S56dnsmasq` (пример) |
@@ -60,9 +60,9 @@ Keenetic filter profiles (`dns-proxy filter profile host <mac>`) требуют 
 
 ## Integration
 
-### With [`smartdns-ru/`](../../smartdns-ru/)
+### With [`smartdns-conf-ru-split/`](../../smartdns-conf-ru-split/)
 
-- Независимость: пакет **не зависит** от `smartdns-ru` в opkg metadata (`Depends: keenetic-entware-extras, iptables`).
+- Независимость: пакет **не зависит** от `smartdns-conf-ru-split` в opkg metadata (`Depends: keenetic-entware-extras, iptables`).
 - `UPSTREAM_PORT=6053` по умолчанию совпадает с тем, что слушает SmartDNS → out-of-the-box работает в связке.
 - `WATCHDOG_SERVICE="S38smartdns"` по умолчанию — при падении SmartDNS watchdog его поднимает.
 

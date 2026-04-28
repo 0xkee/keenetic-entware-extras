@@ -1,21 +1,19 @@
 #!/opt/bin/sh
 # postinst — runs after package files are unpacked.
 # Must be idempotent (called on both install and upgrade).
+# shellcheck disable=SC1091  # sourced files resolved at runtime on router
 set -eu
 
 INSTALL_DIR="/opt/keenetic-entware-extras/webui"
 LISTEN_CONF="$INSTALL_DIR/config/listen.conf"
 S80="/opt/etc/init.d/S80nginx-webui"
 
+. /opt/keenetic-entware-extras/lib/common.sh
+
 # 1. Auto-detect router LAN IP and generate listen.conf (included by nginx.conf).
 # Separate file avoids conffile conflicts on upgrade: nginx.conf stays untouched,
 # listen.conf is regenerated every install/upgrade.
-# Method: br0 is the standard LAN bridge on Keenetic routers.
-# Fallback: ip route get → source IP (may return VPN/WAN on tunneled setups).
-ROUTER_IP=$(ip -4 addr show br0 2>/dev/null | awk '/inet / {split($2, a, "/"); print a[1]; exit}')
-if [ -z "$ROUTER_IP" ]; then
-    ROUTER_IP=$(ip route get 1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}')
-fi
+ROUTER_IP="$(detect_router_ip)"
 if [ -n "$ROUTER_IP" ]; then
     echo "listen ${ROUTER_IP}:8080;" > "$LISTEN_CONF"
     echo "nginx listen IP set to $ROUTER_IP:8080"

@@ -172,14 +172,17 @@ json_output() {
     fi
   fi
 
-  # Port
-  local listening=""
+  # Ports: collect all listen addresses for our port (like smartdns status)
+  local listening="" ports_val=""
   if command -v netstat >/dev/null 2>&1; then
     listening="$(netstat -tlnp 2>/dev/null | grep ":${LISTEN_PORT} " | head -1)" || true
+    ports_val="$(netstat -tlnp 2>/dev/null | grep ":${LISTEN_PORT} " | awk '{print $4}' | sort -u | tr '\n' ' ' | sed 's/ $//')"
   elif command -v ss >/dev/null 2>&1; then
     listening="$(ss -tlnp 2>/dev/null | grep ":${LISTEN_PORT} " | head -1)" || true
+    ports_val="$(ss -tlnp 2>/dev/null | grep ":${LISTEN_PORT} " | awk '{print $4}' | sort -u | tr '\n' ' ' | sed 's/ $//')"
   fi
   [ -n "$listening" ] && port_ok="true"
+  [ -z "$ports_val" ] && ports_val="$LISTEN_PORT"
 
   # Version
   version_val="$(installed_pkg_version webui)"
@@ -209,7 +212,7 @@ json_output() {
   printf ','
   json_kv_bool "ok" "$STATUS_OK"
   printf ',"details":{'
-  json_kv "port" "$LISTEN_PORT"
+  json_kv "ports" "$ports_val"
   printf ','
   json_kv_bool "status" "$([ "$port_ok" = "true" ] && echo 0 || echo 1)"
   printf ','

@@ -5,6 +5,7 @@
 // this script reconciles Angular-created rows by order index from __ewLastOrder.
 (function() {
     'use strict';
+    try {
 
     var __cfg = window.__ewConfig || {};
 
@@ -16,17 +17,8 @@
         { id: 'webui',              label: 'WebUI',        url: '/custom/#webui' },
     ];
 
-    var SERVICE_APIS = [
-        { id: 'geo-split',         label: 'Geo-Split',    desc: 'Policy-based geographic split routing',     url: '/custom/#geo-split',         api: '/api/geo-split/status' },
-        { id: 'smartdns',          label: 'SmartDNS Config', desc: 'RU zone DNS splitting (.ru/.рф/.su)',        url: '/custom/#smartdns',           api: '/api/smartdns/status' },
-        { id: 'smartdns-redirect', label: 'DNS Redirect', desc: 'Transparent DNS redirect for local networks', url: '/custom/#smartdns-redirect',  api: '/api/smartdns-redirect/status' },
-        { id: 'webui',             label: 'WebUI',        desc: 'Entware Extras web dashboard',               url: '/custom/#webui',              api: '/api/webui/status' },
-    ];
-
     var DASH_POLL_INTERVAL = (__cfg.pollInterval > 0) ? __cfg.pollInterval : 30000;
     var DETAILS_SKIP_KEYS = { uptime: 1, version: 1, pid: 1, background: 1 };
-    /** Detail keys whose numeric values are seconds — formatted via formatUptimeStock() and live-ticked. */
-    var TIMER_KEYS = { subnet_freshness: 1, domain_freshness: 1 };
 
     var injected = false;
     var dashboardInjected = false;
@@ -35,6 +27,11 @@
     var dashboardTimer = null;
     var geoFastPollTimer = null;
     var GEO_FAST_POLL = 1000;  // 1s when background update is running
+    var ROUTE_POLL_INTERVAL = 2000;   // Route change detection interval (ms)
+    var DRAG_SETTLE_DELAY = 300;      // Delay after drag to let CDK animation finish (ms)
+    var RESTORE_OBSERVER_DELAY = 3000; // Delay before setting up content restore observer (ms)
+    var IFRAME_INSERT_GUARD = 100;    // Guard delay after iframe insertion (ms)
+    var TOGGLE_REFRESH_DELAY = 500;   // Delay before re-fetching after service toggle (ms)
     var uptimeBaselines = {};  // { 'geo-split': { seconds: 12345, timestamp: Date.now() }, ... }
     var freshnessBaselines = {};  // { 'subnet_freshness': {seconds, timestamp}, 'domain_freshness': ... }
     var uptimeTickTimer = null;
@@ -268,7 +265,7 @@
         var wrapper = document.createElement('div');
         wrapper.id = 'entware-dash-content';
         wrapper.className = 'ew-dash-content ew-loading';
-        SERVICE_APIS.forEach(function(svc) {
+        EW.SERVICE_APIS.forEach(function(svc) {
             wrapper.appendChild(buildServiceRow(svc));
         });
         return wrapper;
@@ -411,7 +408,7 @@
             sendCSSUrlToIframe(iframe);
         };
 
-        setTimeout(function() { insertingIframe = false; }, 100);
+        setTimeout(function() { insertingIframe = false; }, IFRAME_INSERT_GUARD);
     }
 
     // ── CSS URL resilience ───────────────────────────────────────────────────
@@ -472,7 +469,7 @@
                 });
                 obs.observe(content, { childList: true });
             }
-        }, 3000);
+        }, RESTORE_OBSERVER_DELAY);
     }
 
     // ── Dashboard summary card ───────────────────────────────────────────────
@@ -515,7 +512,7 @@
                         cb.disabled = false;
                         bar.style.opacity = '';
                         if (!data.ok) cb.checked = !cb.checked;
-                        setTimeout(fetchDashboardStatuses, 500);
+                        setTimeout(fetchDashboardStatuses, TOGGLE_REFRESH_DELAY);
                     })
                     .catch(function() {
                         cb.disabled = false;
@@ -590,25 +587,6 @@
         return frag;
     }
 
-    /**
-     * Format seconds as stock Keenetic uptime: "N DAYS HH:MM:SS" or "HH:MM:SS"
-     * @param {number} totalSeconds
-     * @returns {string}
-     */
-    function formatUptimeStock(totalSeconds) {
-        var days = Math.floor(totalSeconds / 86400);
-        var hours = Math.floor((totalSeconds % 86400) / 3600);
-        var mins = Math.floor((totalSeconds % 3600) / 60);
-        var secs = Math.floor(totalSeconds % 60);
-        var hms = ('0' + hours).slice(-2) + ':' +
-                  ('0' + mins).slice(-2) + ':' +
-                  ('0' + secs).slice(-2);
-        if (days > 0) {
-            return days + (days === 1 ? ' DAY ' : ' DAYS ') + hms;
-        }
-        return hms;
-    }
-
     /** Start 1s ticker that updates all running chips with live uptime + freshness. */
     function startUptimeTicker() {
         if (uptimeTickTimer) return;
@@ -627,7 +605,7 @@
                 if (!chip.classList.contains('ew-chip--running') && !chip.classList.contains('ew-chip--caution')) continue;
                 // Preserve chip prefix: "DEFAULT MODE" for caution (disabled service), "RUNNING" otherwise
                 var chipPrefix = chip.classList.contains('ew-chip--caution') && chip.textContent.indexOf('DEFAULT') !== -1 ? 'DEFAULT MODE' : 'RUNNING';
-                chip.innerHTML = '<span class="ew-chip__dot"></span> ' + chipPrefix + ' ' + formatUptimeStock(currentSeconds);
+                chip.innerHTML = '<span class="ew-chip__dot"></span> ' + chipPrefix + ' ' + EW.formatUptimeStock(currentSeconds);
             }
             // Update freshness counters
             for (var fkey in freshnessBaselines) {
@@ -635,7 +613,7 @@
                 var fcurrent = fbl.seconds + Math.floor((now - fbl.timestamp) / 1000);
                 var fEl = document.querySelector('[data-freshness-key="' + fkey + '"]');
                 if (fEl) {
-                    fEl.textContent = formatUptimeStock(fcurrent);
+                    fEl.textContent = EW.formatUptimeStock(fcurrent);
                 }
             }
         }, 1000);
@@ -669,22 +647,6 @@
         stopUptimeTicker();
     }
 
-    /** Format detail key: snake_case → Title Case. */
-    function formatKey(key) {
-        return key.replace(/_/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
-    }
-
-    /** Format boolean: true → "Ok", false → "Fail". */
-    function formatBool(val) {
-        return val ? 'Ok' : 'Fail';
-    }
-
-    // Updatable detail keys → POST action URL (only geo-split)
-    var GEO_UPDATE_ACTIONS = {
-        'geo_zone':       '/api/geo-split/update-subnets',
-        'domain_sources': '/api/geo-split/update-domains'
-    };
-
     /**
      * Render details grid HTML from data.details object.
      * Iterates keys in JSON order (matches status.sh text output).
@@ -708,13 +670,13 @@
             var valStyle = '';
             if (typeof val === 'boolean') {
                 if (!val && isRunning) valStyle = ' style="color:var(--error,#f44336)"';
-                val = formatBool(val);
+                val = EW.formatBool(val);
             } else if (typeof val === 'number' && val === 0 && isRunning) {
                 valStyle = ' style="color:var(--error,#f44336)"';
             }
             // Timer fields: numeric seconds → formatted string
-            if (typeof val === 'number' && TIMER_KEYS[key]) {
-                val = formatUptimeStock(val);
+            if (typeof val === 'number' && EW.TIMER_KEYS[key]) {
+                val = EW.formatUptimeStock(val);
             }
             val = String(val);
             // Multi-line values: split on \n, "!" prefix → red line
@@ -724,22 +686,22 @@
                     if (line.charAt(0) === '!') return line.substring(1);
                     return line;
                 }).join('<br>');
-            } else if (val.indexOf(' ') !== -1 && val.indexOf(':') !== -1 && !TIMER_KEYS[key]) {
+            } else if (val.indexOf(' ') !== -1 && val.indexOf(':') !== -1 && !EW.TIMER_KEYS[key]) {
                 // Space-separated multi-values (e.g. ports)
                 val = val.split(' ').join('<br>');
             }
             var updateBtn = '';
-            if (GEO_UPDATE_ACTIONS[key]) {
-                updateBtn = ' <button class="ew-update-btn" data-action="' + GEO_UPDATE_ACTIONS[key] + '" data-tooltip="Force Reload">' +
+            if (EW.GEO_UPDATE_ACTIONS[key]) {
+                updateBtn = ' <button class="ew-update-btn" data-action="' + EW.GEO_UPDATE_ACTIONS[key] + '" data-tooltip="Force Reload">' +
                     '<svg class="ndw-svg-icon svg-restart-dims" style="width:14px;height:14px;fill:currentColor"><use href="/assets/sprite/sprite.svg#restart"></use></svg></button>';
             }
             // Add data-freshness-key for live ticker on freshness fields
             var dataAttr = '';
-            if (TIMER_KEYS[key]) {
+            if (EW.TIMER_KEYS[key]) {
                 dataAttr = ' data-freshness-key="' + key + '"';
             }
             html += '<div class="ew-detail-item">' +
-                '<div class="ew-detail-label">' + formatKey(key) + '</div>' +
+                '<div class="ew-detail-label">' + EW.formatKey(key) + '</div>' +
                 '<div class="ew-detail-value"' + valStyle + dataAttr + '>' + val + updateBtn + '</div></div>';
         }
         return html;
@@ -775,8 +737,8 @@
      */
     function fetchSingleServiceStatus(serviceId) {
         var svc = null;
-        for (var i = 0; i < SERVICE_APIS.length; i++) {
-            if (SERVICE_APIS[i].id === serviceId) { svc = SERVICE_APIS[i]; break; }
+        for (var i = 0; i < EW.SERVICE_APIS.length; i++) {
+            if (EW.SERVICE_APIS[i].id === serviceId) { svc = EW.SERVICE_APIS[i]; break; }
         }
         if (!svc) return;
         fetch(svc.api, { cache: 'no-store' })
@@ -820,7 +782,7 @@
             text = 'DEFAULT MODE';
         }
         if (data.running && data.details && data.details.uptime) {
-            text += ' ' + formatUptimeStock(data.details.uptime);
+            text += ' ' + EW.formatUptimeStock(data.details.uptime);
         }
         return { state: state, text: text };
     }
@@ -865,7 +827,7 @@
 
         // Update freshness baselines (timer keys)
         if (data.details) {
-            for (var tk in TIMER_KEYS) {
+            for (var tk in EW.TIMER_KEYS) {
                 if (data.details[tk]) {
                     freshnessBaselines[tk] = { seconds: data.details[tk], timestamp: Date.now() };
                 }
@@ -887,7 +849,7 @@
      * Each service is fetched independently for maximum parallelism.
      */
     function fetchDashboardStatuses() {
-        SERVICE_APIS.forEach(function(svc) {
+        EW.SERVICE_APIS.forEach(function(svc) {
             fetch(svc.api, { cache: 'no-store' })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
@@ -940,29 +902,36 @@
 
     // ── Drag lifecycle — suppress reconcile during active drag ────────
     document.addEventListener('pointerdown', function(e) {
+        try {
         if (e.target.closest('.cdk-drag.ndw-drag-panel__row')) {
             ewInDrag = true;
         }
+        } catch (_) {}
     }, true);
 
     document.addEventListener('pointerup', function() {
+        try {
         if (ewInDrag) {
             ewInDrag = false;
             // Delay reconcile to let CDK drop animation finish (~250ms).
             // Immediate reconcile would find stale/transitional DOM.
             setTimeout(function() {
                 ewScheduleReconcile('pointerup-delayed');
-            }, 300);
+            }, DRAG_SETTLE_DELAY);
         }
+        } catch (_) {}
     }, true);
 
     document.addEventListener('drop', function() {
+        try {
         ewInDrag = false;
         ewScheduleReconcile('drop');
+        } catch (_) {}
     }, true);
 
     // ── Single MutationObserver — sidebar + reconcile ─────────────────
     var observer = new MutationObserver(function() {
+        try {
         // Sidebar re-injection (only when enabled)
         if (__cfg.injectSidebar) {
             if (!document.querySelector('.entware-menu-section')) {
@@ -974,6 +943,7 @@
         }
         // Dashboard reconcile (coalesced via ewScheduled flag)
         ewScheduleReconcile('mutation');
+        } catch (_) {}
     });
     observer.observe(document.documentElement, {
         childList: true, subtree: true,
@@ -1014,5 +984,10 @@
                 ewScheduleReconcile('route-change');
             }
         }
-    }, 2000);
+    }, ROUTE_POLL_INTERVAL);
+
+    } catch (e) {
+        // Error boundary: never break stock Keenetic UI
+        console.error('[Entware Extras] inject.js failed:', e);
+    }
 })();

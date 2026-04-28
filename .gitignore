@@ -29,6 +29,7 @@ geo-split-data/lists/geoip/*.zone
 
 # Stock firmware backup (11MB, local-only reference)
 docs/knowledge/keenetic-webui-research/stock-backup-*
+docs/knowledge/keenetic-webui-research/stock-styles/*
 
 # Built packages
 dist/*.ipk

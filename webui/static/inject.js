@@ -7,6 +7,10 @@
     'use strict';
     try {
 
+    // ═══════════════════════════════════════════════════════════════════
+    // §1. CONFIGURATION & STATE
+    // ═══════════════════════════════════════════════════════════════════
+
     var __cfg = window.__ewConfig || {};
 
     var CUSTOM_ITEMS = [
@@ -25,18 +29,42 @@
     var activeItem = null;
     var insertingIframe = false;
     var dashboardTimer = null;
-    var geoFastPollTimer = null;
     var GEO_FAST_POLL = 1000;  // 1s when background update is running
     var ROUTE_POLL_INTERVAL = 2000;   // Route change detection interval (ms)
     var DRAG_SETTLE_DELAY = 300;      // Delay after drag to let CDK animation finish (ms)
     var RESTORE_OBSERVER_DELAY = 3000; // Delay before setting up content restore observer (ms)
     var IFRAME_INSERT_GUARD = 100;    // Guard delay after iframe insertion (ms)
     var TOGGLE_REFRESH_DELAY = 500;   // Delay before re-fetching after service toggle (ms)
-    var uptimeBaselines = {};  // { 'geo-split': { seconds: 12345, timestamp: Date.now() }, ... }
-    var freshnessBaselines = {};  // { 'subnet_freshness': {seconds, timestamp}, 'domain_freshness': ... }
-    var uptimeTickTimer = null;
+    /** Ticker for live uptime/freshness counters — updates dashboard chip DOM. */
+    var ticker = EW.createTicker(function(id, currentSeconds) {
+        var row = document.getElementById('ew-dash-' + id);
+        if (!row) return;
+        var chip = row.querySelector('.ew-chip');
+        if (!chip) return;
+        if (!chip.classList.contains('ew-chip--running') && !chip.classList.contains('ew-chip--caution')) return;
+        var chipPrefix = chip.classList.contains('ew-chip--caution') && chip.textContent.indexOf('DEFAULT') !== -1 ? 'DEFAULT MODE' : 'RUNNING';
+        chip.innerHTML = '<span class="ew-chip__dot"></span> ' + chipPrefix + ' ' + EW.formatUptimeStock(currentSeconds);
+    });
 
-    // ── Reconciler: patch Angular-created rows by order index ─────────
+    /** Fast poller for geo-split during background updates. */
+    var geoPoller = EW.createPoller(
+        function() { fetchSingleServiceStatus('geo-split'); },
+        GEO_FAST_POLL,
+        function() {
+            var card = document.querySelector('.ew-dash-card');
+            if (card) {
+                card.querySelectorAll('.ew-update-btn--spinning').forEach(function(btn) {
+                    btn.classList.remove('ew-update-btn--spinning');
+                    btn.disabled = false;
+                });
+            }
+        }
+    );
+
+    // ═══════════════════════════════════════════════════════════════════
+    // §2. RECONCILER — Angular CDK row patching
+    //     Finds ENTWARE_EXTRAS in __ewLastOrder, patches empty CDK row.
+    // ═══════════════════════════════════════════════════════════════════
     var EW_KEY = 'ENTWARE_EXTRAS';
     var EW_ATTR = 'data-ew-key';
 
@@ -171,10 +199,15 @@
                 if (!dashboardTimer) {
                     dashboardTimer = setInterval(fetchDashboardStatuses, DASH_POLL_INTERVAL);
                 }
-                startUptimeTicker();
+                ticker.start();
             }
         }
     }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // §3. DASHBOARD CARD — DOM construction
+    //     Creates/removes Entware card inside Angular CDK rows.
+    // ═══════════════════════════════════════════════════════════════════
 
     /**
      * Remove our injected content from a CDK row.
@@ -246,7 +279,7 @@
             btn.disabled = true;
             fetch(actionUrl, { method: 'POST' })
                 .then(function(r) { return r.json(); })
-                .then(function() { startGeoFastPolling(); })
+                .then(function() { geoPoller.start(); })
                 .catch(function() {
                     btn.classList.remove('ew-update-btn--spinning');
                     btn.disabled = false;
@@ -291,7 +324,10 @@
         });
     }
 
-    // ── Build sidebar section ────────────────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════════
+    // §4. SIDEBAR — menu section + iframe navigation
+    //     Sidebar DOM, iframe loading, restore on stock menu click.
+    // ═══════════════════════════════════════════════════════════════════
 
     /**
      * Create the "Entware Extras" sidebar section DOM.
@@ -472,7 +508,10 @@
         }, RESTORE_OBSERVER_DELAY);
     }
 
-    // ── Dashboard summary card ───────────────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════════
+    // §5. STATUS & POLLING — data fetching, details, live updates
+    //     Service rows, status parsing, fast polling, fetch logic.
+    // ═══════════════════════════════════════════════════════════════════
 
     /**
      * Build a single service row for the dashboard card.
@@ -587,48 +626,6 @@
         return frag;
     }
 
-    /** Start 1s ticker that updates all running chips with live uptime + freshness. */
-    function startUptimeTicker() {
-        if (uptimeTickTimer) return;
-        uptimeTickTimer = setInterval(function() {
-            var now = Date.now();
-            // Update uptime chips
-            for (var id in uptimeBaselines) {
-                var bl = uptimeBaselines[id];
-                var elapsed = Math.floor((now - bl.timestamp) / 1000);
-                var currentSeconds = bl.seconds + elapsed;
-                var row = document.getElementById('ew-dash-' + id);
-                if (!row) continue;
-                var chip = row.querySelector('.ew-chip');
-                if (!chip) continue;
-                // Tick both running and caution chips (both show uptime)
-                if (!chip.classList.contains('ew-chip--running') && !chip.classList.contains('ew-chip--caution')) continue;
-                // Preserve chip prefix: "DEFAULT MODE" for caution (disabled service), "RUNNING" otherwise
-                var chipPrefix = chip.classList.contains('ew-chip--caution') && chip.textContent.indexOf('DEFAULT') !== -1 ? 'DEFAULT MODE' : 'RUNNING';
-                chip.innerHTML = '<span class="ew-chip__dot"></span> ' + chipPrefix + ' ' + EW.formatUptimeStock(currentSeconds);
-            }
-            // Update freshness counters
-            for (var fkey in freshnessBaselines) {
-                var fbl = freshnessBaselines[fkey];
-                var fcurrent = fbl.seconds + Math.floor((now - fbl.timestamp) / 1000);
-                var fEl = document.querySelector('[data-freshness-key="' + fkey + '"]');
-                if (fEl) {
-                    fEl.textContent = EW.formatUptimeStock(fcurrent);
-                }
-            }
-        }, 1000);
-    }
-
-    /** Stop uptime ticker and clear baselines. */
-    function stopUptimeTicker() {
-        if (uptimeTickTimer) {
-            clearInterval(uptimeTickTimer);
-            uptimeTickTimer = null;
-        }
-        uptimeBaselines = {};
-        freshnessBaselines = {};
-    }
-
     /**
      * Stop all dashboard polling (status, geo fast-poll, uptime ticker).
      * Called when the card is hidden via Cards Position toggle.
@@ -640,94 +637,44 @@
             clearInterval(dashboardTimer);
             dashboardTimer = null;
         }
-        if (geoFastPollTimer) {
-            clearInterval(geoFastPollTimer);
-            geoFastPollTimer = null;
-        }
-        stopUptimeTicker();
+        geoPoller.stop();
+        ticker.stop();
     }
 
     /**
      * Render details grid HTML from data.details object.
-     * Iterates keys in JSON order (matches status.sh text output).
-     * Booleans rendered via formatBool() with red color for negative states.
-     * Red highlighting suppressed when service is stopped (running=false).
+     * Uses EW.parseDetails() for parsing, wraps entries in grid cells.
      * @param {Object} details - data.details from status API
      * @param {boolean} isRunning - whether the service is running
      * @returns {string}
      */
     function renderDetailsGrid(details, isRunning) {
         if (!details) return '';
-        var keys = Object.keys(details);
+        var entries = EW.parseDetails(details, { skipKeys: DETAILS_SKIP_KEYS, isRunning: isRunning });
         var html = '';
-        for (var i = 0; i < keys.length; i++) {
-            var key = keys[i];
-            if (DETAILS_SKIP_KEYS[key]) continue;
-            // Keys starting with "_" → empty grid cell (spacer)
-            if (key.charAt(0) === '_') { html += '<div class="ew-detail-item"></div>'; continue; }
-            var val = details[key];
-            if (val === '' || val === null || val === undefined) continue;
-            var valStyle = '';
-            if (typeof val === 'boolean') {
-                if (!val && isRunning) valStyle = ' style="color:var(--error,#f44336)"';
-                val = EW.formatBool(val);
-            } else if (typeof val === 'number' && val === 0 && isRunning) {
-                valStyle = ' style="color:var(--error,#f44336)"';
-            }
-            // Timer fields: numeric seconds → formatted string
-            if (typeof val === 'number' && EW.TIMER_KEYS[key]) {
-                val = EW.formatUptimeStock(val);
-            }
-            val = String(val);
-            // Multi-line values: split on \n, "!" prefix → red line
-            if (val.indexOf('\n') !== -1) {
-                val = val.split('\n').map(function(line) {
-                    if (line.charAt(0) === '!' && isRunning) return '<span style="color:var(--error,#f44336)">' + line.substring(1) + '</span>';
-                    if (line.charAt(0) === '!') return line.substring(1);
-                    return line;
+        for (var i = 0; i < entries.length; i++) {
+            var e = entries[i];
+            if (e.isSpacer) { html += '<div class="ew-detail-item"></div>'; continue; }
+            var valStyle = e.isError ? ' style="color:var(--error,#f44336)"' : '';
+            var val = e.value;
+            if (e.lines) {
+                val = e.lines.map(function(l) {
+                    return l.isError ? '<span style="color:var(--error,#f44336)">' + l.text + '</span>' : l.text;
                 }).join('<br>');
-            } else if (val.indexOf(' ') !== -1 && val.indexOf(':') !== -1 && !EW.TIMER_KEYS[key]) {
-                // Space-separated multi-values (e.g. ports)
+            } else if (val.indexOf(' ') !== -1 && val.indexOf(':') !== -1 && !e.isTimer) {
                 val = val.split(' ').join('<br>');
             }
             var updateBtn = '';
-            if (EW.GEO_UPDATE_ACTIONS[key]) {
-                updateBtn = ' <button class="ew-update-btn" data-action="' + EW.GEO_UPDATE_ACTIONS[key] + '" data-tooltip="Force Reload">' +
+            if (e.updateAction) {
+                updateBtn = ' <button class="ew-update-btn" data-action="' + e.updateAction + '" data-tooltip="Force Reload">' +
                     '<svg class="ndw-svg-icon svg-restart-dims" style="width:14px;height:14px;fill:currentColor"><use href="/assets/sprite/sprite.svg#restart"></use></svg></button>';
             }
-            // Add data-freshness-key for live ticker on freshness fields
-            var dataAttr = '';
-            if (EW.TIMER_KEYS[key]) {
-                dataAttr = ' data-freshness-key="' + key + '"';
-            }
+            var dataAttr = e.freshnessKey ? ' data-freshness-key="' + e.freshnessKey + '"' : '';
             html += '<div class="ew-detail-item">' +
-                '<div class="ew-detail-label">' + EW.formatKey(key) + '</div>' +
+                '<div class="ew-detail-label">' + e.label + '</div>' +
                 '<div class="ew-detail-value"' + valStyle + dataAttr + '>' + val + updateBtn + '</div></div>';
         }
         return html;
-    }
-
-    /** Start fast polling for geo-split card (3s). */
-    function startGeoFastPolling() {
-        if (geoFastPollTimer) return;
-        geoFastPollTimer = setInterval(function() {
-            fetchSingleServiceStatus('geo-split');
-        }, GEO_FAST_POLL);
-    }
-
-    /** Stop fast polling, remove spinning indicators. */
-    function stopGeoFastPolling() {
-        if (!geoFastPollTimer) return;
-        clearInterval(geoFastPollTimer);
-        geoFastPollTimer = null;
-        // Remove spinning from all update buttons
-        var card = document.querySelector('.ew-dash-card');
-        if (card) {
-            card.querySelectorAll('.ew-update-btn--spinning').forEach(function(btn) {
-                btn.classList.remove('ew-update-btn--spinning');
-                btn.disabled = false;
-            });
-        }
     }
 
     /**
@@ -820,16 +767,16 @@
 
         // Update uptime baseline
         if (data.running && data.details && data.details.uptime) {
-            uptimeBaselines[svc.id] = { seconds: data.details.uptime, timestamp: Date.now() };
+            ticker.setUptimeBaseline(svc.id, data.details.uptime);
         } else {
-            delete uptimeBaselines[svc.id];
+            ticker.removeUptimeBaseline(svc.id);
         }
 
         // Update freshness baselines (timer keys)
         if (data.details) {
             for (var tk in EW.TIMER_KEYS) {
                 if (data.details[tk]) {
-                    freshnessBaselines[tk] = { seconds: data.details[tk], timestamp: Date.now() };
+                    ticker.setFreshnessBaseline(tk, data.details[tk]);
                 }
             }
         }
@@ -837,9 +784,9 @@
         // Check geo-split background for fast polling
         if (svc.id === 'geo-split' && data.details) {
             if (data.details.background === 'running') {
-                startGeoFastPolling();
-            } else if (geoFastPollTimer) {
-                stopGeoFastPolling();
+                geoPoller.start();
+            } else if (geoPoller.isRunning()) {
+                geoPoller.stop();
             }
         }
     }
@@ -875,7 +822,9 @@
         });
     }
 
-    // ── Sidebar injection ────────────────────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════════════
+    // §6. BOOTSTRAP — sidebar injection + tryInject
+    // ═══════════════════════════════════════════════════════════════════
 
     /**
      * Try injecting sidebar section into ndw-menu.
@@ -900,7 +849,10 @@
         return true;
     }
 
-    // ── Drag lifecycle — suppress reconcile during active drag ────────
+    // ═══════════════════════════════════════════════════════════════════
+    // §7. EVENT HANDLERS & INITIALIZATION
+    //     Drag lifecycle, MutationObserver, route change watcher.
+    // ═══════════════════════════════════════════════════════════════════
     document.addEventListener('pointerdown', function(e) {
         try {
         if (e.target.closest('.cdk-drag.ndw-drag-panel__row')) {
@@ -969,11 +921,8 @@
                 clearInterval(dashboardTimer);
                 dashboardTimer = null;
             }
-            if (geoFastPollTimer) {
-                clearInterval(geoFastPollTimer);
-                geoFastPollTimer = null;
-            }
-            stopUptimeTicker();
+            geoPoller.stop();
+            ticker.stop();
             // Clear our markers — let Angular manage its own rows
             var marked = document.querySelectorAll('[' + EW_ATTR + ']');
             for (var i = 0; i < marked.length; i++) {

@@ -68,16 +68,28 @@ function setStatus(id, state, text) {
 
 // ── Details rendering ────────────────────────────────────────────────────────
 
-var geoFastPollTimer = null;
 var GEO_FAST_POLL = 1000;  // 1s when background update is running
-var uptimeBaselines = {};  // { 'geo-split': { seconds: 12345, timestamp: Date.now() } }
-var freshnessBaselines = {};  // { 'subnet_freshness': {seconds, timestamp}, ... }
-var uptimeTickTimer = null;
+
+/** Ticker for live uptime/freshness counters — updates status badges. */
+var ticker = EW.createTicker(function(id, currentSeconds, extra) {
+    setStatus(id, (extra && extra.state) || "ok", "Running " + EW.formatUptimeStock(currentSeconds));
+});
+
+/** Fast poller for geo-split during background updates. */
+var geoPoller = EW.createPoller(
+    function() { fetchStatus("/api/geo-split/status", "geo-split"); },
+    GEO_FAST_POLL,
+    function() {
+        document.querySelectorAll('.ew-update-btn--spinning').forEach(function(btn) {
+            btn.classList.remove('ew-update-btn--spinning');
+            btn.disabled = false;
+        });
+    }
+);
 
 /**
  * Set structured details for a service card.
- * Iterates data.details keys in JSON order (matches status.sh text output).
- * Booleans rendered via formatBool() with contextual labels.
+ * Uses EW.parseDetails() for parsing, wraps entries in list rows.
  * @param {string} id - service id
  * @param {Object} data - full JSON response from API
  */
@@ -86,49 +98,29 @@ function setDetails(id, data) {
     if (!el) return;
     if (!data.details) { el.innerHTML = ""; return; }
 
-    var keys = Object.keys(data.details);
+    var entries = EW.parseDetails(data.details, { isRunning: data.running });
     var html = "";
-    for (var i = 0; i < keys.length; i++) {
-        var key = keys[i];
-        // Keys starting with "_" are grid spacers — skip in list view
-        if (key.charAt(0) === '_') continue;
-        if (key === 'uptime') continue;
-        var val = data.details[key];
-        if (val === "" || val === null || val === undefined) continue;
-        var valColor = "var(--primary-text)";
-        if (typeof val === "boolean") {
-            if (!val) valColor = "var(--error, #f44336)";
-            val = EW.formatBool(val);
-        }
-        // Timer fields: numeric seconds → formatted string
-        if (typeof val === 'number' && EW.TIMER_KEYS[key]) {
-            val = EW.formatUptimeStock(val);
-        }
+    for (var i = 0; i < entries.length; i++) {
+        var e = entries[i];
+        if (e.isSpacer) continue;
+        var valColor = e.isError ? "var(--error, #f44336)" : "var(--primary-text)";
         var valHtml;
-        var strVal = String(val);
-        // Multi-line values: split on \n, "!" prefix → red line
-        if (strVal.indexOf('\n') !== -1) {
-            valHtml = strVal.split('\n').map(function(line) {
-                if (line.charAt(0) === '!') return '<span style="color:var(--error,#f44336)">' + escapeHtml(line.substring(1)) + '</span>';
-                return escapeHtml(line);
+        if (e.lines) {
+            valHtml = e.lines.map(function(l) {
+                return l.isError ? '<span style="color:var(--error,#f44336)">' + escapeHtml(l.text) + '</span>' : escapeHtml(l.text);
             }).join('<br>');
         } else {
-            valHtml = '<span style="color:' + valColor + '">' + escapeHtml(strVal) + '</span>';
+            valHtml = '<span style="color:' + valColor + '">' + escapeHtml(e.value) + '</span>';
         }
-        // Add update button for updatable geo-split fields
         var updateBtn = '';
-        if (id === 'geo-split' && EW.GEO_UPDATE_ACTIONS[key]) {
-            updateBtn = ' <button class="ew-update-btn" data-action="' + EW.GEO_UPDATE_ACTIONS[key] + '" data-tooltip="Force Reload">' +
+        if (e.updateAction) {
+            updateBtn = ' <button class="ew-update-btn" data-action="' + e.updateAction + '" data-tooltip="Force Reload">' +
                 '<svg class="ndw-svg-icon svg-restart-dims" style="width:14px;height:14px;fill:currentColor"><use href="/assets/sprite/sprite.svg#restart"></use></svg></button>';
         }
-        // Add data-freshness-key for live ticker on freshness fields
-        var dataAttr = '';
-        if (EW.TIMER_KEYS[key]) {
-            dataAttr = ' data-freshness-key="' + key + '"';
-        }
+        var dataAttr = e.freshnessKey ? ' data-freshness-key="' + e.freshnessKey + '"' : '';
         html += '<div class="ew-service-row">' +
             '<div class="ew-service-info">' +
-            '<span style="color:var(--text-gray)">' + escapeHtml(EW.formatKey(key)) + '</span>' +
+            '<span style="color:var(--text-gray)">' + escapeHtml(e.label) + '</span>' +
             '</div>' +
             '<span' + dataAttr + '>' + valHtml + '</span>' + updateBtn +
             '</div>';
@@ -219,28 +211,28 @@ function fetchStatus(url, id) {
                 setDetails(id, data);
                 // Update uptime baseline (store badge state for ticker)
                 if (data.running && data.details && data.details.uptime) {
-                    uptimeBaselines[id] = { seconds: data.details.uptime, timestamp: Date.now(), state: badgeState };
+                    ticker.setUptimeBaseline(id, data.details.uptime, { state: badgeState });
                 } else {
-                    delete uptimeBaselines[id];
+                    ticker.removeUptimeBaseline(id);
                 }
                 // Update freshness baselines (timer keys)
                 if (data.details) {
                     for (var tk in EW.TIMER_KEYS) {
                         if (data.details[tk]) {
-                            freshnessBaselines[tk] = { seconds: data.details[tk], timestamp: Date.now() };
+                            ticker.setFreshnessBaseline(tk, data.details[tk]);
                         }
                     }
                 }
                 // Start ticker if not running and at least one service has baseline
-                if (!uptimeTickTimer && Object.keys(uptimeBaselines).length > 0) {
-                    startUptimeTicker();
+                if (ticker.hasBaselines()) {
+                    ticker.start();
                 }
                 // Check geo-split background for fast polling
                 if (id === 'geo-split' && data.details) {
                     if (data.details.background === 'running') {
-                        startGeoFastPolling();
-                    } else if (geoFastPollTimer) {
-                        stopGeoFastPolling();
+                        geoPoller.start();
+                    } else if (geoPoller.isRunning()) {
+                        geoPoller.stop();
                     }
                 }
             } else if (data.output !== undefined) {
@@ -262,68 +254,6 @@ function fetchStatus(url, id) {
                 setStatus(id, "error", "Error: " + err.message);
             }
         });
-}
-
-// ── Live uptime ticker ───────────────────────────────────────────────────────
-
-/** Start 1s ticker that updates all running status badges with live uptime + freshness. */
-function startUptimeTicker() {
-    if (uptimeTickTimer) return;
-    uptimeTickTimer = setInterval(function() {
-        var now = Date.now();
-        // Update uptime badges
-        for (var id in uptimeBaselines) {
-            var bl = uptimeBaselines[id];
-            var elapsed = Math.floor((now - bl.timestamp) / 1000);
-            var currentSeconds = bl.seconds + elapsed;
-            setStatus(id, bl.state || "ok", "Running " + EW.formatUptimeStock(currentSeconds));
-        }
-        // Update freshness counters
-        for (var fkey in freshnessBaselines) {
-            var fbl = freshnessBaselines[fkey];
-            var fcurrent = fbl.seconds + Math.floor((now - fbl.timestamp) / 1000);
-            var fEl = document.querySelector('[data-freshness-key="' + fkey + '"]');
-            if (fEl) {
-                fEl.textContent = EW.formatUptimeStock(fcurrent);
-            }
-        }
-    }, 1000);
-}
-
-/** Stop uptime ticker and clear baselines. */
-function stopUptimeTicker() {
-    if (uptimeTickTimer) {
-        clearInterval(uptimeTickTimer);
-        uptimeTickTimer = null;
-    }
-    uptimeBaselines = {};
-    freshnessBaselines = {};
-}
-
-// ── Geo-split fast polling during background updates ─────────────────────────
-
-/**
- * Start fast polling for geo-split only (1s).
- * Activated when background update is running.
- */
-function startGeoFastPolling() {
-    if (geoFastPollTimer) return;
-    geoFastPollTimer = setInterval(function() {
-        fetchStatus("/api/geo-split/status", "geo-split");
-    }, GEO_FAST_POLL);
-}
-
-/**
- * Stop fast polling and remove spinning indicators.
- */
-function stopGeoFastPolling() {
-    if (!geoFastPollTimer) return;
-    clearInterval(geoFastPollTimer);
-    geoFastPollTimer = null;
-    document.querySelectorAll('.ew-update-btn--spinning').forEach(function(btn) {
-        btn.classList.remove('ew-update-btn--spinning');
-        btn.disabled = false;
-    });
 }
 
 // ── Refresh all ──────────────────────────────────────────────────────────────
@@ -392,11 +322,73 @@ window.addEventListener("message", function(e) {
     }
 });
 
+// ── UI generation ────────────────────────────────────────────────────────────
+
+/**
+ * Generate tabs and service cards from EW.SERVICE_APIS.
+ * Called once at DOMContentLoaded — single source of truth for UI structure.
+ */
+function buildUI() {
+    var tabList = document.getElementById("tab-list");
+    var cardsContainer = document.getElementById("service-cards");
+    if (!tabList || !cardsContainer) return;
+
+    // "All Services" tab
+    var allTab = document.createElement("div");
+    allTab.tabIndex = 0;
+    allTab.className = "ndw-tabs__tab ndw-tabs__tab--active";
+    allTab.id = "tab-all";
+    allTab.setAttribute("role", "tab");
+    allTab.setAttribute("aria-selected", "true");
+    allTab.innerHTML = '<div class="ndw-tabs__tab__label">All Services</div>';
+    allTab.addEventListener("click", function() { switchTab("all"); });
+    tabList.appendChild(allTab);
+
+    // Service tabs + cards from registry
+    EW.SERVICE_APIS.forEach(function(svc, idx) {
+        // Tab
+        var tab = document.createElement("div");
+        tab.tabIndex = 0;
+        tab.className = "ndw-tabs__tab";
+        if (idx === EW.SERVICE_APIS.length - 1) tab.className += " ndw-tabs__tab--last";
+        tab.id = "tab-" + svc.id;
+        tab.setAttribute("role", "tab");
+        tab.setAttribute("aria-selected", "false");
+        tab.innerHTML = '<div class="ndw-tabs__tab__label">' + escapeHtml(svc.label) + '</div>';
+        tab.addEventListener("click", function() { switchTab(svc.id); });
+        tabList.appendChild(tab);
+
+        // Card
+        var card = document.createElement("div");
+        card.className = "dashboard-card";
+        card.id = "card-" + svc.id;
+        card.innerHTML =
+            '<div class="dashboard-card__header">' +
+                '<span class="text-card-heading">' + escapeHtml(svc.label.toUpperCase()) + '</span>' +
+                '<div class="dashboard-card__header-buttons">' +
+                    '<button class="ndw-button ndw-button--toggle ndw-button--toggle-enabled ndw-button--small ndw-button--no-text" title="Refresh" data-refresh="' + svc.id + '">\u27F3</button>' +
+                '</div>' +
+            '</div>' +
+            '<div class="dashboard-card__content" id="content-' + svc.id + '">' +
+                '<div class="ew-service-row"><div class="ew-service-info">' +
+                    '<div class="ndw-status ndw-status--chip" id="status-' + svc.id + '">' +
+                        '<div class="status"><div class="status__text">Loading...</div></div>' +
+                    '</div>' +
+                '</div></div>' +
+                '<div id="details-' + svc.id + '"></div>' +
+            '</div>';
+        cardsContainer.appendChild(card);
+    });
+}
+
 // ── Init ─────────────────────────────────────────────────────────────────────
 
 document.addEventListener("DOMContentLoaded", function() {
     // Discover correct stock CSS URL (styles-*.css may change after firmware update)
     discoverStockCSS();
+
+    // Generate tabs + cards from SERVICE_APIS (single source of truth)
+    buildUI();
 
     refreshAll();
     startAutoRefresh();
@@ -406,8 +398,21 @@ document.addEventListener("DOMContentLoaded", function() {
         startAutoRefresh();
     });
 
-    // Event delegation for update buttons
+    // Event delegation for refresh + update buttons
     document.addEventListener('click', function(e) {
+        // Per-card refresh button
+        var refreshBtn = e.target.closest('[data-refresh]');
+        if (refreshBtn) {
+            var svcId = refreshBtn.getAttribute('data-refresh');
+            for (var i = 0; i < EW.SERVICE_APIS.length; i++) {
+                if (EW.SERVICE_APIS[i].id === svcId) {
+                    fetchStatus(EW.SERVICE_APIS[i].api, svcId);
+                    break;
+                }
+            }
+            return;
+        }
+        // Geo-split force-reload button
         var btn = e.target.closest('.ew-update-btn');
         if (!btn || btn.disabled) return;
         var actionUrl = btn.getAttribute('data-action');
@@ -416,7 +421,7 @@ document.addEventListener("DOMContentLoaded", function() {
         fetch(actionUrl, { method: 'POST' })
             .then(function(r) { return r.json(); })
             .then(function() {
-                startGeoFastPolling();
+                geoPoller.start();
             })
             .catch(function() {
                 btn.classList.remove('ew-update-btn--spinning');

@@ -131,9 +131,12 @@ main() {
     _fill_domain_table
     return 0  # resolved + table filled
   fi
-  # Cache fresh — still fill the table (may be empty after restart)
+  # Cache fresh — only refill if table is empty (e.g. after restart)
+  if is_table_filled "$DOMAIN_ROUTE_TABLE"; then
+    log "Domain cache fresh, table $DOMAIN_ROUTE_TABLE already filled — skipping"
+    return 0
+  fi
   _fill_domain_table
-  log "Domain cache is fresh, skipping update"
   return 0
 }
 

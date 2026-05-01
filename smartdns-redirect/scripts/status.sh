@@ -228,6 +228,19 @@ json_output() {
   json_kv_num "uptime" "${uptime_seconds_val:-0}"
   printf ','
   json_kv "version" "${version_val:-unknown}"
+  printf '},'
+
+  # Checks section: "ok"|"warn"|"fail" per field
+  printf '"checks":{'
+  json_check "running" "$(if [ "$running" = "true" ]; then printf ok; else printf fail; fi)"
+  printf ','
+  json_check "upstream" "$(if [ "$upstream_ok" = "true" ]; then printf ok; else printf fail; fi)"
+  printf ','
+  json_check "ndm_hook" "$(if [ "$ndm_hook_ok_val" = 0 ]; then printf ok; else printf fail; fi)"
+  printf ','
+  json_check "init" "$(if [ "$init_ok_val" = 0 ]; then printf ok; else printf fail; fi)"
+  printf ','
+  json_check "rules" "$(if [ "$rules_ok_val" = 0 ]; then printf ok; else printf fail; fi)"
   printf '}}\n'
 }
 

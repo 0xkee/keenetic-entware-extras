@@ -20,7 +20,7 @@ show_mode() {
   # Geo zone from SUBNET_URL
   local _geo_zone=""
   if [ -n "${SUBNET_URL:-}" ]; then
-    _geo_zone=$(basename "$SUBNET_URL" .zone | tr 'a-z' 'A-Z')
+    _geo_zone=$(basename "$SUBNET_URL" .zone | tr '[:lower:]' '[:upper:]')
   fi
   echo "    Geo zone:    ${_geo_zone:-unknown}"
 
@@ -267,7 +267,7 @@ json_output() {
 
   # Geo zone from SUBNET_URL (e.g. ".../ru.zone" → "RU")
   if [ -n "${SUBNET_URL:-}" ]; then
-    geo_zone=$(basename "$SUBNET_URL" .zone | tr 'a-z' 'A-Z')
+    geo_zone=$(basename "$SUBNET_URL" .zone | tr '[:lower:]' '[:upper:]')
   fi
 
   # Version
@@ -392,6 +392,45 @@ ${_pfx}${_iface}: #${SUBNET_ROUTE_TABLE} subnets"
   json_kv_num "uptime" "${uptime_seconds_val:-0}"
   printf ','
   json_kv "version" "${version_val:-unknown}"
+  printf '},'
+
+  # Checks section: "ok"|"warn"|"fail" per field
+  printf '"checks":{'
+  json_check "cron" "$(if [ "$cron_ok_val" = 0 ]; then printf ok; else printf fail; fi)"
+  printf ','
+  json_check "ndm_hook" "$(if [ "$ndm_hook_ok_val" = 0 ]; then printf ok; else printf fail; fi)"
+  printf ','
+  json_check "subnets" "$(if [ "$subnet_routes" -gt 0 ]; then printf ok; else printf fail; fi)"
+  printf ','
+  json_check "domains" "$(if [ "$domain_routes" -gt 0 ]; then printf ok; else printf fail; fi)"
+  printf ','
+  # subnet_freshness: file missing=fail, stale=warn, fresh=ok
+  if [ ! -f "$SUBNET_LIST_FILE" ]; then
+    _sf_status="fail"
+  elif is_cache_fresh "$SUBNET_LIST_FILE" "$MAX_CACHE_AGE"; then
+    _sf_status="ok"
+  else
+    _sf_status="warn"
+  fi
+  json_check "subnet_freshness" "$_sf_status"
+  printf ','
+  # domain_freshness: file missing=fail, stale=warn, fresh=ok
+  if [ -z "${DOMAINS_CACHE_FILE:-}" ] || [ ! -f "$DOMAINS_CACHE_FILE" ]; then
+    _df_status="fail"
+  elif is_cache_fresh "$DOMAINS_CACHE_FILE" "${DOMAINS_UPDATE_INTERVAL:-3600}"; then
+    _df_status="ok"
+  else
+    _df_status="warn"
+  fi
+  json_check "domain_freshness" "$_df_status"
+  printf ','
+  # rules: any "!" prefix in rules_detail means failure
+  if echo "$rules_detail" | grep -q '^!'; then
+    _r_status="fail"
+  else
+    _r_status="ok"
+  fi
+  json_check "rules" "$_r_status"
   printf '}}\n'
 }
 

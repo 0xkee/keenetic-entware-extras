@@ -22,7 +22,7 @@ INJECT_SIDEBAR=0
 DASH_POLL_INTERVAL=30000
 
 # PID file
-PIDFILE="/opt/var/run/nginx-webui.pid"
+PIDFILE="/tmp/nginx-webui.pid"
 
 # Log tag
 LOG_TAG="kee-webui"

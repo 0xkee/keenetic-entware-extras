@@ -69,15 +69,15 @@ is_table_filled() {
 
 # Flush and fill a routing table from a list file via ip-full -batch.
 # Falls back to BusyBox ip loop if ip-full is not available.
-# Touches stamp file /opt/var/run/geo-split-table-${table}.filled on success
+# Touches stamp file ${TABLE_STAMP_PREFIX}${table}.filled on success
 # (mtime used by status.sh for table freshness display).
 # Args: $1 - table number, $2 - list file path, $3 - target device
 #        $4 - mode: "cidr" (default, each line is a CIDR) or "host" (first field + /32)
-# Requires: IP_FULL from config.sh; list_strip, list_count from lib/lists.sh; log from lib/common.sh
-# Optional: BATCH_FILE (base path, default /opt/tmp/geo-routes); .${table}.batch is appended
+# Requires: IP_FULL, TABLE_STAMP_PREFIX from config.sh; list_strip, list_count from lib/lists.sh; log from lib/common.sh
+# Optional: BATCH_FILE (base path, default /tmp/geo-routes); .${table}.batch is appended
 fill_routes_batch() {
   local table="$1" file="$2" dev="$3" mode="${4:-cidr}"
-  local batch_file="${BATCH_FILE:-/opt/tmp/geo-routes}.${table}.batch"
+  local batch_file="${BATCH_FILE:-/tmp/geo-routes}.${table}.batch"
 
   if [ ! -f "$file" ]; then
     log "fill_routes_batch: no file $file, skipping table $table"
@@ -110,7 +110,7 @@ fill_routes_batch() {
     elapsed=$((t_end - t_start))
 
     rm -f "$batch_file"
-    touch "/opt/var/run/geo-split-table-${table}.filled"
+    touch "${TABLE_STAMP_PREFIX}${table}.filled"
     log "Routes loaded via ip-full -batch (table $table: $count entries in ${elapsed}s)"
   else
     log "ip-full not found, using BusyBox loop (slow)"
@@ -129,7 +129,7 @@ fill_routes_batch() {
     t_end=$(date +%s)
     elapsed=$((t_end - t_start))
 
-    touch "/opt/var/run/geo-split-table-${table}.filled"
+    touch "${TABLE_STAMP_PREFIX}${table}.filled"
     log "Routes loaded via BusyBox loop (table $table: $count entries in ${elapsed}s)"
   fi
 }

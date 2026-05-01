@@ -206,7 +206,7 @@ show_routes() {
   echo "  Routes:"
   local stamp age_label
 
-  stamp="/opt/var/run/geo-split-table-${DOMAIN_ROUTE_TABLE}.filled"
+  stamp="${TABLE_STAMP_PREFIX}${DOMAIN_ROUTE_TABLE}.filled"
   if [ "$_ck_domain_routes" -gt 0 ]; then
     if [ -f "$stamp" ]; then
       age_label="$(format_age "$(( $(date +%s) - $(file_mtime "$stamp") ))")"
@@ -218,7 +218,7 @@ show_routes() {
     echo "    Domains:     0 routes in table $DOMAIN_ROUTE_TABLE ✗"
   fi
 
-  stamp="/opt/var/run/geo-split-table-${SUBNET_ROUTE_TABLE}.filled"
+  stamp="${TABLE_STAMP_PREFIX}${SUBNET_ROUTE_TABLE}.filled"
   if [ "$_ck_subnet_routes" -gt 0 ]; then
     if [ -f "$stamp" ]; then
       age_label="$(format_age "$(( $(date +%s) - $(file_mtime "$stamp") ))")"

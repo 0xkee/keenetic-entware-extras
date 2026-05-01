@@ -104,7 +104,7 @@ Browser → nginx :8080
 | `LISTEN_PORT` | `8080` | Порт nginx-webui |
 | `INJECT_SIDEBAR` | `0` | Инъекция sidebar-меню в stock UI (0/1) |
 | `DASH_POLL_INTERVAL` | `30000` | Интервал опроса API на дашборде (мс) |
-| `PIDFILE` | `/opt/var/run/nginx-webui.pid` | PID-файл |
+| `PIDFILE` | `/tmp/nginx-webui.pid` | PID-файл (tmpfs — сбрасывается при ребуте) |
 | `LOG_TAG` | `"kee-webui"` | Тег для logger |
 
 > **Listen-адрес:** генерируется в `config/listen.conf` при `postinst` (через `detect_router_ip`) + `listen 127.0.0.1:8080`. Нет хардкода IP.
@@ -222,7 +222,7 @@ nginx-webui status:
 
 | Файл | Описание |
 |------|----------|
-| `/opt/var/log/nginx-webui-error.log` | Ошибки nginx + Lua (level: error) |
+| `/tmp/nginx-webui-error.log` | Ошибки nginx + Lua (level: error, tmpfs — теряются при ребуте) |
 | Access log | Отключен (экономия I/O; диагностика через `status.sh`) |
 | `/opt/etc/logrotate.d/nginx-webui` | Logrotate конфиг (daily, rotate 3, compress, USR1 reopen) |
 

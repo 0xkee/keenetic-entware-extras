@@ -30,5 +30,8 @@ PIDFILE="/opt/var/run/smartdns.pid"
 # SmartDNS persistent cache
 CACHE_FILE="/opt/var/cache/smartdns.cache"
 
+# SmartDNS listen port (main, used for DNS tests)
+SMARTDNS_PORT=6053
+
 # Log tag
 LOG_TAG="smartdns-conf-ru-split"

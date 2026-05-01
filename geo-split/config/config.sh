@@ -31,7 +31,7 @@ IP_FULL="/opt/sbin/ip"
 
 # Base path for temporary batch files (ip-full -batch route loading)
 # fill_routes_batch() appends .${table}.batch to avoid race conditions
-BATCH_FILE="/opt/tmp/geo-routes"
+BATCH_FILE="/tmp/geo-routes"
 
 # URL to fetch GEO IP subnets (plain CIDR list)
 # RU ip4 example
@@ -89,4 +89,8 @@ DOMAINS_CACHE_FILE="$_LISTS_DIR/domains-resolved.txt"
 DOMAINS_UPDATE_INTERVAL=3600
 
 # PID file (written on start, removed on stop; mtime used for uptime)
-PIDFILE="/opt/var/run/geo-split.pid"
+PIDFILE="/tmp/geo-split.pid"
+
+# Stamp file prefix for route table fill tracking (tmpfs — cleared on reboot)
+# Actual files: ${TABLE_STAMP_PREFIX}${TABLE_ID}.filled
+TABLE_STAMP_PREFIX="/tmp/geo-split-table-"

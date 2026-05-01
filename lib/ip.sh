@@ -33,12 +33,22 @@ detect_dns_port() {
   echo "0 system resolver"
 }
 
-# Detect outgoing interface from default route.
-# Excludes LAN bridges (br*) — those are NOT outgoing interfaces.
-# NOTE: "ip route show default" on iproute2-entware returns ALL main table routes,
-# not just default. Using "ip route | grep ^default" for exact match.
+# Detect outgoing ISP interface from default routes across all routing tables.
+# Excludes VPN interfaces (nwg*, ovpn*, l2tp*, etc.) and LAN bridges (br*).
+# Works when "Политика по умолчанию" = VPN (ISP only in Keenetic policy tables 4096+).
+# Fallback: if no non-VPN route found, uses main table default (original behavior).
 detect_out_iface() {
-  ip route | grep "^default" | sed -n 's/.*dev \([^ ]*\).*/\1/p' | grep -v '^br' | head -1
+  local iface
+  iface=$(ip route show table all | grep "^default" | \
+    grep -v "dev nwg\|dev ovpn\|dev l2tp\|dev pptp\|dev sstp\|dev ipsec\|dev tun\|dev tap" | \
+    sed -n 's/.*dev \([^ ]*\).*/\1/p' | grep -v '^br' | head -1)
+
+  # Fallback: main table default route (ISP down, unusual interface names)
+  if [ -z "$iface" ]; then
+    iface=$(ip route | grep "^default" | sed -n 's/.*dev \([^ ]*\).*/\1/p' | grep -v '^br' | head -1)
+  fi
+
+  echo "$iface"
 }
 
 # Resolve target outgoing interface from ROUTE_OUT config.

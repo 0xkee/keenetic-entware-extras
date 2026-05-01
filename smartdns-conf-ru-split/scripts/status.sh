@@ -1,67 +1,86 @@
 #!/opt/bin/sh
 # Show SmartDNS diagnostic status.
-# shellcheck disable=SC3043  # 'local' supported by ash/busybox sh
 # shellcheck disable=SC1091
+# shellcheck disable=SC3043  # 'local' supported by ash/busybox sh
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/common.sh"
+. "$SCRIPT_DIR/../../lib/status.sh"
 
 _CONFIG_DIR="${SCRIPT_DIR%/*}/config"
 # shellcheck source=/dev/null
 . "$_CONFIG_DIR/config.sh"
 
 STATUS_OK=0
+_st_pid=""
+_st_pid_source=""
+_st_running="false"
+_st_mem_kb="0"
+_st_uptime_seconds=0
+_st_port_ok="false"
+_st_port_addrs=""
+_st_version=""
 
-# Get SmartDNS PID (from pidfile or pidof fallback).
-# Sets global __PID (empty if not running).
-detect_pid() {
-  __PID=""
-  if [ -f "$PIDFILE" ]; then
-    __PID="$(cat "$PIDFILE" 2>/dev/null)" || true
-    if [ -n "$__PID" ] && kill -0 "$__PID" 2>/dev/null; then
-      return 0
-    fi
-    __PID=""
+# --- Check functions (specific to this service) ---
+
+# Check config file: servers count and rules count.
+# Sets: _ck_config_ok ("true"|"false"), _ck_servers, _ck_rules
+check_config() {
+  _ck_config_ok="false"
+  _ck_servers=0
+  _ck_rules=0
+  if [ -f "$CONF" ]; then
+    _ck_config_ok="true"
+    _ck_servers="$(grep -c '^server' "$CONF" 2>/dev/null || true)"
+    _ck_rules="$(grep -c '^nameserver' "$CONF" 2>/dev/null || true)"
   fi
-  __PID="$(pidof smartdns 2>/dev/null || true)"
 }
 
-# Show process info: running/stopped, PID, RSS.
-show_process() {
-  if [ -n "$__PID" ] && kill -0 "$__PID" 2>/dev/null; then
-    local mem src="pidfile"
-    mem="$(awk '/VmRSS/{print $2}' "/proc/$__PID/status" 2>/dev/null || echo "?")"
-    [ ! -f "$PIDFILE" ] && src="pidof"
-    echo "    Process:     running (pid $__PID via $src, RSS ${mem}kB) ✓"
+# Check persistent cache file.
+# Sets: _ck_cache_size (du -h output), _ck_cache_kb (numeric kB for JSON)
+check_cache() {
+  _ck_cache_size=""
+  _ck_cache_kb=""
+  if [ -f "$CACHE_FILE" ]; then
+    _ck_cache_size="$(du -h "$CACHE_FILE" 2>/dev/null | awk '{print $1}')"
+    _ck_cache_kb="$(du -k "$CACHE_FILE" 2>/dev/null | awk '{print $1}')"
+  fi
+}
+
+# Check split-DNS enabled state.
+# Sets: _ck_enabled ("true"|"false")
+check_enabled() {
+  _ck_enabled="false"
+  if [ -f "$STATE_FILE" ]; then
+    _ck_enabled="true"
+  fi
+}
+
+# --- Show functions (text, use lib + local checks) ---
+
+show_config() {
+  if [ "$_ck_config_ok" = "true" ]; then
+    echo "    Config:      $CONF ($_ck_servers servers, $_ck_rules rules) ✓"
   else
-    echo "    Process:     NOT running ✗"; STATUS_OK=1
+    echo "    Config:      NOT found ✗"; STATUS_OK=1
   fi
 }
 
-# Show service uptime from pidfile mtime.
-show_uptime() {
-  if [ -f "$PIDFILE" ]; then
-    local mtime age age_label
-    mtime="$(file_mtime "$PIDFILE")"
-    if [ -n "$mtime" ] && [ "$mtime" -gt 0 ] 2>/dev/null; then
-      age=$(( $(date +%s) - mtime ))
-      age_label="$(format_age "$age")"
-      echo "    Uptime:      $age_label ✓"
-    else
-      echo "    Uptime:      unknown"
-    fi
+show_cache() {
+  if [ -n "$_ck_cache_size" ]; then
+    echo "    Cache:       $_ck_cache_size ($CACHE_FILE) ✓"
   else
-    echo "    Uptime:      — (not running)"
+    echo "    Cache:       not found"
   fi
 }
 
-# Show listening ports for SmartDNS process.
+# Show listening ports (custom text for "none listening" case).
 show_ports() {
-  local lines first=1
-  lines="$(netstat -tlnup 2>/dev/null | grep smartdns | awk '{print $4}' | sort -u)"
-  if [ -n "$lines" ]; then
-    echo "$lines" | while IFS= read -r addr; do
+  if [ "$_st_port_ok" = "true" ]; then
+    local first=1
+    echo "$_st_port_addrs" | tr ' ' '\n' | while IFS= read -r addr; do
+      [ -z "$addr" ] && continue
       if [ "$first" = 1 ]; then
         echo "    Ports:       $addr ✓"
         first=0
@@ -71,40 +90,6 @@ show_ports() {
     done
   else
     echo "    Ports:       none listening ✗"; STATUS_OK=1
-  fi
-}
-
-# Show config file info: server count, routing rules.
-show_config() {
-  if [ -f "$CONF" ]; then
-    local servers rules
-    servers="$(grep -c '^server' "$CONF" 2>/dev/null || true)"
-    rules="$(grep -c '^nameserver' "$CONF" 2>/dev/null || true)"
-    echo "    Config:      $CONF ($servers servers, $rules rules) ✓"
-  else
-    echo "    Config:      NOT found ✗"; STATUS_OK=1
-  fi
-}
-
-# Show persistent cache status and size.
-show_cache() {
-  if [ -f "$CACHE_FILE" ]; then
-    local size
-    size="$(du -h "$CACHE_FILE" 2>/dev/null | awk '{print $1}')"
-    echo "    Cache:       $size ($CACHE_FILE) ✓"
-  else
-    echo "    Cache:       not found"
-  fi
-}
-
-# Show installed package version.
-show_version() {
-  local ver
-  ver="$(installed_pkg_version smartdns-conf-ru-split)"
-  if [ -n "$ver" ]; then
-    echo "    Version:     $ver"
-  else
-    echo "    Version:     — (not installed via opkg)"
   fi
 }
 
@@ -138,93 +123,62 @@ show_dns_tests() {
   dns_test "github.com"  "default-group"
 }
 
-# Collect structured data and emit JSON for webui.
+# --- JSON output ---
+
 json_output() {
-  local running="false" pid_val="" mem_val="" version_val=""
-  local ports_val="" servers=0 rules=0 cache_size=""
-
-  # Process
-  if [ -n "$__PID" ] && kill -0 "$__PID" 2>/dev/null; then
-    running="true"
-    pid_val="$__PID"
-    mem_val="$(awk '/VmRSS/{print $2}' "/proc/$__PID/status" 2>/dev/null || echo "0")"
-  fi
-
-  # Uptime
-  if [ -f "$PIDFILE" ]; then
-    local mtime age
-    mtime="$(file_mtime "$PIDFILE")"
-    if [ -n "$mtime" ] && [ "$mtime" -gt 0 ] 2>/dev/null; then
-      age=$(( $(date +%s) - mtime ))
-      uptime_seconds_val="$age"
-    fi
-  fi
-
-  # Ports
-  ports_val="$(netstat -tlnup 2>/dev/null | grep smartdns | awk '{print $4}' | sort -u | tr '\n' ' ' | sed 's/ $//')"
-
-  # Config
-  if [ -f "$CONF" ]; then
-    servers="$(grep -c '^server' "$CONF" 2>/dev/null || true)"
-    rules="$(grep -c '^nameserver' "$CONF" 2>/dev/null || true)"
-  fi
-
-  # Cache (formatted via format_size_kb)
-  if [ -f "$CACHE_FILE" ]; then
-    cache_size="$(format_size_kb "$(du -k "$CACHE_FILE" 2>/dev/null | awk '{print $1}')")"
-  fi
-
-  # Version
-  version_val="$(installed_pkg_version smartdns-conf-ru-split)"
-
-  # Enabled state (split-DNS active?)
-  local enabled="false"
-  if [ -f "$STATE_FILE" ]; then
-    enabled="true"
-  fi
-
   printf '{'
-  json_kv_bool "running" "$([ "$running" = "true" ] && echo 0 || echo 1)"
+  json_kv_bool "running" "$([ "$_st_running" = "true" ] && echo 0 || echo 1)"
   printf ','
-  json_kv_bool "enabled" "$([ "$enabled" = "true" ] && echo 0 || echo 1)"
+  json_kv_bool "enabled" "$([ "$_ck_enabled" = "true" ] && echo 0 || echo 1)"
   printf ','
   json_kv_bool "ok" "$STATUS_OK"
   printf ',"details":{'
-  json_kv "ports" "$ports_val"
+  json_kv "ports" "$_st_port_addrs"
   printf ','
-  json_kv_num "servers" "$servers"
+  json_kv_num "servers" "$_ck_servers"
   printf ','
-  json_kv_num "rules" "$rules"
+  json_kv_num "rules" "$_ck_rules"
   printf ','
-  json_kv "cache" "${cache_size:-none}"
+  json_kv "cache" "$([ -n "$_ck_cache_kb" ] && format_size_kb "$_ck_cache_kb" || printf 'none')"
   printf ','
-  json_kv "memory" "$([ -n "$mem_val" ] && [ "$mem_val" != "0" ] && format_size_kb "$mem_val" || printf '')"
+  json_kv "memory" "$([ "$_st_running" = "true" ] && [ "$_st_mem_kb" != "0" ] && format_size_kb "$_st_mem_kb" || printf '')"
   printf ','
-  json_kv "pid" "$pid_val"
+  json_kv "pid" "$_st_pid"
   printf ','
-  json_kv_num "uptime" "${uptime_seconds_val:-0}"
+  json_kv_num "uptime" "$_st_uptime_seconds"
   printf ','
-  json_kv "version" "${version_val:-unknown}"
+  json_kv "version" "${_st_version:-unknown}"
   printf '},'
 
   # Checks section: "ok"|"warn"|"fail" per field
   printf '"checks":{'
-  json_check "process" "$(if [ "$running" = "true" ]; then printf ok; else printf fail; fi)"
+  json_check "process" "$(if [ "$_st_running" = "true" ]; then printf ok; else printf fail; fi)"
   printf ','
-  json_check "ports" "$(if [ -n "$ports_val" ]; then printf ok; else printf fail; fi)"
+  json_check "ports" "$(if [ "$_st_port_ok" = "true" ]; then printf ok; else printf fail; fi)"
   printf ','
-  json_check "config" "$(if [ -f "$CONF" ]; then printf ok; else printf fail; fi)"
+  json_check "config" "$(if [ "$_ck_config_ok" = "true" ]; then printf ok; else printf fail; fi)"
   printf '}}\n'
 }
 
 # --- main ---
-detect_pid
+
+# Run all checks (data collection, no output)
+status_detect_pid "$PIDFILE" "smartdns"
+status_check_process
+status_check_uptime "$PIDFILE"
+status_check_port "" "any" "smartdns"
+status_check_version "smartdns-conf-ru-split"
+check_config
+check_cache
+check_enabled
+
+# Set STATUS_OK based on critical checks
+[ "$_st_running" = "false" ] && STATUS_OK=1
+[ "$_st_port_ok" = "false" ] && STATUS_OK=1
+[ "$_ck_config_ok" = "false" ] && STATUS_OK=1
 
 if [ "${1:-}" = "--json" ]; then
-  # Run checks silently to set STATUS_OK
-  show_process >/dev/null 2>&1 || true
-  show_ports >/dev/null 2>&1 || true
-  show_config >/dev/null 2>&1 || true
+  # DNS tests also affect STATUS_OK
   show_dns_tests >/dev/null 2>&1 || true
   json_output
   exit "$STATUS_OK"
@@ -232,19 +186,19 @@ fi
 
 echo "smartdns-conf-ru-split status:"
 echo "  Service:"
-if [ -f "$STATE_FILE" ]; then
+if [ "$_ck_enabled" = "true" ]; then
   echo "    Mode:        split-DNS (enabled) ✓"
 else
   echo "    Mode:        default (simple forwarder)"
 fi
-show_process
+status_show_process
 show_ports
 show_config
 show_cache
 echo
 echo "  System:"
-show_uptime
-show_version
+status_show_uptime
+status_show_version
 echo
 echo "  DNS Tests:"
 show_dns_tests

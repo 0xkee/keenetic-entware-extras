@@ -7,11 +7,12 @@ Shell-скрипты и `.ipk` пакеты для Keenetic-роутеров с 
 
 | Пакет | Версия | Описание |
 |-------|--------|----------|
-| `keenetic-entware-extras` | 0.5.2 | Базовый пакет — shared libraries (`lib/common.sh`, `lib/ip.sh`, `lib/lists.sh`) + CLI `kee-status` (агрегированная диагностика всех пакетов) |
-| `geo-split` | 0.8.5 | Split routing по GeoIP + доменам. Зависит от `keenetic-entware-extras` |
+| `keenetic-entware-extras` | 0.7.0 | Базовый пакет — shared libraries (`lib/common.sh`, `lib/ip.sh`, `lib/lists.sh`, `lib/status.sh`) + CLI `kee-status` |
+| `geo-split` | 0.9.1 | Split routing по GeoIP + доменам. Зависит от `keenetic-entware-extras` |
 | `geo-split-data` | 0.3.2 | Данные: списки доменов, GeoIP-зоны, whitelist. Conffiles — сохраняются при upgrade |
-| `smartdns-conf-ru-split` | 0.1.2 | Split DNS: .ru/.рф → российские DNS, остальное → Google/Cloudflare DoH. Зависит от `smartdns`, `ca-certificates` |
-| `smartdns-redirect` | 0.1.1 | Universal DNS DNAT: перехват LAN `:53` → local DNS (SmartDNS/AGH/Unbound). Latency ~130ms → <80ms. Зависит от `iptables` |
+| `smartdns-conf-ru-split` | 0.3.3 | Split DNS: .ru/.рф → российские DNS, остальное → Google/Cloudflare DoH. |
+| `smartdns-redirect` | 0.1.5 | Universal DNS DNAT: перехват LAN `:53` → local DNS. |
+| `webui` | 0.7.7 | Custom dashboard для Keenetic/Entware services на :8080. |
 
 ## Установка через opkg
 
@@ -22,9 +23,9 @@ Shell-скрипты и `.ipk` пакеты для Keenetic-роутеров с 
 scp *.ipk root@<router-ip>:/tmp/
 
 # Установить (порядок важен — сначала base, потом data, потом geo-split)
-opkg install /tmp/keenetic-entware-extras_0.5.2_all.ipk
+opkg install /tmp/keenetic-entware-extras_0.7.0_all.ipk
 opkg install /tmp/geo-split-data_0.3.2_all.ipk
-opkg install /tmp/geo-split_0.8.5_all.ipk
+opkg install /tmp/geo-split_0.9.1_all.ipk
 ```
 
 Зависимости (`ip-full`, `curl`, `bind-dig`, `aggregate`) устанавливаются автоматически через opkg.
@@ -54,20 +55,21 @@ Split routing для Keenetic: маршрутизация трафика по Ge
 
 ### [smartdns-conf-ru-split](smartdns-conf-ru-split/README.md)
 
-Split DNS для российского интернета: `.ru`/`.рф`/`.su` → Yandex/AdGuard DoT, всё остальное → Google/Cloudflare DoH. Deployed, v0.1.2.
+Split DNS для российского интернета: `.ru`/`.рф`/`.su` → Yandex/AdGuard DoT, всё остальное → Google/Cloudflare DoH. Deployed, v0.3.3.
 
 ### [smartdns-redirect](smartdns-redirect/README.md)
 
-Universal DNS DNAT: `iptables PREROUTING REDIRECT` для LAN-клиентов (`br0`) — обход Keenetic ndnproxy, прямое резолвление через локальный DNS (SmartDNS/AdGuard Home/Unbound/dnsmasq). Persistence через NDM `netfilter.d` hook, watchdog по cron. Измеренный выигрыш latency: `~130ms → <80ms`. Deployed, v0.1.1.
+Universal DNS DNAT: `iptables PREROUTING REDIRECT` для LAN-клиентов (`br0`) — обход Keenetic ndnproxy, прямое резолвление через локальный DNS (SmartDNS/AdGuard Home/Unbound/dnsmasq). Persistence через NDM `netfilter.d` hook, watchdog по cron. Измеренный выигрыш latency: `~130ms → <80ms`. Deployed, v0.1.5.
 
 ## Структура проекта
 
 ```
 keenetic-entware-extras/
 ├── lib/                  # shared libraries
-│   ├── common.sh         # logging, error handling
+│   ├── common.sh         # logging, error handling, JSON helpers
 │   ├── ip.sh             # IP/interface utilities
-│   └── lists.sh          # list processing (@include, dedup)
+│   ├── lists.sh          # list processing (@include, dedup)
+│   └── status.sh         # status check/show helpers for diagnostics
 ├── geo-split/            # split routing подпроект
 │   ├── scripts/          # attach, detach, update, status, ndm-hook
 │   ├── config/           # config.sh
@@ -77,13 +79,18 @@ keenetic-entware-extras/
 ├── geo-split-data/       # данные (списки, GeoIP-зоны)
 │   ├── lists/            # domains.txt, ru-whitelist.txt
 │   └── scripts/          # fetch-zones.sh
-├── smartdns-conf-ru-split/          # DNS split (v0.1.2)
+├── smartdns-conf-ru-split/          # DNS split (v0.3.3)
 │   ├── config/           # smartdns.conf
 │   ├── scripts/          # status.sh
-├── smartdns-redirect/    # DNS DNAT для LAN (v0.1.1)
+├── smartdns-redirect/    # DNS DNAT для LAN (v0.1.5)
 │   ├── config/           # smartdns-redirect.conf (conffile)
 │   ├── scripts/          # dns-redirect, watchdog, status, netfilter-hook
 │   └── rootfs/           # init.d/S39smartdns-redirect
+├── webui/                # custom dashboard (nginx + lua)
+│   ├── config/           # nginx.conf, logrotate.conf
+│   ├── scripts/          # status.sh, patch-stock-ui.sh
+│   ├── lua/              # api-router, serve-index
+│   └── rootfs/           # init.d/S80nginx-webui
 ├── packaging/            # .ipk метаданные
 │   ├── keenetic-entware-extras/
 │   ├── geo-split/

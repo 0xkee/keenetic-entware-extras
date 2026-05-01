@@ -131,7 +131,7 @@ LAN Client → :53 (ndnproxy, plain UDP forward) → :6053 (SmartDNS) → upstre
 | Header comment | Обязательно | ✅ | 0% | 🟢 |
 | Logging (logger -t) | Обязательно | ✅ log() + log_error() | 0% | 🟢 |
 | Именование файлов | kebab-case.sh | ✅ | 0% | 🟢 |
-| No lib/common.sh | Запрещено | ✅ Не использует | 0% | 🟢 |
+| lib/common.sh + lib/status.sh | Используется | ✅ Подключено | 0% | 🟢 |
 | BusyBox совместимость | 100% | ✅ Нет bashisms | 0% | 🟢 |
 | Trap cleanup | Рекомендовано | ❌ Нет в install.sh | ~10% | 🟡 |
 | Простота | 90%+ | 90%+ | 0% | 🟢 |

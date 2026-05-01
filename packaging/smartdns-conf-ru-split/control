@@ -1,5 +1,5 @@
 Package: smartdns-conf-ru-split
-Version: 0.3.2
+Version: 0.3.4
 Architecture: all
 Maintainer: 0xkee
 Depends: keenetic-entware-extras, smartdns, ca-certificates

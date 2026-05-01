@@ -6,6 +6,7 @@ set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/common.sh"
+. "$SCRIPT_DIR/../../lib/status.sh"
 
 PIDFILE="/opt/var/run/nginx-webui.pid"
 CONF="/opt/keenetic-entware-extras/webui/config/nginx.conf"
@@ -14,71 +15,86 @@ BASE_URL="http://127.0.0.1:${LISTEN_PORT}"
 
 STATUS_OK=0
 
-# Get nginx-webui PID (from pidfile or pidof fallback).
-# Sets global __PID (empty if not running).
-detect_pid() {
-  __PID=""
-  if [ -f "$PIDFILE" ]; then
-    __PID="$(cat "$PIDFILE" 2>/dev/null)" || true
-    if [ -n "$__PID" ] && kill -0 "$__PID" 2>/dev/null; then
-      return 0
-    fi
-    __PID=""
+# Pre-init globals set by lib/status.sh functions
+_st_pid="" _st_pid_source=""
+_st_running="false" _st_mem_kb="0"
+_st_uptime_seconds=0
+_st_port_ok="false" _st_port_addrs=""
+_st_version=""
+
+# --- Check functions (specific to webui) ---
+
+# Check nginx config file presence.
+# Sets: _ck_config_ok ("true"|"false")
+check_config() {
+  if [ -f "$CONF" ]; then
+    _ck_config_ok="true"
+  else
+    _ck_config_ok="false"
   fi
-  __PID="$(pidof nginx 2>/dev/null || true)"
 }
 
-# Show process info: running/stopped, PID, RSS.
-show_process() {
-  if [ -n "$__PID" ] && kill -0 "$__PID" 2>/dev/null; then
-    local mem src="pidfile"
-    mem="$(awk '/VmRSS/{print $2}' "/proc/$__PID/status" 2>/dev/null || echo "?")"
-    [ ! -f "$PIDFILE" ] && src="pidof"
-    echo "    Process:     running (pid $__PID via $src, RSS ${mem}kB) ✓"
+# Check Lua dynamic module presence.
+# Sets: _ck_lua_module_ok ("true"|"false")
+check_lua_module() {
+  if [ -f "/opt/lib/nginx/modules/ngx_http_lua_module.so" ]; then
+    _ck_lua_module_ok="true"
   else
-    echo "    Process:     NOT running ✗"; STATUS_OK=1
+    _ck_lua_module_ok="false"
   fi
 }
+
+# Check logrotate setup (binary + config + cron daily).
+# Sets: _ck_logrotate_ok ("true"|"false")
+check_logrotate() {
+  if [ -x "/opt/sbin/logrotate" ] \
+     && [ -f "/opt/etc/logrotate.d/nginx-webui" ] \
+     && [ -x "/opt/etc/cron.daily/logrotate" ]; then
+    _ck_logrotate_ok="true"
+  else
+    _ck_logrotate_ok="false"
+  fi
+}
+
+# --- Show functions (text, specific to webui) ---
 
 # Show config file presence.
 show_config() {
-  if [ -f "$CONF" ]; then
+  if [ "$_ck_config_ok" = "true" ]; then
     echo "    Config:      $CONF ✓"
   else
-    echo "    Config:      $CONF NOT FOUND ✗"; STATUS_OK=1
+    echo "    Config:      $CONF NOT FOUND ✗"
   fi
 }
 
 # Show Lua dynamic module presence.
 show_lua_module() {
   local mod="/opt/lib/nginx/modules/ngx_http_lua_module.so"
-  if [ -f "$mod" ]; then
+  if [ "$_ck_lua_module_ok" = "true" ]; then
     echo "    Lua module:  $mod ✓"
   else
-    echo "    Lua module:  $mod NOT FOUND ✗"; STATUS_OK=1
+    echo "    Lua module:  $mod NOT FOUND ✗"
   fi
 }
 
-# Show listening port status (actual addresses from netstat/ss).
-show_port() {
-  local lines=""
-  if command -v netstat >/dev/null 2>&1; then
-    lines="$(netstat -tlnp 2>/dev/null | grep ":${LISTEN_PORT} " | awk '{print $4}' | sort -u)"
-  elif command -v ss >/dev/null 2>&1; then
-    lines="$(ss -tlnp 2>/dev/null | grep ":${LISTEN_PORT} " | awk '{print $4}' | sort -u)"
-  fi
-  if [ -n "$lines" ]; then
-    local first=1
-    echo "$lines" | while IFS= read -r addr; do
-      if [ "$first" = 1 ]; then
-        echo "    Ports:       $addr ✓"
-        first=0
-      else
-        echo "                 $addr ✓"
-      fi
-    done
+# Show logrotate status (3 sub-checks with details).
+show_logrotate() {
+  if [ -x "/opt/sbin/logrotate" ]; then
+    echo "    Binary:      /opt/sbin/logrotate ✓"
   else
-    echo "    Ports:       :${LISTEN_PORT} not listening ✗"; STATUS_OK=1
+    echo "    Binary:      /opt/sbin/logrotate NOT FOUND ✗"
+  fi
+
+  if [ -f "/opt/etc/logrotate.d/nginx-webui" ]; then
+    echo "    Config:      /opt/etc/logrotate.d/nginx-webui ✓"
+  else
+    echo "    Config:      /opt/etc/logrotate.d/nginx-webui NOT FOUND ✗"
+  fi
+
+  if [ -x "/opt/etc/cron.daily/logrotate" ]; then
+    echo "    Cron daily:  /opt/etc/cron.daily/logrotate ✓"
+  else
+    echo "    Cron daily:  /opt/etc/cron.daily/logrotate NOT FOUND ✗"
   fi
 }
 
@@ -105,124 +121,37 @@ show_http() {
   fi
 }
 
-# Show service uptime from pidfile mtime.
-show_uptime() {
-  if [ -f "$PIDFILE" ]; then
-    local mtime age age_label
-    mtime="$(file_mtime "$PIDFILE")"
-    if [ -n "$mtime" ] && [ "$mtime" -gt 0 ] 2>/dev/null; then
-      age=$(( $(date +%s) - mtime ))
-      age_label="$(format_age "$age")"
-      echo "    Uptime:      $age_label ✓"
-    else
-      echo "    Uptime:      unknown"
-    fi
-  else
-    echo "    Uptime:      — (not running)"
-  fi
-}
-
-# Show logrotate status for nginx-webui logs.
-show_logrotate() {
-  local all_ok=true
-
-  if [ -x "/opt/sbin/logrotate" ]; then
-    echo "    Binary:      /opt/sbin/logrotate ✓"
-  else
-    echo "    Binary:      /opt/sbin/logrotate NOT FOUND ✗"; all_ok=false
-  fi
-
-  if [ -f "/opt/etc/logrotate.d/nginx-webui" ]; then
-    echo "    Config:      /opt/etc/logrotate.d/nginx-webui ✓"
-  else
-    echo "    Config:      /opt/etc/logrotate.d/nginx-webui NOT FOUND ✗"; all_ok=false
-  fi
-
-  if [ -x "/opt/etc/cron.daily/logrotate" ]; then
-    echo "    Cron daily:  /opt/etc/cron.daily/logrotate ✓"
-  else
-    echo "    Cron daily:  /opt/etc/cron.daily/logrotate NOT FOUND ✗"; all_ok=false
-  fi
-
-  if ! "$all_ok"; then STATUS_OK=1; fi
-}
-
-# Show installed package version.
-show_version() {
-  local ver
-  ver="$(installed_pkg_version webui)"
-  if [ -n "$ver" ]; then
-    echo "    Version:     $ver"
-  else
-    echo "    Version:     — (not installed via opkg)"
-  fi
-}
+# --- JSON output ---
 
 # Collect structured data and emit JSON for webui.
 json_output() {
-  local running="false" pid_val="" mem_val="" version_val=""
-  local port_ok="false"
+  local config_ok_val=1 lua_module_ok_val=1 http_ok_val=1 logrotate_ok_val=1
+  local mem_formatted=""
 
-  # Process
-  if [ -n "$__PID" ] && kill -0 "$__PID" 2>/dev/null; then
-    running="true"
-    pid_val="$__PID"
-    mem_val="$(awk '/VmRSS/{print $2}' "/proc/$__PID/status" 2>/dev/null || echo "0")"
-  fi
-
-  # Uptime
-  if [ -f "$PIDFILE" ]; then
-    local mtime age
-    mtime="$(file_mtime "$PIDFILE")"
-    if [ -n "$mtime" ] && [ "$mtime" -gt 0 ] 2>/dev/null; then
-      age=$(( $(date +%s) - mtime ))
-      uptime_seconds_val="$age"
-    fi
-  fi
-
-  # Ports: collect all listen addresses for our port (like smartdns status)
-  local listening="" ports_val=""
-  if command -v netstat >/dev/null 2>&1; then
-    listening="$(netstat -tlnp 2>/dev/null | grep ":${LISTEN_PORT} " | head -1)" || true
-    ports_val="$(netstat -tlnp 2>/dev/null | grep ":${LISTEN_PORT} " | awk '{print $4}' | sort -u | tr '\n' ' ' | sed 's/ $//')"
-  elif command -v ss >/dev/null 2>&1; then
-    listening="$(ss -tlnp 2>/dev/null | grep ":${LISTEN_PORT} " | head -1)" || true
-    ports_val="$(ss -tlnp 2>/dev/null | grep ":${LISTEN_PORT} " | awk '{print $4}' | sort -u | tr '\n' ' ' | sed 's/ $//')"
-  fi
-  [ -n "$listening" ] && port_ok="true"
-  [ -z "$ports_val" ] && ports_val="$LISTEN_PORT"
-
-  # Version
-  version_val="$(installed_pkg_version webui)"
-
-  # Config file presence
-  local config_ok_val=1
-  [ -f "$CONF" ] && config_ok_val=0
-
-  # Lua module presence
-  local lua_module_ok_val=1
-  [ -f "/opt/lib/nginx/modules/ngx_http_lua_module.so" ] && lua_module_ok_val=0
+  [ "$_ck_config_ok" = "true" ] && config_ok_val=0 || true
+  [ "$_ck_lua_module_ok" = "true" ] && lua_module_ok_val=0 || true
+  [ "$_ck_logrotate_ok" = "true" ] && logrotate_ok_val=0 || true
 
   # HTTP ok: use port_listening as proxy (avoids curl recursion via nginx lua)
-  local http_ok_val=1
-  [ "$port_ok" = "true" ] && http_ok_val=0
+  [ "$_st_port_ok" = "true" ] && http_ok_val=0 || true
 
-  # Logrotate: binary + config + cron wrapper all present
-  local logrotate_ok_val=1
-  if [ -x "/opt/sbin/logrotate" ] \
-     && [ -f "/opt/etc/logrotate.d/nginx-webui" ] \
-     && [ -x "/opt/etc/cron.daily/logrotate" ]; then
-    logrotate_ok_val=0
+  # Format memory
+  if [ "$_st_mem_kb" != "0" ] && [ -n "$_st_mem_kb" ]; then
+    mem_formatted="$(format_size_kb "$_st_mem_kb")"
   fi
 
+  # Ports display: use detected addrs or fall back to port number
+  local ports_val="$_st_port_addrs"
+  [ -z "$ports_val" ] && ports_val="$LISTEN_PORT" || true
+
   printf '{'
-  json_kv_bool "running" "$([ "$running" = "true" ] && echo 0 || echo 1)"
+  json_kv_bool "running" "$([ "$_st_running" = "true" ] && echo 0 || echo 1)"
   printf ','
   json_kv_bool "ok" "$STATUS_OK"
   printf ',"details":{'
   json_kv "ports" "$ports_val"
   printf ','
-  json_kv_bool "status" "$([ "$port_ok" = "true" ] && echo 0 || echo 1)"
+  json_kv_bool "status" "$([ "$_st_port_ok" = "true" ] && echo 0 || echo 1)"
   printf ','
   json_kv_bool "config" "$config_ok_val"
   printf ','
@@ -230,20 +159,20 @@ json_output() {
   printf ','
   json_kv_bool "http" "$http_ok_val"
   printf ','
-  json_kv "pid" "$pid_val"
+  json_kv "pid" "$_st_pid"
   printf ','
-  json_kv "memory" "$([ -n "$mem_val" ] && [ "$mem_val" != "0" ] && format_size_kb "$mem_val" || printf '')"
+  json_kv "memory" "$mem_formatted"
   printf ','
   json_kv_bool "logrotate" "$logrotate_ok_val"
   printf ','
-  json_kv_num "uptime" "${uptime_seconds_val:-0}"
+  json_kv_num "uptime" "$_st_uptime_seconds"
   printf ','
-  json_kv "version" "${version_val:-unknown}"
+  json_kv "version" "${_st_version:-unknown}"
   printf '},'
 
   # Checks section: "ok"|"warn"|"fail" per field
   printf '"checks":{'
-  json_check "process" "$(if [ "$running" = "true" ]; then printf ok; else printf fail; fi)"
+  json_check "process" "$(if [ "$_st_running" = "true" ]; then printf ok; else printf fail; fi)"
   printf ','
   json_check "config" "$(if [ "$config_ok_val" = 0 ]; then printf ok; else printf fail; fi)"
   printf ','
@@ -256,23 +185,35 @@ json_output() {
 }
 
 # --- main ---
-detect_pid
+
+# Run all checks upfront
+status_detect_pid "$PIDFILE" "nginx"
+status_check_process
+status_check_uptime "$PIDFILE"
+status_check_port "$LISTEN_PORT" "tcp"
+status_check_version "webui"
+check_config
+check_lua_module
+check_logrotate
+
+# Determine STATUS_OK
+[ "$_st_running" = "false" ] && STATUS_OK=1
+[ "$_st_port_ok" = "false" ] && STATUS_OK=1
+[ "$_ck_config_ok" = "false" ] && STATUS_OK=1
+[ "$_ck_lua_module_ok" = "false" ] && STATUS_OK=1
+[ "$_ck_logrotate_ok" = "false" ] && STATUS_OK=1
 
 if [ "${1:-}" = "--json" ]; then
-  # Run checks silently to set STATUS_OK
-  show_process >/dev/null 2>&1 || true
-  show_port >/dev/null 2>&1 || true
-  show_config >/dev/null 2>&1 || true
   json_output
   exit "$STATUS_OK"
 fi
 
 echo "nginx-webui status:"
 echo "  Service:"
-show_process
+status_show_process
 show_config
 show_lua_module
-show_port
+status_show_port "$LISTEN_PORT"
 echo
 echo "  HTTP:"
 show_http
@@ -281,7 +222,7 @@ echo "  Logrotate:"
 show_logrotate
 echo
 echo "  System:"
-show_uptime
-show_version
+status_show_uptime
+status_show_version
 
 exit "$STATUS_OK"

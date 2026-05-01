@@ -9,7 +9,8 @@ set -eu
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/common.sh"
 _CONFIG_DIR="$(cd "$SCRIPT_DIR/../config" && pwd)"
-. "$_CONFIG_DIR/smartdns-redirect.conf"
+. "$_CONFIG_DIR/defaults.conf"
+[ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
 
 # Exit silently if disabled (empty INTERFACES == package inactive).
 [ -n "${INTERFACES:-}" ] || exit 0

@@ -10,7 +10,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 _CONFIG_DIR="${SCRIPT_DIR%/*}/config"
 # shellcheck source=/dev/null
-. "$_CONFIG_DIR/config.sh"
+. "$_CONFIG_DIR/defaults.conf"
+[ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
 
 STATUS_OK=0
 _st_pid=""

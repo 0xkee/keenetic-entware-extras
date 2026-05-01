@@ -17,13 +17,13 @@ opkg install geo-split_0.8.2_all.ipk
 
 Зависимости (`keenetic-entware-extras`, `geo-split-data`, `ip-full`, `curl`, `bind-dig`, `aggregate`) устанавливаются автоматически.
 
-> `config/config.sh` — conffile: при `opkg upgrade` пользовательский конфиг сохраняется.
+> `config/config.conf` — conffile: при `opkg upgrade` пользовательский конфиг сохраняется.
 
 После установки:
 
 ```sh
 # 1. Отредактировать конфигурацию
-vi /opt/keenetic-entware-extras/geo-split/config/config.sh
+vi /opt/keenetic-entware-extras/geo-split/config/config.conf
 
 # 2. Запустить
 /opt/etc/init.d/S99geo-split start
@@ -124,7 +124,7 @@ Hook слушает интерфейс в зависимости от `ROUTE_OUT
 
 ## Настройка
 
-Конфигурация: `config/config.sh`
+Конфигурация: `config/config.conf`
 
 ### Полная таблица параметров
 
@@ -186,7 +186,7 @@ DOMAINS_UPDATE_INTERVAL=0
 | `scripts/status.sh` | Диагностика: режим, правила, таблицы, кэши |
 | `loaders/cidr-plain.sh` | Загрузчик: plain CIDR (по умолчанию) |
 | `loaders/ripe-json.sh` | Загрузчик: RIPE JSON API (требует `jq`) |
-| `config/config.sh` | Конфигурация (режим, интерфейсы, URL, интервалы) |
+| `config/config.conf` | Конфигурация (режим, интерфейсы, URL, интервалы) |
 | `rootfs/opt/etc/init.d/S99geo-split` | Init-скрипт (start/stop/restart/status/refresh/update) |
 
 Данные (домен-листы, geoip-зоны) вынесены в отдельный пакет [`geo-split-data`](../geo-split-data/).
@@ -200,7 +200,7 @@ DOMAINS_UPDATE_INTERVAL=0
 | `cidr-plain` | Plain-текст CIDR, фильтрация IPv6. По умолчанию | `curl` |
 | `ripe-json` | RIPE Stat JSON API | `curl`, `jq` |
 
-Выбор загрузчика в `config/config.sh`:
+Выбор загрузчика в `config/config.conf`:
 
 ```sh
 SUBNET_LOADER="cidr-plain"

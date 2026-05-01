@@ -14,7 +14,7 @@
 |---|---|---|
 | **Назначение** | Селективная GEO-маршрутизация (страновые подсети) | Обход блокировок РКН (per-domain/per-IP из blacklist) |
 | **Язык** | POSIX sh (~1200 строк) | sh (~1130) + Lua (~620) / Python (~560) / awk парсер |
-| **Конфиг** | `config.sh` (shell vars) | `ruantiblock.conf` (shell vars) |
+| **Конфиг** | `config.conf` (shell vars) | `ruantiblock.conf` (shell vars) |
 | **Платформа** | Keenetic + Entware | Keenetic/Padavan + Entware |
 | **Статус** | Активен (v0.1.0) | **⛔ Заброшен** (OpenWrt-версия актуальна) |
 | **Лицензия** | нет (private) | MIT |

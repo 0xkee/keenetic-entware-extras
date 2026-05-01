@@ -278,9 +278,9 @@ _merge_and_emit_cidrs() {
         fi
 ```
 
-### 5.2. `config.sh` — новая переменная
+### 5.2. `config.conf` — новая переменная
 
-Файл: [`geo-split/config/config.sh`](../config/config.sh)
+Файл: [`geo-split/config/config.conf`](../config/config.conf)
 
 Вставить после строки 53 (`SUBNET_LOADER`):
 
@@ -402,7 +402,7 @@ Host-биты сбрасываются при парсинге: `start = ip − 
 |------|----------|--------|
 | [`lib/lists.sh`](../../lib/lists.sh) | 3 функции после строки 106 | +~70 строк |
 | [`geo-split/scripts/update-subnets.sh`](../scripts/update-subnets.sh) | Блок агрегации между строками 83–84 | +~7 строк |
-| [`geo-split/config/config.sh`](../config/config.sh) | `SUBNET_AGGREGATE` после строки 53 | +~3 строки |
+| [`geo-split/config/config.conf`](../config/config.conf) | `SUBNET_AGGREGATE` после строки 53 | +~3 строки |
 
 ## 8. Соответствие стандартам
 

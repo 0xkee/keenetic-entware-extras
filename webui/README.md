@@ -17,7 +17,7 @@ opkg install webui_0.7.0_all.ipk
 
 Зависимости (`keenetic-entware-extras`, `nginx`, `nginx-mod-lua`, `logrotate`) устанавливаются автоматически.
 
-> `config/nginx.conf`, `config/logrotate.conf`, `config/config.sh` — conffiles: при `opkg upgrade` пользовательский конфиг сохраняется.
+> `config/nginx.conf`, `config/logrotate.conf`, `config/config.conf` — conffiles: при `opkg upgrade` пользовательский конфиг сохраняется.
 
 После установки:
 
@@ -96,7 +96,7 @@ Browser → nginx :8080
 
 ## Настройка
 
-Конфигурация: `config/config.sh`
+Конфигурация: `config/config.conf`
 
 | Параметр | По умолчанию | Описание |
 |----------|-------------|----------|
@@ -197,7 +197,7 @@ nginx-webui status:
 
 | Файл | Назначение |
 |------|-----------|
-| `config/config.sh` | Конфигурация (ENABLED, порт, sidebar, poll interval) |
+| `config/config.conf` | Конфигурация (ENABLED, порт, sidebar, poll interval) |
 | `config/nginx.conf` | Конфигурация nginx (listen, proxy, lua paths, gzip) |
 | `config/logrotate.conf` | Logrotate: ротация error-лога nginx-webui |
 | `config/listen.conf` | Listen-адрес (генерируется postinst, не conffile) |

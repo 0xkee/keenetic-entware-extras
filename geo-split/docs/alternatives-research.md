@@ -121,7 +121,7 @@ graph TB
 
     subgraph "Keenetic + Entware"
         direction TB
-        K_CFG["config.sh<br/>простой shell"]
+        K_CFG["config.conf<br/>простой shell"]
         K_NDM["NDM<br/>ifstatechanged hooks"]
         K_NO_FW["Нет firewall zones"]
         K_ROUTE["<b>ip rule + ip route</b><br/>route-based, без fwmark"]

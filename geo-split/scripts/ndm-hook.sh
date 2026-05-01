@@ -6,18 +6,13 @@
 # shellcheck disable=SC1091  # sourced files resolved at runtime on router
 set -eu
 
-LOG_TAG="geo-split-hook"
-
 # Resolve symlink to find real script location
 REAL_PATH="$(readlink -f "$0" 2>/dev/null || readlink "$0")"
 HOOK_DIR="$(dirname "$REAL_PATH")"
-CONFIG="$HOOK_DIR/../config/config.sh"
+_CONFIG_DIR="$HOOK_DIR/../config"
 
-[ -f "$CONFIG" ] || exit 0
-
-# Extract only needed variables from config
-# (faster than full source — only simple vars, no path computation)
-eval "$(grep -E '^(ROUTE_OUT|DOMAIN_ROUTE_TABLE|DOMAIN_RULE_PRIORITY|SUBNET_ROUTE_TABLE|SUBNET_RULE_PRIORITY|ROUTE_IN)=' "$CONFIG")"
+. "$_CONFIG_DIR/defaults.conf"
+[ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
 
 # NDM hook filter
 [ "${1:-}" != "hook" ] && exit 0

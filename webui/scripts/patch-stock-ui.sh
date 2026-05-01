@@ -18,7 +18,8 @@ PATCHES_DIR="$PROJECT_DIR/webui/patches"
 # Source webui config
 _CONFIG_DIR="$PROJECT_DIR/webui/config"
 # shellcheck source=/dev/null
-. "$_CONFIG_DIR/config.sh"
+. "$_CONFIG_DIR/defaults.conf"
+[ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
 
 HTDOCS="/usr/share/htdocs_"
 CACHE="/tmp/ew-webui"

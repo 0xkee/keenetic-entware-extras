@@ -14,7 +14,7 @@
 | **Язык** | POSIX sh (~1200 строк) | Go (~3700 строк) + sh (~150 строк) |
 | **Тесты** | shellcheck | Go unit tests (~5000 строк) |
 | **Версия** | 0.1.0 | 2.2.2 |
-| **Конфиг** | `config.sh` (shell vars) | `keen-pbr.conf` (TOML) |
+| **Конфиг** | `config.conf` (shell vars) | `keen-pbr.conf` (TOML) |
 | **Платформа** | Keenetic + Entware | Keenetic + Entware |
 | **Лицензия** | нет (private) | MIT |
 | **Сообщество** | 1 автор | GitHub + Telegram чат |
@@ -372,7 +372,7 @@ keen-pbr не тестировался на 13K+ записях — другой
 | Зависимости build | нет (sh — interpreted) | Go compiler, cross-compile |
 | Архитектур | any (POSIX sh — interpreted) | mips, mipsel, aarch64 (Go native binary) |
 | Размер бинарника | 0 (скрипты) | ~6-8 MB (Go binary) |
-| Файлов конфигурации | 1 (config.sh) | 3+ (keen-pbr.conf, dnsmasq.conf, defaults) |
+| Файлов конфигурации | 1 (config.conf) | 3+ (keen-pbr.conf, dnsmasq.conf, defaults) |
 | NDM hooks | 1 (ifstatechanged) | 2 (ifstatechanged + netfilter) |
 | Cron частота | каждые 15 мин (smart cache check) | ежедневно |
 | Cold start время | ~1-2 сек (из кэша) | зависит от кол-ва записей |
@@ -436,7 +436,7 @@ fwmark позволяет:
    - Альтернатива: уменьшить DOMAINS_UPDATE_INTERVAL до 5 мин
 
 6. ✓ **Multiple ipsets** — разные списки → разные VPN/interfaces
-   - Потребует рефакторинг config.sh → array-based config
+   - Потребует рефакторинг config.conf → array-based config
    - ✓ Может быть реализовано как множество instansов geo-split
 
 ### Не нужно (несовместимо / overkill)

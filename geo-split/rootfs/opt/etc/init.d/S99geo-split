@@ -10,7 +10,8 @@ INSTALL_DIR="/opt/keenetic-entware-extras/geo-split"
 SCRIPTS="$INSTALL_DIR/scripts"
 _CONFIG_DIR="$INSTALL_DIR/config"
 # shellcheck source=/dev/null
-. "$_CONFIG_DIR/config.sh"
+. "$_CONFIG_DIR/defaults.conf"
+[ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
 
 case "${1:-}" in
   start)

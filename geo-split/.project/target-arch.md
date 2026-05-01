@@ -87,7 +87,7 @@ geo-split/
 │   ├── target-arch.md       # this file
 │   └── target-code.md       # code standards
 ├── config/
-│   └── config.sh            # ROUTE_OUT, ROUTE_IN, URLs
+│   └── config.conf            # ROUTE_OUT, ROUTE_IN, URLs
 ├── lists/
 │   └── *.cidr               # CIDR lists (downloaded)
 ├── scripts/
@@ -104,7 +104,7 @@ geo-split/
 ```
 /opt/keenetic-entware-extras/                              # project root (remote_base)
 /opt/keenetic-entware-extras/lib/common.sh                 # shared library
-/opt/keenetic-entware-extras/geo-split/config/config.sh   # config
+/opt/keenetic-entware-extras/geo-split/config/config.conf   # config
 /opt/keenetic-entware-extras/geo-split/scripts/*.sh       # scripts
 /opt/keenetic-entware-extras/geo-split/loaders/           # subnet loaders
 /opt/keenetic-entware-extras/geo-split-data/lists/        # domain lists + geoip zones

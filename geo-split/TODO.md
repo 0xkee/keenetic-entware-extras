@@ -48,7 +48,7 @@
 
 ### Разделение route tables + async reload (2026-04-12)
 
-- [x] **config.sh** — `DOMAIN_ROUTE_TABLE="1000"` prio 50, `SUBNET_ROUTE_TABLE="1001"` prio 51 (переименованы из ROUTE_TABLE/RULE_PRIORITY)
+- [x] **config.conf** — `DOMAIN_ROUTE_TABLE="1000"` prio 50, `SUBNET_ROUTE_TABLE="1001"` prio 51 (переименованы из ROUTE_TABLE/RULE_PRIORITY)
 - [x] **lib/ip.sh** — `resolve_target_interface()`, `fill_routes_batch()` (flush+batch load), `detect_out_iface()` (переименован из detect_isp_interface)
 - [x] **update-subnets.sh** — download + `fill_routes_batch $SUBNET_ROUTE_TABLE`, поддержка `--refill` (NDM hook)
 - [x] **update-domains.sh** — resolve + `fill_routes_batch $DOMAIN_ROUTE_TABLE ... host`, поддержка `--refill`
@@ -70,7 +70,7 @@
 ### Удаление ipset dead code (2026-04-12)
 
 - [x] **load-ipset.sh удалён** — весь файл (130 строк) dead code: ipset загружался, но не использовался ни одним iptables-правилом
-- [x] **Убраны ссылки из 8 файлов** — apply-routes.sh, update-domains.sh, config.sh, S99geo-split, status.sh, ndm-hook.sh, packaging/control, packaging/prerm
+- [x] **Убраны ссылки из 8 файлов** — apply-routes.sh, update-domains.sh, config.conf, S99geo-split, status.sh, ndm-hook.sh, packaging/control, packaging/prerm
 - [x] **Убрана зависимость** — `ipset` удалён из `Depends:` в packaging/geo-split/control
 - [x] **Маршрутизация** — работает как прежде через `ip rule` + `ip route table 1000` (attach-rules.sh)
 
@@ -132,7 +132,7 @@
 - [x] **update-скрипты → чистые fetcher-ы** — `update-subnets.sh` и `update-domains.sh` больше не вызывают активацию (apply-routes/attach-rules). Exit code: 0 = данные обновлены, 10 = кэш свежий.
 - [x] **Единый оркестратор** — `S99geo-split`: `_refresh_if_stale()` helper, cold/warm start split, `update-subnets)`/`update-domains)` команды с условной активацией
 - [x] **Cron через S99** — `postinst`: `*/15 * * * * root /opt/etc/init.d/S99geo-split update-subnets`
-- [x] **Нормализация путей** — `_LISTS_DIR` в `config.sh` через parameter expansion `${_CONFIG_DIR%/*/*}/geo-split-data/lists`; `_CONFIG_DIR` резолвится через `cd && pwd` в 6 скриптах
+- [x] **Нормализация путей** — `_LISTS_DIR` в `config.conf` через parameter expansion `${_CONFIG_DIR%/*/*}/geo-split-data/lists`; `_CONFIG_DIR` резолвится через `cd && pwd` в 6 скриптах
 - [x] **status.sh** — 7 новых метрик: cron jobs, NDM hook, version, domain sources, секционная группировка
 - [x] **Деплой** — оба роутера (router-2 + router-1) обновлены, status ✓
 

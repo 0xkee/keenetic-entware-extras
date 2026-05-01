@@ -9,7 +9,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/lists.sh"
 . "$SCRIPT_DIR/../../lib/ip.sh"
 _CONFIG_DIR="$(cd "$SCRIPT_DIR/../config" && pwd)"
-. "$_CONFIG_DIR/config.sh"
+. "$_CONFIG_DIR/defaults.conf"
+[ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
 
 # Filter out private/special IPs from stdin
 filter_private_ips() {

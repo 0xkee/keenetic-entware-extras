@@ -73,7 +73,7 @@ is_table_filled() {
 # (mtime used by status.sh for table freshness display).
 # Args: $1 - table number, $2 - list file path, $3 - target device
 #        $4 - mode: "cidr" (default, each line is a CIDR) or "host" (first field + /32)
-# Requires: IP_FULL, TABLE_STAMP_PREFIX from config.sh; list_strip, list_count from lib/lists.sh; log from lib/common.sh
+# Requires: IP_FULL, TABLE_STAMP_PREFIX from config.conf; list_strip, list_count from lib/lists.sh; log from lib/common.sh
 # Optional: BATCH_FILE (base path, default /tmp/geo-routes); .${table}.batch is appended
 fill_routes_batch() {
   local table="$1" file="$2" dev="$3" mode="${4:-cidr}"

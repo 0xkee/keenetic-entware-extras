@@ -5,7 +5,8 @@
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-. "$SCRIPT_DIR/../config/config.sh"
+. "$SCRIPT_DIR/../config/defaults.conf"
+[ -f "$SCRIPT_DIR/../config/config.conf" ] && . "$SCRIPT_DIR/../config/config.conf"
 . "$SCRIPT_DIR/../../lib/common.sh"
 . "$SCRIPT_DIR/../../lib/status.sh"
 

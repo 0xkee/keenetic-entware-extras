@@ -100,7 +100,7 @@ NDM UP fill-ит таблицы: resolve актуальный dev, заполн�
 
 ## План реализации
 
-### 1. config.sh
+### 1. config.conf
 ```sh
 DOMAIN_ROUTE_TABLE="1000"
 DOMAIN_RULE_PRIORITY="50"

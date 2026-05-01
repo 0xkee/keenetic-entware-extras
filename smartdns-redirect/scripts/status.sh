@@ -8,9 +8,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/common.sh"
 . "$SCRIPT_DIR/../../lib/status.sh"
 _CONFIG_DIR="$(cd "$SCRIPT_DIR/../config" && pwd)"
-CONFIG_FILE="$_CONFIG_DIR/smartdns-redirect.conf"
+CONFIG_FILE="$_CONFIG_DIR/defaults.conf"
 # shellcheck source=/dev/null
 . "$CONFIG_FILE"
+[ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
 
 STATUS_OK=0
 

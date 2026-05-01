@@ -72,7 +72,7 @@ keenetic-entware-extras/
 │   └── status.sh         # status check/show helpers for diagnostics
 ├── geo-split/            # split routing подпроект
 │   ├── scripts/          # attach, detach, update, status, ndm-hook
-│   ├── config/           # config.sh
+│   ├── config/           # config.conf
 │   ├── loaders/          # CIDR загрузчики (plain, RIPE JSON)
 │   ├── rootfs/           # init.d/S99geo-split
 │   └── docs/             # архитектура, сравнения

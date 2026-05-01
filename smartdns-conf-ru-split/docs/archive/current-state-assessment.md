@@ -320,7 +320,7 @@ Latency приемлема (мс), но DNAT убирает лишний хоп.
 | `scripts/status.sh` | ✅ 7380 строк | ❌ | 🟡 |
 | NDM hooks | ✅ ifstatechanged.d | ❌ | 🟡 |
 | `.project/` | ✅ | ✅ | 🟢 |
-| `config/` | ✅ config.sh | ✅ smartdns.conf | 🟢 |
+| `config/` | ✅ config.conf | ✅ smartdns.conf | 🟢 |
 | `docs/` | ✅ Подробные | ❌ | 🟡 |
 | README.md | ✅ | ✅ | 🟢 |
 

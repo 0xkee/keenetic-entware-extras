@@ -2,7 +2,7 @@
 # smartdns-redirect — DNAT LAN DNS (:53) to local resolver (e.g. SmartDNS :6053).
 # Idempotent: repeated start does not duplicate rules (iptables -C guard).
 # Subcommands: start | stop | reload | restart
-# Config:      $SCRIPT_DIR/../config/smartdns-redirect.conf (sourced)
+# Config:      $SCRIPT_DIR/../config/defaults.conf (sourced)
 # shellcheck disable=SC3043  # 'local' supported by ash/busybox sh
 # shellcheck disable=SC1091  # sourced files resolved at runtime on router
 set -eu
@@ -10,7 +10,8 @@ set -eu
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/common.sh"
 _CONFIG_DIR="$(cd "$SCRIPT_DIR/../config" && pwd)"
-. "$_CONFIG_DIR/smartdns-redirect.conf"
+. "$_CONFIG_DIR/defaults.conf"
+[ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
 
 # --- config validation ---
 case "${UPSTREAM_PORT:-}" in

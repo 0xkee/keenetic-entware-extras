@@ -6,7 +6,8 @@ set -eu
 
 BASE="/opt/keenetic-entware-extras/smartdns-conf-ru-split"
 _CONFIG_DIR="$BASE/config"
-. "$_CONFIG_DIR/config.sh"
+. "$_CONFIG_DIR/defaults.conf"
+[ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
 . /opt/keenetic-entware-extras/lib/common.sh
 
 # 1. Auto-detect router LAN IP and generate bind-addrs.conf.
@@ -33,8 +34,8 @@ fi
 if [ -f "$_CONFIG_DIR/smartdns.conf" ]; then
     cp "$_CONFIG_DIR/smartdns.conf" "$CONF_SPLIT"
 fi
-if [ -f "$_CONFIG_DIR/default.conf" ]; then
-    cp "$_CONFIG_DIR/default.conf" "$CONF_DEFAULT"
+if [ -f "$_CONFIG_DIR/smartdns-default.conf" ]; then
+    cp "$_CONFIG_DIR/smartdns-default.conf" "$CONF_DEFAULT"
 fi
 
 # 3. Activate config based on current state

@@ -44,7 +44,7 @@ CIDRs are aggregated (merged overlapping/adjacent) to reduce route count.
 Included zones (EAEU countries): `ru`, `by`, `kz`, `am`, `kg`.
 
 By default, geo-split uses `ru.zone`. To use a different zone, change `SUBNET_URL`
-or `SUBNET_LIST_FILE` in `geo-split/config/config.sh`.
+or `SUBNET_LIST_FILE` in `geo-split/config/config.conf`.
 
 ### Manual fetch
 

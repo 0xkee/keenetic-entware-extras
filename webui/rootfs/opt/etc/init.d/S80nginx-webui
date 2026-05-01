@@ -8,7 +8,8 @@ set -eu
 INSTALL_DIR="/opt/keenetic-entware-extras/webui"
 _CONFIG_DIR="$INSTALL_DIR/config"
 # shellcheck source=/dev/null
-. "$_CONFIG_DIR/config.sh"
+. "$_CONFIG_DIR/defaults.conf"
+[ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
 
 DESC="nginx WebUI dashboard"
 CONF="$_CONFIG_DIR/nginx.conf"

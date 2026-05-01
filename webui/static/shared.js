@@ -141,14 +141,16 @@ window.EW = (function() {
      * @param {Object} [opts]
      * @param {Object} [opts.skipKeys] - keys to skip entirely (default: {uptime:1})
      * @param {boolean} [opts.isRunning] - affects red error highlighting (default: true)
+     * @param {Object} [opts.checks] - checks map from backend (ok/warn/fail per key)
      * @returns {Array<{isSpacer?:boolean, key:string, label:string, value:string,
-     *   lines?:Array<{text:string, isError:boolean}>, isError:boolean, isTimer:boolean,
-     *   freshnessKey:string|null, updateAction:string|null}>}
+     *   lines?:Array<{text:string, isError:boolean}>, isError:boolean, isWarning:boolean,
+     *   isTimer:boolean, freshnessKey:string|null, updateAction:string|null}>}
      */
     function parseDetails(details, opts) {
         opts = opts || {};
         var skipKeys = opts.skipKeys || { uptime: 1 };
         var isRunning = opts.isRunning !== false;
+        var checks = opts.checks || null;
         var entries = [];
         var keys = Object.keys(details);
 
@@ -164,16 +166,36 @@ window.EW = (function() {
             var val = details[key];
             if (val === '' || val === null || val === undefined) continue;
 
+            var check = (checks && checks[key]) || null;
             var isError = false;
+            var isWarning = false;
+
             if (typeof val === 'boolean') {
-                isError = !val && isRunning;
                 val = formatBool(val);
-            } else if (typeof val === 'number' && val === 0 && isRunning) {
-                isError = true;
+            } else if (typeof val === 'number' && val === 0 && TIMER_KEYS[key] && check === 'fail') {
+                // Timer key with 0 value and explicit fail → show dash
+                val = '\u2014';
             }
 
-            var isTimer = typeof val === 'number' && !!TIMER_KEYS[key];
-            if (isTimer) val = formatUptimeStock(val);
+            // Determine color: checks takes priority over type-based fallback
+            if (check && isRunning) {
+                if (check === 'fail') {
+                    isError = true;
+                } else if (check === 'warn') {
+                    isWarning = true;
+                }
+                // check === 'ok' → no highlight
+            } else if (!check) {
+                // Fallback: type-based detection (backward compat)
+                if (typeof details[key] === 'boolean' && !details[key] && isRunning) {
+                    isError = true;
+                } else if (typeof details[key] === 'number' && details[key] === 0 && isRunning) {
+                    isError = true;
+                }
+            }
+
+            var isTimer = typeof details[key] === 'number' && !!TIMER_KEYS[key];
+            if (isTimer && typeof val === 'number') val = formatUptimeStock(val);
 
             var strVal = String(val);
             var lines = null;
@@ -192,6 +214,7 @@ window.EW = (function() {
                 value: strVal,
                 lines: lines,
                 isError: isError,
+                isWarning: isWarning,
                 isTimer: isTimer,
                 freshnessKey: TIMER_KEYS[key] ? key : null,
                 updateAction: GEO_UPDATE_ACTIONS[key] || null

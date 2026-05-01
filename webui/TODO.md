@@ -1,6 +1,6 @@
 # WebUI — TODO
 
-> Обновлено 2026-04-26. v0.3.0: Angular-native card — пустой CDK row (sub_filter #9 ngTemplateOutlet=null), inject.js создаёт card DOM с нуля. Удалены хаки: CSS stub hiding, header patch, dialog toggle/header patches. Target: `.project/target-arch.md`.
+> Обновлено 2026-04-29. v0.3.0: Angular-native card — пустой CDK row (sub_filter #9 ngTemplateOutlet=null), inject.js создаёт card DOM с нуля. Удалены хаки: CSS stub hiding, header patch, dialog toggle/header patches. Target: `.project/target-arch.md`.
 
 ## 🎯 Спайки — свой template для Angular
 
@@ -35,22 +35,22 @@
 
 - [ ] **Sidebar menu: config-driven при реанимации** — если будем возвращать sidebar меню (`injectSidebar`), сделать его config-driven аналогично dashboard card (CUSTOM_ITEMS/SERVICE_APIS → shared config в `EW.*` или `__ewConfig`). Не хардкодить список пунктов в inject.js.
 
-- [ ] **Refresh button: emoji → SVG sprite** — `index.html:55,79,105` используют emoji `⟳`, нужно `<use href="./assets/sprite/sprite.svg#refresh">` по keenetic-dom-catalog.md §12
+- [x] **Refresh button: emoji → SVG sprite** ✅ — устарело, старый iframe-based index.html заменён на tab-архитектуру (app.js)
 - [x] **CUSTOM_ITEMS: добавить DNS Redirect** — добавлен smartdns-redirect в sidebar
 - [x] **Dashboard card: стоковый вид** — переписан на stock DOM-классы, toggle switches, status chips, expandable details, localStorage persist
 - [ ] **Sidebar icon: #settings → уникальная иконка** — `inject.js` использует `#settings` (та же что у MANAGEMENT), рассмотреть `#extensions` или другую из sprite
-- [ ] **Light theme: проверить CSS fallback** — fallback значения захардкожены под dark theme; проверить light
-- [ ] **Status.sh: добавить geo domain и upstream DNS** — geo-split: актуальный гео-домен (не хардкод "RU") в JSON; dns-redirect: upstream DNS в JSON (чтобы показывать в деталях)
-- [ ] **Fast polling для всех сервисов** — при переключении on/off (toggle) должен быть fast polling для всех сервисов, не только geo-split
+- [x] **Light theme: проверить CSS fallback** ✅ — проверено, корректно
+- [x] **Status.sh: добавить geo domain и upstream DNS** ✅ — geo-split: `geo_zone` в JSON; dns-redirect: `upstream` + `name` в JSON
+- [x] **Fast polling для всех сервисов** ✅ — `startTogglePoller(serviceId, targetRunning)`: 1s fast-poll после toggle до совпадения `data.running === target` или timeout 10s. `stopAllTogglePollers()` при route change / card hide.
 
 ## 🟡 Средние
 
 - [x] **postinst: автоопределение listen IP** ✅ — `postinst` определяет IP через `ip route get 1 | awk src`, `sed -i` заменяет non-loopback listen в `nginx.conf`. Safe on upgrade (conffile preserved).
-- [ ] **Init script: AGENTS.md compliance** — `S80nginx-webui` использует `#!/bin/sh` (нужно `#!/opt/bin/sh`) и нет `set -eu`
-- [ ] **nginx: user root → privilege separation** — `config/nginx.conf:11` — io.popen() от root = RCE risk
+- [x] **Init script: AGENTS.md compliance** ✅ — `S80nginx-webui` использует `#!/opt/bin/sh` + `set -eu`
+- [x] ~~**nginx: user root → privilege separation**~~ — won't fix: LAN-only, всё на роутере от root, lua вызывает только фиксированные команды без user input. Пересмотреть при WAN-доступе.
 - [x] **inject.js: window.showInContent утечка** — заменено на addEventListener
-- [ ] **inject.js: setInterval pathname polling → popstate** — опрашивает pathname каждые 2с
-- [ ] **Toggle switches: подключить к backend** — сейчас cosmetic; API start/stop готов (`api-router.lua` action_routes), осталось подключить frontend
+- [x] **inject.js: setInterval pathname polling** ✅ — неактуально: MutationObserver покрывает DOM-изменения, 2с poll — одно сравнение строк (нулевая нагрузка), popstate не ловит pushState Angular Router
+- [x] **Toggle switches: подключить к backend** ✅ — inject.js wires toggle → `POST /api/{service}/start|stop`, обработка ответов, re-fetch
 - [ ] **Webui pluggable modules** — сделать архитектуру расширяемой (geo, smartdns как модули)
 
 ## 🟢 Мелкие / Cleanup
@@ -58,10 +58,4 @@
 - [x] **Dashboard card header: кликабельный заголовок** — `<span>` с hover underline, ведёт на /custom/
 - [x] **Dashboard card: drag-and-drop icon** — SVG sprite 6 dots
 - [x] **Dashboard card: expand details** — 4-square icon, expandable grid, localStorage persist
-- [ ] **iframe page card headers: `<span>` → ссылки** — `index.html:52,76,100`
-- [ ] **README.md: обновить** — описать inject.js, proxy architecture, packaging, logrotate, 502 page
-- [ ] **spike-update-plan.md: отметить батчи** — Batch 1–4 выполнены
-
-
-ок, остались мелочи, не скрывается карточка, карточка refrash при перносе (а не должна)
-и нужно убрать всё лишее из кода
+- [x] **iframe page card headers: `<span>` → ссылки** ✅ — устарело, iframe-архитектура удалена

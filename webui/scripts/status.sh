@@ -5,12 +5,11 @@
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/../config/config.sh"
 . "$SCRIPT_DIR/../../lib/common.sh"
 . "$SCRIPT_DIR/../../lib/status.sh"
 
-PIDFILE="/opt/var/run/nginx-webui.pid"
 CONF="/opt/keenetic-entware-extras/webui/config/nginx.conf"
-LISTEN_PORT="8080"
 BASE_URL="http://127.0.0.1:${LISTEN_PORT}"
 
 STATUS_OK=0

@@ -93,12 +93,12 @@ show_ports() {
   fi
 }
 
-# Run a single DNS test via main port 6053.
+# Run a single DNS test via main SmartDNS port.
 # Usage: dns_test <domain> <group_label>
 dns_test() {
   local domain="$1" label="$2"
   local result ip_line
-  result="$(dig +short +time=3 "$domain" @127.0.0.1 -p 6053 2>/dev/null || echo "FAILED")"
+  result="$(dig +short +time=3 "$domain" @127.0.0.1 -p "$SMARTDNS_PORT" 2>/dev/null || echo "FAILED")"
   # dig +short may return multiple lines; take first A-record
   ip_line="$(echo "$result" | head -1)"
   if [ -n "$ip_line" ] && [ "$ip_line" != "FAILED" ]; then

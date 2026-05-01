@@ -15,7 +15,6 @@ case "${1:-}" in
   start)
     echo "Starting smartdns-redirect..."
     "$SCRIPTS/dns-redirect.sh" start
-    mkdir -p "$(dirname "$PIDFILE")"
     echo $$ > "$PIDFILE"
     ;;
   stop)
@@ -26,7 +25,6 @@ case "${1:-}" in
   reload)
     echo "Reloading smartdns-redirect..."
     "$SCRIPTS/dns-redirect.sh" reload
-    mkdir -p "$(dirname "$PIDFILE")"
     echo $$ > "$PIDFILE"
     ;;
   restart)

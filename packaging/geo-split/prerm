@@ -14,6 +14,6 @@ if [ -f "$CRON_FILE" ]; then
     sed -i '/geo-split/d' "$CRON_FILE"
 fi
 
-# 4. Cleanup runtime data
-rm -f /opt/tmp/geo-routes.*.batch
-rm -f /opt/var/run/geo-split-table-*.filled
+# 4. Cleanup runtime data (tmpfs — cleared on reboot anyway, but clean up on uninstall)
+rm -f /tmp/geo-routes.*.batch
+rm -f /tmp/geo-split-table-*.filled

@@ -24,8 +24,8 @@ main() {
   ip route flush table "$SUBNET_ROUTE_TABLE" 2>/dev/null || true
 
   # Remove table fill stamp files (freshness tracking)
-  rm -f "/opt/var/run/geo-split-table-${DOMAIN_ROUTE_TABLE}.filled"
-  rm -f "/opt/var/run/geo-split-table-${SUBNET_ROUTE_TABLE}.filled"
+  rm -f "${TABLE_STAMP_PREFIX}${DOMAIN_ROUTE_TABLE}.filled"
+  rm -f "${TABLE_STAMP_PREFIX}${SUBNET_ROUTE_TABLE}.filled"
 
   log "Rules detached (tables $DOMAIN_ROUTE_TABLE,$SUBNET_ROUTE_TABLE flushed, iif: $ROUTE_IN)"
 }

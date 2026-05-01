@@ -1,7 +1,8 @@
 Package: keenetic-entware-extras
-Version: 0.7.1
+Version: 0.8.1
 Architecture: all
 Maintainer: 0xkee
+Depends: cron
 Description: Shared shell libraries and CLI tools for keenetic-entware-extras.
  Provides common.sh (logging, validation, router IP detection), lists.sh
  (list processing with @include support, deduplication), ip.sh (CIDR

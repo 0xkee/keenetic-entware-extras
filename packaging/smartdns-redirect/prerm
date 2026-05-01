@@ -16,5 +16,7 @@ if [ -f "$CRON_FILE" ]; then
     sed -i '/smartdns-redirect/d' "$CRON_FILE"
 fi
 
-# 4. Restart crond
-[ -x /opt/etc/init.d/S10cron ] && /opt/etc/init.d/S10cron restart
+# 4. Restart crond to drop removed jobs
+if [ -x /opt/etc/init.d/S10cron ]; then
+    /opt/etc/init.d/S10cron restart 2>/dev/null || true
+fi

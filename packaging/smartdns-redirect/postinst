@@ -21,7 +21,9 @@ fi
 } >> "$CRON_FILE"
 
 # 3. Restart crond to pick up changes
-[ -x /opt/etc/init.d/S10cron ] && /opt/etc/init.d/S10cron restart
+if [ -x /opt/etc/init.d/S10cron ]; then
+    /opt/etc/init.d/S10cron restart 2>/dev/null || true
+fi
 
 # 4. Start service (|| true: don't fail install if upstream DNS not ready)
 if [ -x /opt/etc/init.d/S39smartdns-redirect ]; then

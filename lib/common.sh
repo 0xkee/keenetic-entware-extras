@@ -63,7 +63,7 @@ file_mtime() {
 # Returns: 0 if file exists and is younger than max_age, 1 otherwise
 is_cache_fresh() {
   local file="$1" max_age="$2"
-  [ -f "$file" ] || return 1
+  [ -s "$file" ] || return 1  # -s: exists AND non-empty (0-byte cache = stale)
   local file_age
   file_age=$(( $(date +%s) - $(file_mtime "$file") ))
   [ "$file_age" -lt "$max_age" ]

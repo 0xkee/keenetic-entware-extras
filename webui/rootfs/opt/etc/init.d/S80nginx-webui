@@ -40,24 +40,30 @@ start() {
 
 stop() {
     printf " Stopping %s... " "$DESC"
-    if ! is_running; then
-        echo "not running."
-        rm -rf /tmp/ew-webui
-        return 0
-    fi
-    $NGINX -c "$CONF" -s stop 2>&1
-    COUNTER=0
-    while is_running && [ "$COUNTER" -le 10 ]; do
-        sleep 1
-        COUNTER=$((COUNTER + 1))
-    done
     if is_running; then
-        echo "failed, killing."
-        kill -9 "$(cat "$PIDFILE")" 2>/dev/null
-        rm -f "$PIDFILE"
+        $NGINX -c "$CONF" -s stop 2>&1
+        COUNTER=0
+        while is_running && [ "$COUNTER" -le 10 ]; do
+            sleep 1
+            COUNTER=$((COUNTER + 1))
+        done
+        if is_running; then
+            echo "failed, killing PID."
+            kill -9 "$(cat "$PIDFILE")" 2>/dev/null
+        else
+            echo "done."
+        fi
     else
-        echo "done."
+        echo "not running (no PID)."
     fi
+    # Kill any orphaned nginx processes bound to our config
+    # (handles stale/missing PID file → port conflict on upgrade)
+    if pgrep -f "nginx.*$CONF" >/dev/null 2>&1; then
+        echo " Killing orphaned nginx-webui process(es)..."
+        pkill -f "nginx.*$CONF" 2>/dev/null || true
+        sleep 1
+    fi
+    rm -f "$PIDFILE"
     # Clean up tmpfs
     rm -rf /tmp/ew-webui
 }

@@ -21,7 +21,9 @@ fi
 } >> "$CRON_FILE"
 
 # 3. Restart crond to pick up changes
-[ -x /opt/etc/init.d/S10cron ] && /opt/etc/init.d/S10cron restart
+if [ -x /opt/etc/init.d/S10cron ]; then
+    /opt/etc/init.d/S10cron restart 2>/dev/null || true
+fi
 
 echo "geo-split installed. Edit config: $INSTALL_DIR/config/config.sh"
 echo "Start: /opt/etc/init.d/S99geo-split start"

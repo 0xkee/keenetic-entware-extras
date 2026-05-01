@@ -152,3 +152,10 @@ json_kv_bool() {
     printf '"%s":false' "$1"
   fi
 }
+
+# Emit a JSON key with check status: "key":"status"
+# Args: $1 - key, $2 - status: "ok"|"warn"|"fail"
+# stdout: "key":"status"
+json_check() {
+  printf '"%s":"%s"' "$1" "$2"
+}

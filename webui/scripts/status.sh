@@ -59,18 +59,26 @@ show_lua_module() {
   fi
 }
 
-# Show listening port status.
+# Show listening port status (actual addresses from netstat/ss).
 show_port() {
-  local listening=""
+  local lines=""
   if command -v netstat >/dev/null 2>&1; then
-    listening="$(netstat -tlnp 2>/dev/null | grep ":${LISTEN_PORT} " | head -1)" || true
+    lines="$(netstat -tlnp 2>/dev/null | grep ":${LISTEN_PORT} " | awk '{print $4}' | sort -u)"
   elif command -v ss >/dev/null 2>&1; then
-    listening="$(ss -tlnp 2>/dev/null | grep ":${LISTEN_PORT} " | head -1)" || true
+    lines="$(ss -tlnp 2>/dev/null | grep ":${LISTEN_PORT} " | awk '{print $4}' | sort -u)"
   fi
-  if [ -n "$listening" ]; then
-    echo "    Port:        :${LISTEN_PORT} listening ✓"
+  if [ -n "$lines" ]; then
+    local first=1
+    echo "$lines" | while IFS= read -r addr; do
+      if [ "$first" = 1 ]; then
+        echo "    Ports:       $addr ✓"
+        first=0
+      else
+        echo "                 $addr ✓"
+      fi
+    done
   else
-    echo "    Port:        :${LISTEN_PORT} not listening ✗"; STATUS_OK=1
+    echo "    Ports:       :${LISTEN_PORT} not listening ✗"; STATUS_OK=1
   fi
 }
 
@@ -231,6 +239,19 @@ json_output() {
   json_kv_num "uptime" "${uptime_seconds_val:-0}"
   printf ','
   json_kv "version" "${version_val:-unknown}"
+  printf '},'
+
+  # Checks section: "ok"|"warn"|"fail" per field
+  printf '"checks":{'
+  json_check "process" "$(if [ "$running" = "true" ]; then printf ok; else printf fail; fi)"
+  printf ','
+  json_check "config" "$(if [ "$config_ok_val" = 0 ]; then printf ok; else printf fail; fi)"
+  printf ','
+  json_check "lua_module" "$(if [ "$lua_module_ok_val" = 0 ]; then printf ok; else printf fail; fi)"
+  printf ','
+  json_check "http" "$(if [ "$http_ok_val" = 0 ]; then printf ok; else printf fail; fi)"
+  printf ','
+  json_check "logrotate" "$(if [ "$logrotate_ok_val" = 0 ]; then printf ok; else printf warn; fi)"
   printf '}}\n'
 }
 

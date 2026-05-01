@@ -58,10 +58,8 @@
 ### Backlog (minor)
 
 - [ ] **SmartDNS TCP on :6053** — в recon обнаружено что SmartDNS слушает только UDP. TCP-редирект в iptables безвреден но бесполезен. Либо добавить `bind-tcp 127.0.0.1:6053` в [`smartdns-conf-ru-split/config/smartdns.conf`](../smartdns-conf-ru-split/config/smartdns.conf), либо убрать TCP-правило из `dns-redirect.sh`. Сейчас — оставлено TCP-правило для forward-compat.
-- [ ] **Deploy на router-2** — второй роутер.
 - [x] ~~Uptime через pidfile~~ — поведение через PIDFILE оставлено как есть (сброс при reload — acceptable).
 - [ ] **AGH / Unbound preset configs** — в `config/` добавить закомментированные примеры `UPSTREAM_PORT=5353 WATCHDOG_SERVICE=S80adguardhome` и `UPSTREAM_PORT=5335 WATCHDOG_SERVICE=S60unbound`.
-- [ ] **router-2 deploy** через `opkg install`.
 
 ### Documentation
 

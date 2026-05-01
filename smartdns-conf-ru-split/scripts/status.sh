@@ -205,6 +205,15 @@ json_output() {
   json_kv_num "uptime" "${uptime_seconds_val:-0}"
   printf ','
   json_kv "version" "${version_val:-unknown}"
+  printf '},'
+
+  # Checks section: "ok"|"warn"|"fail" per field
+  printf '"checks":{'
+  json_check "process" "$(if [ "$running" = "true" ]; then printf ok; else printf fail; fi)"
+  printf ','
+  json_check "ports" "$(if [ -n "$ports_val" ]; then printf ok; else printf fail; fi)"
+  printf ','
+  json_check "config" "$(if [ -f "$CONF" ]; then printf ok; else printf fail; fi)"
   printf '}}\n'
 }
 

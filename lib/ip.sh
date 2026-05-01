@@ -59,6 +59,14 @@ resolve_target_interface() {
   echo "$iface"
 }
 
+# Check if a routing table already has routes loaded.
+# Returns: 0 if table has at least one route, 1 if empty.
+# Args: $1 - table number
+is_table_filled() {
+  local table="$1"
+  ip route show table "$table" 2>/dev/null | grep -q .
+}
+
 # Flush and fill a routing table from a list file via ip-full -batch.
 # Falls back to BusyBox ip loop if ip-full is not available.
 # Touches stamp file /opt/var/run/geo-split-table-${table}.filled on success

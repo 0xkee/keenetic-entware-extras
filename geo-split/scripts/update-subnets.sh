@@ -187,7 +187,11 @@ main() {
     _fill_subnet_table
     return 0  # data updated + table filled
   fi
-  # Cache fresh — still fill the table (may be empty after restart)
+  # Cache fresh — only refill if table is empty (e.g. after restart)
+  if is_table_filled "$SUBNET_ROUTE_TABLE"; then
+    log "Subnet cache fresh, table $SUBNET_ROUTE_TABLE already filled — skipping"
+    return 0
+  fi
   _fill_subnet_table
   return 0
 }

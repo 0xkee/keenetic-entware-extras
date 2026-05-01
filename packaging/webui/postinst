@@ -47,6 +47,12 @@ fi
 cp "$INSTALL_DIR/rootfs/opt/etc/init.d/S80nginx-webui" "$S80"
 chmod 755 "$S80"
 
+# 4a. Disable default Entware nginx (port 80 conflicts with Keenetic stock web UI)
+if [ -x /opt/etc/init.d/S80nginx ]; then
+    /opt/etc/init.d/S80nginx stop 2>/dev/null || true
+    chmod -x /opt/etc/init.d/S80nginx
+fi
+
 # 5. (Re)start nginx-webui
 "$S80" restart || true
 

@@ -29,12 +29,12 @@
     var activeItem = null;
     var insertingIframe = false;
     var dashboardTimer = null;
-    var GEO_FAST_POLL = 1000;  // 1s when background update is running
+    var TOGGLE_FAST_POLL = 1000;      // 1s fast polling after toggle / background update (ms)
+    var TOGGLE_POLL_TIMEOUT = 10000;  // Max fast-poll duration after toggle (ms)
     var ROUTE_POLL_INTERVAL = 2000;   // Route change detection interval (ms)
     var DRAG_SETTLE_DELAY = 300;      // Delay after drag to let CDK animation finish (ms)
     var RESTORE_OBSERVER_DELAY = 3000; // Delay before setting up content restore observer (ms)
     var IFRAME_INSERT_GUARD = 100;    // Guard delay after iframe insertion (ms)
-    var TOGGLE_REFRESH_DELAY = 500;   // Delay before re-fetching after service toggle (ms)
     /** Ticker for live uptime/freshness counters — updates dashboard chip DOM. */
     var ticker = EW.createTicker(function(id, currentSeconds) {
         var row = document.getElementById('ew-dash-' + id);
@@ -49,7 +49,7 @@
     /** Fast poller for geo-split during background updates. */
     var geoPoller = EW.createPoller(
         function() { fetchSingleServiceStatus('geo-split'); },
-        GEO_FAST_POLL,
+        TOGGLE_FAST_POLL,
         function() {
             var card = document.querySelector('.ew-dash-card');
             if (card) {
@@ -60,6 +60,9 @@
             }
         }
     );
+
+    /** Per-service toggle pollers — fast-poll until state settles or timeout. */
+    var togglePollers = {};
 
     // ═══════════════════════════════════════════════════════════════════
     // §2. RECONCILER — Angular CDK row patching
@@ -543,6 +546,7 @@
         if (svc.id !== 'webui') {
             cb.addEventListener('change', function() {
                 var action = cb.checked ? 'start' : 'stop';
+                var targetRunning = cb.checked;
                 cb.disabled = true;
                 bar.style.opacity = '0.5';
                 fetch('/api/' + svc.id + '/' + action, { method: 'POST' })
@@ -550,8 +554,11 @@
                     .then(function(data) {
                         cb.disabled = false;
                         bar.style.opacity = '';
-                        if (!data.ok) cb.checked = !cb.checked;
-                        setTimeout(fetchDashboardStatuses, TOGGLE_REFRESH_DELAY);
+                        if (!data.ok) {
+                            cb.checked = !cb.checked;
+                        } else {
+                            startTogglePoller(svc.id, targetRunning);
+                        }
                     })
                     .catch(function() {
                         cb.disabled = false;
@@ -638,6 +645,7 @@
             dashboardTimer = null;
         }
         geoPoller.stop();
+        stopAllTogglePollers();
         ticker.stop();
     }
 
@@ -646,16 +654,18 @@
      * Uses EW.parseDetails() for parsing, wraps entries in grid cells.
      * @param {Object} details - data.details from status API
      * @param {boolean} isRunning - whether the service is running
+     * @param {Object} [checks] - checks map from backend (ok/warn/fail per key)
      * @returns {string}
      */
-    function renderDetailsGrid(details, isRunning) {
+    function renderDetailsGrid(details, isRunning, checks) {
         if (!details) return '';
-        var entries = EW.parseDetails(details, { skipKeys: DETAILS_SKIP_KEYS, isRunning: isRunning });
+        var entries = EW.parseDetails(details, { skipKeys: DETAILS_SKIP_KEYS, isRunning: isRunning, checks: checks });
         var html = '';
         for (var i = 0; i < entries.length; i++) {
             var e = entries[i];
             if (e.isSpacer) { html += '<div class="ew-detail-item"></div>'; continue; }
-            var valStyle = e.isError ? ' style="color:var(--error,#f44336)"' : '';
+            var valStyle = e.isError ? ' style="color:var(--error,#f44336)"'
+                : e.isWarning ? ' style="color:var(--status-caution-text,#ffbb57)"' : '';
             var val = e.value;
             if (e.lines) {
                 val = e.lines.map(function(l) {
@@ -679,7 +689,7 @@
 
     /**
      * Fetch status for a single service and update its row.
-     * Used by geo-split fast polling (1s interval during background updates).
+     * Used by fast polling (geo-split background updates, toggle polling).
      * @param {string} serviceId - SERVICE_APIS entry id
      */
     function fetchSingleServiceStatus(serviceId) {
@@ -695,7 +705,66 @@
     }
 
     /**
-     * Check if any detail field is boolean false.
+     * Start fast polling for a service after toggle until state settles.
+     * Polls every TOGGLE_FAST_POLL ms; stops when running matches target or TOGGLE_POLL_TIMEOUT.
+     * @param {string} serviceId - SERVICE_APIS entry id
+     * @param {boolean} targetRunning - expected state after toggle
+     */
+    function startTogglePoller(serviceId, targetRunning) {
+        stopTogglePoller(serviceId);
+        var svc = null;
+        for (var i = 0; i < EW.SERVICE_APIS.length; i++) {
+            if (EW.SERVICE_APIS[i].id === serviceId) { svc = EW.SERVICE_APIS[i]; break; }
+        }
+        if (!svc) return;
+
+        var startTime = Date.now();
+        var timerId = setInterval(function() {
+            // Timeout guard
+            if (Date.now() - startTime > TOGGLE_POLL_TIMEOUT) {
+                stopTogglePoller(serviceId);
+                return;
+            }
+            fetch(svc.api, { cache: 'no-store' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    applyServiceData(svc, data);
+                    // Stop when state matches target
+                    if (data.running === targetRunning) {
+                        stopTogglePoller(serviceId);
+                    }
+                })
+                .catch(function() {
+                    stopTogglePoller(serviceId);
+                });
+        }, TOGGLE_FAST_POLL);
+
+        togglePollers[serviceId] = timerId;
+    }
+
+    /**
+     * Stop fast polling for a specific service.
+     * @param {string} serviceId
+     */
+    function stopTogglePoller(serviceId) {
+        if (togglePollers[serviceId]) {
+            clearInterval(togglePollers[serviceId]);
+            delete togglePollers[serviceId];
+        }
+    }
+
+    /**
+     * Stop all active toggle pollers (used on route change or card hide).
+     */
+    function stopAllTogglePollers() {
+        for (var id in togglePollers) {
+            clearInterval(togglePollers[id]);
+        }
+        togglePollers = {};
+    }
+
+    /**
+     * Check if any detail field is boolean false (fallback when checks absent).
      * @param {Object} details
      * @returns {boolean}
      */
@@ -709,16 +778,40 @@
     }
 
     /**
+     * Determine fail/warn from checks map.
+     * @param {Object} checks - checks map {key: "ok"|"warn"|"fail"}
+     * @returns {{hasFail: boolean, hasWarn: boolean}}
+     */
+    function checksSummary(checks) {
+        var hasFail = false, hasWarn = false;
+        if (!checks) return { hasFail: false, hasWarn: false };
+        var keys = Object.keys(checks);
+        for (var i = 0; i < keys.length; i++) {
+            if (checks[keys[i]] === 'fail') hasFail = true;
+            else if (checks[keys[i]] === 'warn') hasWarn = true;
+        }
+        return { hasFail: hasFail, hasWarn: hasWarn };
+    }
+
+    /**
      * Build status chip text from structured data.
-     * Returns "caution" state if running but any detail is boolean false.
+     * Returns "caution" state if running but any check is fail/warn.
+     * Uses data.checks if available, falls back to detail field === false.
      * @param {Object} data - full API response
      * @returns {{state: string, text: string}}
      */
     function parseServiceStatus(data) {
         var state = data.running ? 'running' : 'stopped';
-        // If running but at least one detail field is false → caution (yellow)
-        if (data.running && hasFailField(data.details)) {
-            state = 'caution';
+        // Determine chip state from checks or fallback
+        if (data.running) {
+            if (data.checks) {
+                var cs = checksSummary(data.checks);
+                if (cs.hasFail || cs.hasWarn) {
+                    state = 'caution';
+                }
+            } else if (hasFailField(data.details)) {
+                state = 'caution';
+            }
         }
         // Services with "enabled" field: running but disabled → "default mode" (yellow)
         if (data.running && typeof data.enabled === 'boolean' && !data.enabled) {
@@ -762,7 +855,7 @@
 
         // Update expandable details grid
         if (detailsEl) {
-            detailsEl.innerHTML = renderDetailsGrid(data.details, data.running);
+            detailsEl.innerHTML = renderDetailsGrid(data.details, data.running, data.checks);
         }
 
         // Update uptime baseline
@@ -922,6 +1015,7 @@
                 dashboardTimer = null;
             }
             geoPoller.stop();
+            stopAllTogglePollers();
             ticker.stop();
             // Clear our markers — let Angular manage its own rows
             var marked = document.querySelectorAll('[' + EW_ATTR + ']');

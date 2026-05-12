@@ -8,6 +8,7 @@ set -eu
 INSTALL_DIR="/opt/keenetic-entware-extras/webui"
 _CONFIG_DIR="$INSTALL_DIR/config"
 # shellcheck source=/dev/null
+. /opt/keenetic-entware-extras/lib/common.sh
 . "$_CONFIG_DIR/defaults.conf"
 [ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
 
@@ -30,11 +31,11 @@ start() {
     fi
     # Self-healing: generate listen.conf if missing (e.g. after spike deploy)
     if [ ! -f "$_CONFIG_DIR/listen.conf" ]; then
-        # shellcheck source=/dev/null
-        . /opt/keenetic-entware-extras/lib/common.sh
         _IP="$(detect_router_ip)"
         echo "listen ${_IP:-0.0.0.0}:8080;" > "$_CONFIG_DIR/listen.conf"
     fi
+    # Clear stale PID (Keenetic /tmp survives firmware updates)
+    rm -f "$PIDFILE"
     # Patch stock UI into tmpfs
     "$PATCH"
     $NGINX -c "$CONF" 2>&1

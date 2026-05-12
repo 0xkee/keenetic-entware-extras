@@ -9,14 +9,16 @@ set -eu
 INSTALL_DIR="/opt/keenetic-entware-extras/smartdns-redirect"
 SCRIPTS="$INSTALL_DIR/scripts"
 _CONFIG_DIR="$INSTALL_DIR/config"
+. /opt/keenetic-entware-extras/lib/common.sh
 . "$_CONFIG_DIR/defaults.conf"
 [ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
 
 case "${1:-}" in
   start)
+    rm -f "$PIDFILE"
     echo "Starting smartdns-redirect..."
     "$SCRIPTS/dns-redirect.sh" start
-    echo $$ > "$PIDFILE"
+    update_pid_file "$PIDFILE"
     ;;
   stop)
     echo "Stopping smartdns-redirect..."
@@ -26,7 +28,7 @@ case "${1:-}" in
   reload)
     echo "Reloading smartdns-redirect..."
     "$SCRIPTS/dns-redirect.sh" reload
-    echo $$ > "$PIDFILE"
+    update_pid_file "$PIDFILE"
     ;;
   restart)
     "$0" stop

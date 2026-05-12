@@ -28,6 +28,7 @@
 - [x] ~~возможно злой баг: таблицы презаполняются при смене состояния любого интерейса~~ — **Исправлено (2026-04-17):** `ip route show default` (iproute2-entware 4.4.0-11) возвращал ВСЕ маршруты main-таблицы вместо только default → false positives для br0/nwg0/br1. Фикс: `ip route | grep "^default"` в [`ndm-hook.sh:47`](scripts/ndm-hook.sh:47) и [`lib/ip.sh:41`](../lib/ip.sh:41)
 - [x] ~~status: freshness заполнения route tables~~ — **Сделано (2026-04-17):** [`lib/ip.sh`](../lib/ip.sh:68) `fill_routes_batch()` пишет stamp-файл `${TABLE_STAMP_PREFIX}${table}.filled` (tmpfs). [`status.sh`](scripts/status.sh:63) показывает "filled Xm ago ✓". Stamp-файлы удаляются в [`detach-rules.sh`](scripts/detach-rules.sh:25) и [`prerm`](../packaging/geo-split/prerm:17)
 - [x] ~~postinst: автоматический restart после upgrade~~ — **Сделано (2026-04-17):** [`postinst`](../packaging/geo-split/postinst:29) безусловно вызывает `S99geo-split start` после setup cron/hook. opkg не рестартует сервисы сам — только через prerm/postinst скрипты.
+- [x] ~~важное - уйти от крона (или рандомайз интервал чекинга)~~ — **Сделано (2026-05-05):** postinst генерирует random offset 0–14 при install → cron `OFFSET-59/15` вместо `*/15`. Устраняет thundering herd на ipdeny.com.
 ---
 
 ## Выполнено

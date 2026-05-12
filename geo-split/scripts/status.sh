@@ -105,14 +105,17 @@ check_domain_sources() {
   fi
 }
 
-# Sets: _ck_cron_ok (0=ok, 1=fail), _ck_cron_count
+# Sets: _ck_cron_ok (0=ok, 1=fail), _ck_cron_count, _ck_cron_shift
 check_cron() {
   _ck_cron_ok=1
   _ck_cron_count=0
+  _ck_cron_shift=""
   if [ -f "/opt/etc/crontab" ]; then
     _ck_cron_count=$(grep -c '^[^#]*geo-split' /opt/etc/crontab 2>/dev/null) || _ck_cron_count=0
     if [ "$_ck_cron_count" -gt 0 ]; then
       _ck_cron_ok=0
+      # Extract offset from "N-59/15" minute field (N = shift)
+      _ck_cron_shift=$(grep '^[^#]*geo-split' /opt/etc/crontab 2>/dev/null | head -1 | awk '{split($1,a,"-"); print a[1]}')
     else
       STATUS_OK=1
     fi
@@ -282,7 +285,9 @@ show_cron() {
     return
   fi
   if [ "$_ck_cron_count" -gt 0 ]; then
-    echo "    Cron:        $_ck_cron_count job(s) ✓"
+    local _shift_info=""
+    [ -n "$_ck_cron_shift" ] && _shift_info=" (shift ${_ck_cron_shift}m)"
+    echo "    Cron:        $_ck_cron_count job(s)${_shift_info} ✓"
   else
     echo "    Cron:        ✗ (no geo-split jobs)"
   fi

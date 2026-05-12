@@ -28,6 +28,13 @@ start() {
         echo "already running."
         return 0
     fi
+    # Self-healing: generate listen.conf if missing (e.g. after spike deploy)
+    if [ ! -f "$_CONFIG_DIR/listen.conf" ]; then
+        # shellcheck source=/dev/null
+        . /opt/keenetic-entware-extras/lib/common.sh
+        _IP="$(detect_router_ip)"
+        echo "listen ${_IP:-0.0.0.0}:8080;" > "$_CONFIG_DIR/listen.conf"
+    fi
     # Patch stock UI into tmpfs
     "$PATCH"
     $NGINX -c "$CONF" 2>&1
@@ -42,7 +49,7 @@ start() {
 stop() {
     printf " Stopping %s... " "$DESC"
     if is_running; then
-        $NGINX -c "$CONF" -s stop 2>&1
+        $NGINX -c "$CONF" -s stop 2>&1 || true
         COUNTER=0
         while is_running && [ "$COUNTER" -le 10 ]; do
             sleep 1
@@ -51,17 +58,21 @@ stop() {
         if is_running; then
             echo "failed, killing PID."
             kill -9 "$(cat "$PIDFILE")" 2>/dev/null
+            sleep 1
         else
             echo "done."
         fi
     else
         echo "not running (no PID)."
     fi
-    # Kill any orphaned nginx processes bound to our config
-    # (handles stale/missing PID file → port conflict on upgrade)
-    if pgrep -f "nginx.*$CONF" >/dev/null 2>&1; then
-        echo " Killing orphaned nginx-webui process(es)..."
-        pkill -f "nginx.*$CONF" 2>/dev/null || true
+    # Kill any orphaned nginx processes holding our port.
+    # Can't use cmdline match for workers (they lack $CONF in args and
+    # "nginx: worker" pattern would hit stock Keenetic nginx workers).
+    # Port-based detection is safe — only our instance uses 8080.
+    _PORT_PIDS=$(netstat -tlnp 2>/dev/null | awk '/:8080 /{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+\//) {split($i,a,"/"); print a[1]}}' | sort -u)
+    if [ -n "$_PORT_PIDS" ]; then
+        echo " Killing orphaned nginx-webui process(es) on port 8080..."
+        echo "$_PORT_PIDS" | xargs kill -9 2>/dev/null || true
         sleep 1
     fi
     rm -f "$PIDFILE"

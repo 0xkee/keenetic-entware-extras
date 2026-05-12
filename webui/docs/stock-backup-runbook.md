@@ -71,3 +71,4 @@ echo "Added ${JS_HASH} → v1"
 | 5.0.8 | aarch64 | NC-4110 | `XXXXXXXX` | `J4CVWJOW` | `stock-backup-5.0.8-aarch64/` |
 | 5.0.8 | mipsel | KN-1011 | `4QPHZXFY` | `D5VNMMPD` | `stock-backup-5.0.8-mipsel/` |
 | 5.0.10 | mipsel | KN-2310 | `TXLLNFBH` | `DKYWR66I` | `stock-backup-5.0.10-mipsel/` |
+| 5.0.11 | mipsel | KN-1011 | `JELMZ7TJ` | `DKYWR66I` | `stock-backup-5.0.11-mipsel/` |

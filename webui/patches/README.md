@@ -60,6 +60,7 @@ ssh root@router /opt/etc/init.d/S80nginx-webui restart
 | `XXXXXXXX` | `J4CVWJOW` | KeeneticOS 5.0.8 | aarch64 | v1 |
 | `4QPHZXFY` | `D5VNMMPD` | KeeneticOS 5.0.8 | mipsel | v1 |
 | `TXLLNFBH` | `DKYWR66I` | KeeneticOS 5.0.10 | mipsel | v1 |
+| `JELMZ7TJ` | `DKYWR66I` | KeeneticOS 5.0.11 | mipsel | v1 |
 
 ## Patch set contract
 

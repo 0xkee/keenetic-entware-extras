@@ -12,6 +12,10 @@ _CONFIG_DIR="$(cd "$SCRIPT_DIR/../config" && pwd)"
 . "$_CONFIG_DIR/defaults.conf"
 [ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
 
+# Cleanup temp files on exit (interrupted resolution)
+_cleanup() { rm -f "${DOMAINS_CACHE_FILE}.tmp"; }
+trap _cleanup EXIT
+
 # Filter out private/special IPs from stdin
 filter_private_ips() {
   grep -vE \

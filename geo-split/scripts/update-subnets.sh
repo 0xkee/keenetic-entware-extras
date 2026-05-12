@@ -13,6 +13,10 @@ _CONFIG_DIR="$(cd "$SCRIPT_DIR/../config" && pwd)"
 . "$_CONFIG_DIR/defaults.conf"
 [ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
 
+# Cleanup temp files on exit (interrupted downloads, aggregation intermediates)
+_cleanup() { rm -f "${SUBNET_LIST_FILE}.tmp" "${SUBNET_LIST_FILE}.tmp.agg"; }
+trap _cleanup EXIT
+
 # Resolve loader script path and verify it exists
 resolve_loader() {
   local loader="$SCRIPT_DIR/../loaders/${SUBNET_LOADER}.sh"

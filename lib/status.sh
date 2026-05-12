@@ -39,17 +39,19 @@ status_check_process() {
   fi
 }
 
-# Check uptime from pidfile mtime.
+# Check uptime from /proc/<pid> (process start) or pidfile mtime (fallback).
 # Args: $1 - pidfile path
 # Sets: _st_uptime_seconds (0 if not available)
 status_check_uptime() {
-  local pidfile="$1" mtime
+  local pidfile="$1" mtime=""
   _st_uptime_seconds=0
-  if [ -f "$pidfile" ]; then
+  if [ -n "${_st_pid:-}" ] && [ -d "/proc/$_st_pid" ]; then
+    mtime="$(stat -t "/proc/$_st_pid" 2>/dev/null | awk '{print $13}')"
+  elif [ -f "$pidfile" ]; then
     mtime="$(file_mtime "$pidfile")"
-    if [ -n "$mtime" ] && [ "$mtime" -gt 0 ] 2>/dev/null; then
-      _st_uptime_seconds=$(( $(date +%s) - mtime ))
-    fi
+  fi
+  if [ -n "$mtime" ] && [ "$mtime" -gt 0 ] 2>/dev/null; then
+    _st_uptime_seconds=$(( $(date +%s) - mtime ))
   fi
 }
 

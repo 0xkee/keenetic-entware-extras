@@ -100,6 +100,14 @@ format_size_kb() {
   }"
 }
 
+# Non-daemon runtime PID marker.
+# /tmp on Keenetic persists across firmware updates — explicit clear keeps status accurate.
+# Usage: pid_file <path>
+update_pid_file() {
+  rm -f "$1"
+  echo $$ > "$1"
+}
+
 # Read installed package version via opkg.
 # Uses 'opkg list-installed' (fast, reliable on Entware) instead of
 # 'opkg info' which may return empty or stale data.

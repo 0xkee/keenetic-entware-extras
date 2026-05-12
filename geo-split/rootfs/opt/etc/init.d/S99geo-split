@@ -10,11 +10,13 @@ INSTALL_DIR="/opt/keenetic-entware-extras/geo-split"
 SCRIPTS="$INSTALL_DIR/scripts"
 _CONFIG_DIR="$INSTALL_DIR/config"
 # shellcheck source=/dev/null
+. /opt/keenetic-entware-extras/lib/common.sh
 . "$_CONFIG_DIR/defaults.conf"
 [ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
 
 case "${1:-}" in
   start)
+    rm -f "$PIDFILE"
     echo "Starting geo-split..."
     # Parallel: subnets and domains use separate temp files, batch files and tables
     # (no conflicts after table separation refactor)
@@ -23,8 +25,7 @@ case "${1:-}" in
     wait
     # Connect LAN to tables
     "$SCRIPTS/attach-rules.sh"
-    # Write PID file (mtime used for uptime tracking)
-    echo $$ > "$PIDFILE"
+    update_pid_file "$PIDFILE"
     ;;
   stop)
     echo "Stopping geo-split..."

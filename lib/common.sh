@@ -101,11 +101,12 @@ format_size_kb() {
 }
 
 # Non-daemon runtime PID marker.
-# /tmp on Keenetic persists across firmware updates — explicit clear keeps status accurate.
-# Usage: pid_file <path>
+# Writes: line 1 = PID, line 2 = system uptime seconds (boot-relative).
+# Line 2 enables clock-skew-immune uptime calculation in status_check_uptime().
+# Args: $1 - pidfile path
 update_pid_file() {
   rm -f "$1"
-  echo $$ > "$1"
+  printf '%s\n%s\n' "$$" "$(awk '{printf "%d", $1}' /proc/uptime)" > "$1"
 }
 
 # Read installed package version via opkg.

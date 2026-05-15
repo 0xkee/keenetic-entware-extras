@@ -39,19 +39,54 @@ status_check_process() {
   fi
 }
 
-# Check uptime from /proc/<pid> (process start) or pidfile mtime (fallback).
+# Check uptime from /proc/<pid>/stat (monotonic) or pidfile stored uptime.
+# Uses boot-relative time to avoid clock-skew issues (NTP sync after boot
+# can make wall-clock timestamps appear days off on routers without RTC battery).
 # Args: $1 - pidfile path
 # Sets: _st_uptime_seconds (0 if not available)
 status_check_uptime() {
-  local pidfile="$1" mtime=""
+  local pidfile="$1"
   _st_uptime_seconds=0
-  if [ -n "${_st_pid:-}" ] && [ -d "/proc/$_st_pid" ]; then
-    mtime="$(stat -t "/proc/$_st_pid" 2>/dev/null | awk '{print $13}')"
-  elif [ -f "$pidfile" ]; then
-    mtime="$(file_mtime "$pidfile")"
+
+  # Method 1: Real process — /proc/<pid>/stat field 22 (starttime in jiffies).
+  # Monotonic, immune to wall-clock skew.
+  if [ -n "${_st_pid:-}" ] && [ -f "/proc/$_st_pid/stat" ]; then
+    local starttime uptime_sec
+    starttime=$(awk '{print $22}' "/proc/$_st_pid/stat" 2>/dev/null) || starttime=""
+    uptime_sec=$(awk '{printf "%d", $1}' /proc/uptime 2>/dev/null) || uptime_sec=""
+    if [ -n "$starttime" ] && [ -n "$uptime_sec" ] && [ "$uptime_sec" -gt 0 ] 2>/dev/null; then
+      _st_uptime_seconds=$((uptime_sec - starttime / 100))
+      [ "$_st_uptime_seconds" -lt 0 ] && _st_uptime_seconds=0 || true
+      return 0
+    fi
   fi
-  if [ -n "$mtime" ] && [ "$mtime" -gt 0 ] 2>/dev/null; then
-    _st_uptime_seconds=$(( $(date +%s) - mtime ))
+
+  # Method 2: Marker pidfile with stored boot-relative uptime on line 2.
+  # Written by update_pid_file() — immune to clock skew.
+  if [ -f "$pidfile" ]; then
+    local stored_uptime uptime_sec
+    stored_uptime=$(sed -n '2p' "$pidfile" 2>/dev/null) || stored_uptime=""
+    if [ -n "$stored_uptime" ] && [ "$stored_uptime" -gt 0 ] 2>/dev/null; then
+      uptime_sec=$(awk '{printf "%d", $1}' /proc/uptime 2>/dev/null) || uptime_sec=""
+      if [ -n "$uptime_sec" ]; then
+        _st_uptime_seconds=$((uptime_sec - stored_uptime))
+        [ "$_st_uptime_seconds" -lt 0 ] && _st_uptime_seconds=0 || true
+        return 0
+      fi
+    fi
+    # Method 3: Legacy fallback — pidfile mtime (subject to clock skew on
+    # routers with bad RTC; kept for backward compat with old-format pidfiles).
+    # Cap at system uptime: a service cannot run longer than the OS.
+    local mtime sys_up
+    mtime="$(file_mtime "$pidfile")" || mtime=""
+    if [ -n "$mtime" ] && [ "$mtime" -gt 0 ] 2>/dev/null; then
+      _st_uptime_seconds=$(( $(date +%s) - mtime ))
+      [ "$_st_uptime_seconds" -lt 0 ] && _st_uptime_seconds=0 || true
+      sys_up=$(awk '{printf "%d", $1}' /proc/uptime 2>/dev/null) || sys_up=""
+      if [ -n "$sys_up" ] && [ "$_st_uptime_seconds" -gt "$sys_up" ]; then
+        _st_uptime_seconds="$sys_up"
+      fi
+    fi
   fi
 }
 

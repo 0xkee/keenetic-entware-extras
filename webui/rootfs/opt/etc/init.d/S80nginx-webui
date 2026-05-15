@@ -77,7 +77,7 @@ stop() {
         sleep 1
     fi
     rm -f "$PIDFILE"
-    # Clean up tmpfs
+    # Clean up patched UI cache (tmpfs — large ephemeral data)
     rm -rf /tmp/ew-webui
 }
 

@@ -3,6 +3,9 @@
 # Must be idempotent (called on both install and upgrade).
 set -eu
 
+# Ensure /opt/tmp exists (runtime data: pidfiles, batch files, caches)
+mkdir -p /opt/tmp
+
 KEE_STATUS="/opt/keenetic-entware-extras/scripts/kee-status.sh"
 SYMLINK="/opt/bin/kee-status"
 

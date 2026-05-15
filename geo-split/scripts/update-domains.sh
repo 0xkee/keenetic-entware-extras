@@ -13,7 +13,7 @@ _CONFIG_DIR="$(cd "$SCRIPT_DIR/../config" && pwd)"
 [ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
 
 # Cleanup temp files on exit (interrupted resolution)
-_cleanup() { rm -f "${DOMAINS_CACHE_FILE}.tmp"; }
+_cleanup() { rm -f "${DOMAINS_CACHE_FILE}.tmp" "${DOMAINS_CACHE_FILE}.new"; }
 trap _cleanup EXIT
 
 # Filter out private/special IPs from stdin
@@ -91,10 +91,10 @@ resolve_domains() {
 
   # Deduplicate by IP (first field); keep first occurrence with its domain comment
   # BusyBox sort ignores -k3,3 — extract domain as sort key, then strip it
-  awk -F' # ' '!seen[$1]++ {print $2 "\t" $0}' "$tmp_cache" | sort | cut -f2- > "$DOMAINS_CACHE_FILE"
+  awk -F' # ' '!seen[$1]++ {print $2 "\t" $0}' "$tmp_cache" | sort | cut -f2- > "${DOMAINS_CACHE_FILE}.new"
   rm -f "$tmp_cache"
   local unique_count
-  unique_count=$(wc -l < "$DOMAINS_CACHE_FILE")
+  unique_count=$(wc -l < "${DOMAINS_CACHE_FILE}.new")
   log "Resolved $domain_count domains: $unique_count unique IPs ($ip_count total, $private_count private skipped)"
 }
 
@@ -133,8 +133,26 @@ main() {
     resolve_domains
     t_end=$(date +%s)
     log "Domain update completed ($((t_end - t_start))s)"
+
+    # Guard: if resolution returned nothing, keep old cache (DNS likely down)
+    if [ ! -s "${DOMAINS_CACHE_FILE}.new" ]; then
+      rm -f "${DOMAINS_CACHE_FILE}.new"
+      log "WARNING: resolution returned 0 IPs — keeping old cache"
+      return 0
+    fi
+
+    # Diff check: skip route table update if IPs unchanged
+    if [ -f "$DOMAINS_CACHE_FILE" ] && cmp -s "$DOMAINS_CACHE_FILE" "${DOMAINS_CACHE_FILE}.new"; then
+      touch "$DOMAINS_CACHE_FILE"
+      rm -f "${DOMAINS_CACHE_FILE}.new"
+      log "Domain IPs unchanged — routes kept as-is"
+      return 0
+    fi
+
+    # IPs changed (or first run) — commit new cache and update routes
+    mv "${DOMAINS_CACHE_FILE}.new" "$DOMAINS_CACHE_FILE"
     _fill_domain_table
-    return 0  # resolved + table filled
+    return 0
   fi
   # Cache fresh — only refill if table is empty (e.g. after restart)
   if is_table_filled "$DOMAIN_ROUTE_TABLE"; then

@@ -57,9 +57,9 @@
 
 ### Backlog (minor)
 
-- [ ] **SmartDNS TCP on :6053** — в recon обнаружено что SmartDNS слушает только UDP. TCP-редирект в iptables безвреден но бесполезен. Либо добавить `bind-tcp 127.0.0.1:6053` в [`smartdns-conf-ru-split/config/smartdns.conf`](../smartdns-conf-ru-split/config/smartdns.conf), либо убрать TCP-правило из `dns-redirect.sh`. Сейчас — оставлено TCP-правило для forward-compat.
+- [x] ~~**SmartDNS TCP on :6053**~~ — **Сделано (2026-05-15):** добавлен `bind-tcp` в `smartdns-conf-ru-split/config/smartdns.conf` + `smartdns-default.conf` + `postinst` (bind-addrs.conf). TCP iptables redirect теперь работает end-to-end.
 - [x] ~~Uptime через pidfile~~ — поведение через PIDFILE оставлено как есть (сброс при reload — acceptable).
-- [ ] **AGH / Unbound preset configs** — в `config/` добавить закомментированные примеры `UPSTREAM_PORT=5353 WATCHDOG_SERVICE=S80adguardhome` и `UPSTREAM_PORT=5335 WATCHDOG_SERVICE=S60unbound`.
+- [x] ~~**AGH / Unbound preset configs**~~ — **Сделано (2026-05-16):** закомментированные примеры в `config/defaults.conf`
 
 ### Documentation
 

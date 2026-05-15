@@ -49,11 +49,11 @@
 ### Известные проблемы
 
 - [x] ~~**conffile conflict при установке**~~ — решено: `opkg install --force-maintainer` по умолчанию (см. [deploy-workflow.md §4.6](../.project/deploy-workflow.md))
-- [ ] **BUG-6: `restart-on-crash`** — SmartDNS `execv()` fails с relative `argv[0]` при запуске через `S38`/`rc.func`. Upstream SmartDNS bug. Workaround: опция закомментирована; при необходимости — cron watchdog.
+- [x] ~~**BUG-6: `restart-on-crash`**~~ — SmartDNS `execv()` fails с relative `argv[0]` при запуске через `S38`/`rc.func`. Upstream SmartDNS bug. **Mitigated (2026-05-15):** опция закомментирована в конфиге + `smartdns-redirect/scripts/watchdog.sh` перезапускает при падении через cron.
 
 ### Улучшения (backlog)
 
 - [x] ~~DNS DNAT redirect: `iptables PREROUTING` br0:53 → SmartDNS:6053 (обход ndnproxy)~~ — реализовано в отдельном пакете [`smartdns-redirect`](../smartdns-redirect/) v0.1.1 (deployed на router-1, latency ~130ms → <80ms)
 - [x] ~~Мониторинг: cron watchdog для перезапуска SmartDNS при падении~~ — реализовано в [`smartdns-redirect/scripts/watchdog.sh`](../smartdns-redirect/scripts/watchdog.sh) (через `WATCHDOG_SERVICE="S38smartdns"`)
-- [ ] Интеграция SmartDNS `ipset` directive с geo-split (вместо `dig` в `update-domains.sh`)
-- [ ] `bind-tcp 127.0.0.1:6053` в `smartdns.conf` — SmartDNS сейчас слушает только UDP, TCP-редирект в `smartdns-redirect` безвреден но бесполезен (EDNS0 fallback на больших ответах)
+- [x] ~~Интеграция SmartDNS `ipset` directive с geo-split~~ — **Отменено:** `ip rule fwmark` не работает на Keenetic, ipset-based routing невозможен. Текущий подход (1h poll + cmp) достаточен.
+- [x] ~~`bind-tcp 127.0.0.1:6053` в `smartdns.conf`~~ — **Сделано (2026-05-15):** добавлен `bind-tcp` для :6053 и :6153 в smartdns.conf, smartdns-default.conf, postinst bind-addrs.conf

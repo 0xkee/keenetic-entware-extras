@@ -5,6 +5,14 @@
 - [x] **Деплой на router-2** — применить ту же конфигурацию geo-split + SmartDNS на втором роутере
 - [x] **Создать либу для списков** — включение подсписков по `@[dir/]filename`; общие функции: сортировка, дедупликация, валидация формата; библиотека для всех подпроектов (`lib/`), сразу .ipk!
 - [x] ~~**TTL-aware domain cache**~~ — **Сделано (2026-05-16):** интервал 4ч→1ч, diff-check через `cmp` (не трогает routes если IP не изменились), guard при пустом resolve
+- [ ] **Multi-zone support** — instance-based архитектура, один движок + N конфигов. См. [docs/zone-sizes-research.md](docs/zone-sizes-research.md)
+  - Каждая зона = `config.d/<name>.conf` (INSTANCE_NAME, SUBNET_URL, ROUTE_OUT, свои table/priority)
+  - Init: `S99geo-split` итерирует `config.d/*.conf`, start/stop/status per-instance
+  - NDM hook: один `ndm-hook.sh`, деривирует instance из имени симлинка (`geo-split-<name>-hook`)
+  - WebUI: enumerate instances → отдельная карточка «Geo-Split (RU) ● RUNNING»
+  - CLI: `geo-split-ctl add|remove|list` instances
+  - Backward compat: нет `config.d/` → single-instance как сейчас (defaults.conf + config.conf)
+  - Core scripts (attach/detach/update-*) — без изменений, уже параметризированы через конфиг
 - [ ] **Мониторинг** — периодическая проверка доступности OZON/критичных доменов через cron; алерт при маршрутных аномалиях
 - [x] кешировать последний удачный iface для subnet loader и начинать с него
 - [x] сгенерировать белый список для ru (из белого списка ркн)

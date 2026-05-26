@@ -7,6 +7,21 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-05-26
+
+### Changed
+- Simplified hash-map.conf: removed per-build JS hash entries, now uses only
+  `DEFAULT:<version>` entries with cascade lookup (exact → major.minor)
+- Removed WARN log on successful DEFAULT fallback (was noise on every new fw build)
+- patch-stock-ui.sh: firmware version is now the primary patch selection mechanism
+
+## [0.8.9] - 2026-05-26
+
+### Added
+- v2.sh patch set for KeeneticOS 5.1 (Angular minifier renamed enum Po→Vo)
+- Version-based fallback in hash-map.conf (DEFAULT:5.0 → v1, DEFAULT:5.1 → v2)
+- Firmware version detection via ndmc in patch-stock-ui.sh fallback logic
+
 ## [0.8.8] - 2026-05-15
 
 ### Changed

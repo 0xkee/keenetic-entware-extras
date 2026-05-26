@@ -4,11 +4,12 @@
 # Result: /tmp/ew-webui/ with patched index.html + main-*.js bundle.
 #
 # Multi-version support:
-#   Patch sets live in webui/patches/<HASH>.sh (one file per firmware bundle).
-#   Different routers may run different firmware versions -- each needs its own
-#   patch file matching main-<HASH>.js from that firmware.
-#   After firmware upgrade: identify new hash, create patch file, test, deploy.
-#   If no matching patch file -- fallback to unpatched stock UI + inject.js only.
+#   Patch sets live in webui/patches/v<N>.sh (one per firmware branch).
+#   Mapping in webui/patches/hash-map.conf via DEFAULT:<fw_version> entries.
+#   Lookup: DEFAULT:<full_version> → DEFAULT:<major.minor> → fallback (no patches).
+#   After firmware upgrade: test existing patches against new bundle,
+#   create new vN.sh + DEFAULT entry only if DOM changed.
+# shellcheck disable=SC1091  # sourced files resolved at runtime on router
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -67,16 +68,23 @@ fi
 HASH_MAP="$PATCHES_DIR/hash-map.conf"
 PATCH_VER=""
 
-# Look up JS hash in hash-map.conf
-if [ -f "$HASH_MAP" ]; then
-    PATCH_VER=$(grep -v '^#' "$HASH_MAP" | grep -v '^$' | awk -v h="$JS_HASH" '$1 == h { print $2 }')
+# Detect firmware version via ndmc (e.g. "5.0.11", "5.1")
+FW_TITLE=""
+FW_VER=""
+if command -v ndmc >/dev/null 2>&1; then
+    FW_TITLE=$(ndmc -c "show version" 2>/dev/null | awk '/title:/ { print $2; exit }')
+    FW_VER=$(printf '%s' "$FW_TITLE" | sed 's/^\([0-9]*\.[0-9]*\).*/\1/')
 fi
 
-# Fallback: use the latest patch version (last entry in hash-map)
-if [ -z "$PATCH_VER" ]; then
-    if [ -f "$HASH_MAP" ]; then
-        PATCH_VER=$(grep -v '^#' "$HASH_MAP" | grep -v '^$' | awk '{ v=$2 } END { print v }')
-        log "WARN: JS hash '${JS_HASH}' not in hash-map.conf -- falling back to ${PATCH_VER}"
+# Look up patch set from hash-map.conf using firmware version cascade:
+#   1. DEFAULT:<full_version>  (e.g. DEFAULT:5.0.11)
+#   2. DEFAULT:<major.minor>   (e.g. DEFAULT:5.0)
+if [ -f "$HASH_MAP" ] && [ -n "$FW_TITLE" ]; then
+    # Try exact version first (e.g. DEFAULT:5.0.11)
+    PATCH_VER=$(grep -v '^#' "$HASH_MAP" | grep -v '^$' | awk -v d="DEFAULT:$FW_TITLE" '$1 == d { print $2 }')
+    # Fallback to major.minor (e.g. DEFAULT:5.0)
+    if [ -z "$PATCH_VER" ] && [ -n "$FW_VER" ]; then
+        PATCH_VER=$(grep -v '^#' "$HASH_MAP" | grep -v '^$' | awk -v d="DEFAULT:$FW_VER" '$1 == d { print $2 }')
     fi
 fi
 

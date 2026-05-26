@@ -7,6 +7,13 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-05-26
+
+### Fixed
+- `lib/ip.sh` — `detect_out_iface()` now checks main table default route first;
+  fixes incorrect ISP detection on multi-WAN routers where backup ISP (e.g. LTE
+  in Keenetic table 16384) appeared before active WISP in `ip route show table all`
+
 ## [0.9.3] - 2026-05-15
 
 ### Fixed

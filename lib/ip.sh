@@ -33,19 +33,24 @@ detect_dns_port() {
   echo "0 system resolver"
 }
 
-# Detect outgoing ISP interface from default routes across all routing tables.
+# Detect outgoing ISP interface for geo-split routes.
+# Priority: main table default route (most reliable, reflects actual connectivity).
+# Fallback: scan all routing tables (handles "VPN = default policy" where ISP
+# is only reachable via Keenetic policy tables 4096+).
 # Excludes VPN interfaces (nwg*, ovpn*, l2tp*, etc.) and LAN bridges (br*).
-# Works when "Политика по умолчанию" = VPN (ISP only in Keenetic policy tables 4096+).
-# Fallback: if no non-VPN route found, uses main table default (original behavior).
 detect_out_iface() {
   local iface
-  iface=$(ip route show table all | grep "^default" | \
+
+  # Primary: main table default route (actual system default)
+  iface=$(ip route | grep "^default" | \
     grep -v "dev nwg\|dev ovpn\|dev l2tp\|dev pptp\|dev sstp\|dev ipsec\|dev tun\|dev tap" | \
     sed -n 's/.*dev \([^ ]*\).*/\1/p' | grep -v '^br' | head -1)
 
-  # Fallback: main table default route (ISP down, unusual interface names)
+  # Fallback: all tables (VPN is default policy, ISP only in policy tables)
   if [ -z "$iface" ]; then
-    iface=$(ip route | grep "^default" | sed -n 's/.*dev \([^ ]*\).*/\1/p' | grep -v '^br' | head -1)
+    iface=$(ip route show table all | grep "^default" | \
+      grep -v "dev nwg\|dev ovpn\|dev l2tp\|dev pptp\|dev sstp\|dev ipsec\|dev tun\|dev tap" | \
+      sed -n 's/.*dev \([^ ]*\).*/\1/p' | grep -v '^br' | head -1)
   fi
 
   echo "$iface"

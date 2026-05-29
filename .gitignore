@@ -34,3 +34,5 @@ docs/knowledge/keenetic-webui-research/stock-styles/*
 # Built packages
 dist/*.ipk
 .playwright-mcp/*
+docs/knowledge/stock-firmware/*.bin
+docs/knowledge/stock-firmware/_extracted/

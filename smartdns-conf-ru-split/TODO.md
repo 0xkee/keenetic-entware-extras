@@ -51,6 +51,10 @@
 - [x] ~~**conffile conflict при установке**~~ — решено: `opkg install --force-maintainer` по умолчанию (см. [deploy-workflow.md §4.6](../.project/deploy-workflow.md))
 - [x] ~~**BUG-6: `restart-on-crash`**~~ — SmartDNS `execv()` fails с relative `argv[0]` при запуске через `S38`/`rc.func`. Upstream SmartDNS bug. **Mitigated (2026-05-15):** опция закомментирована в конфиге + `smartdns-redirect/scripts/watchdog.sh` перезапускает при падении через cron.
 
+### Исследовать
+
+- [ ] **Нужен ли `ndmc -c 'ip name-server <IP>:6053'` при наличии smartdns-redirect?** Если DNAT (br0:53→:6053) покрывает все LAN-клиенты, то настройка ndnproxy через `ip name-server` может быть избыточна. Вопрос: что происходит с DNS-запросами **самого роутера** (loopback, он ходит через ndnproxy:53) — для них DNAT не работает, нужен forward через ndnproxy. Разобрать сценарии: (a) только smartdns-redirect, (b) только ip name-server, (c) оба.
+
 ### Улучшения (backlog)
 
 - [x] ~~DNS DNAT redirect: `iptables PREROUTING` br0:53 → SmartDNS:6053 (обход ndnproxy)~~ — реализовано в отдельном пакете [`smartdns-redirect`](../smartdns-redirect/) v0.1.1 (deployed на router-1, latency ~130ms → <80ms)

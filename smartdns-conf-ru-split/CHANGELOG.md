@@ -7,6 +7,10 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+- `smartdns.conf` — misleading comment about leading dot in nameserver rules;
+  clarified that `/.ru/ru` and `/ru/ru` are equivalent (suffix match)
+
 ## [0.4.3] - 2026-05-16
 
 ### Added

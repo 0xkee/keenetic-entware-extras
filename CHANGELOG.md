@@ -7,6 +7,13 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.9.5] - 2026-05-29
+
+### Added
+- `scripts/bug-report.sh` — one-command diagnostics collector for forum bug reports;
+  gathers firmware version, package versions, all service statuses (via `kee-status -d`),
+  DNS checks, route/rule state, and log tails
+
 ## [0.9.4] - 2026-05-26
 
 ### Fixed

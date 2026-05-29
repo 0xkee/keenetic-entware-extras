@@ -59,3 +59,37 @@
 - [x] **Dashboard card: drag-and-drop icon** — SVG sprite 6 dots
 - [x] **Dashboard card: expand details** — 4-square icon, expandable grid, localStorage persist
 - [x] **iframe page card headers: `<span>` → ссылки** ✅ — устарело, iframe-архитектура удалена
+
+## 🧊 Порт на KeeneticOS 4.x (KN-1711 Extra)
+
+> Исследование прошивки KN-1711 stable 4.3.7 (`docs/knowledge/stock-firmware/KN-1711_stable_4.3.7_4.03.C.7.0-3.bin`) показало: NDW4 (Angular) **присутствует**.
+
+**Отличия от 5.x:**
+- Бандл: `main.790e5e1f5b169fd2.js` (ТОЧКА в имени, на 5.x — тире: `main-HASH.js`)
+- Отдельный `vendor.238eaa341d3874ba.js` + `runtime.2fb25874618f03d2.js` (на 5.x bundled)
+- CSS: `styles.1d2e1ec4187acf13.css`
+
+**Анализ паттернов v1 против бандла 4.3.7:**
+
+| # | Паттерн | 4.3 | Статус |
+|---|---------|-----|--------|
+| #6 | `TELEPHONY:"TELEPHONY"}` | Идентичен | ✅ |
+| #6a | `.values(Po))` | `.values(we))` — enum `Po`→`we` | ✅ тривиально |
+| #7 | `[Po.TELEPHONY]:...title"};` | `[we.TELEPHONY]:...title"},` — `Po`→`we` + `;`→`,` | ⚠️ тривиально |
+| #8 | `filter(a=>this.viewService...)` | `filter(r=>this.viewService...)` — var `a`→`r` | ⚠️ тривиально |
+| #QS | `Po.INTERNET,...Po.TELEPHONY]` | `we.INTERNET,...we.TELEPHONY]` — `Po`→`we` | ✅ тривиально |
+| #2 | `set order(e){this.elementsOrder=e}` | Идентичен | ✅ |
+| #3 | `getTemplate(e){return this.templateMap.get(e)}` | Идентичен | ✅ |
+| #9 | `d("ngTemplateOutlet",i.getTemplate(e))` | `Y8G("ngTemplateOutlet",...)` — другая Ivy-инструкция | ❌ новый паттерн |
+| #4 | `enterPredicate=(n,r)=>...` | Не найден — CDK в `vendor.js`? | ❌ исследовать |
+
+**Вывод:** 5/9 ✅, 2/9 ⚠️ тривиальная адаптация, 2/9 ❌ требуют исследования (Ivy instructions + CDK DragDrop в vendor.js).
+
+**Задачи:**
+- [ ] `patch-stock-ui.sh`: поддержка паттерна `main.*.js` (сейчас ищет `main-*.js`)
+- [ ] Создать `v0.sh` patch-set: адаптировать 7 тривиальных паттернов (`Po`→`we`, `;`→`,`, `a`→`r`)
+- [ ] #9: найти `Y8G("ngTemplateOutlet"...)` + `getTemplate` в контексте и написать новый sed
+- [ ] #4: проверить `vendor.238eaa341d3874ba.js` на CDK enterPredicate/sortPredicate
+- [ ] Добавить `DEFAULT:4.3 v0` в `hash-map.conf`
+- [ ] Тест: inject.js (sidebar ✅ `ndw-menu`, dashboard card ✅ `dashboard-card` — подтверждены в бандле)
+- [ ] Определить CSS-хеш для `index.html` stock CSS link (`styles.1d2e1ec4187acf13.css`)

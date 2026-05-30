@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.10.8] - 2026-05-30
+
+### Changed
+- `DOWNLOAD_INTERFACES` default: `"default *"` — auto-detect all active VPN interfaces (awg-manager, OpenConnect, Tailscale, etc.) instead of manually listing glob patterns
+- Glob expansion in `resolve_download_interfaces()` now skips infrastructure interfaces (`lo`, `br*`, `ifb*`)
+
 ## [0.10.7] - 2026-05-25
 
 ### Added

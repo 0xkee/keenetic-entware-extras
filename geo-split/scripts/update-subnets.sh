@@ -29,7 +29,8 @@ resolve_loader() {
 }
 
 # Expand DOWNLOAD_INTERFACES config to actual active interface names.
-# Resolves globs (nwg*, ovpn_br*) against currently active interfaces.
+# Resolves globs (nwg*, ovpn*) against currently active interfaces.
+# Skips infrastructure interfaces (lo, br*, ifb*) from glob matches.
 # "default" token is passed through as-is.
 resolve_download_interfaces() {
   local active_ifaces token iface result=""
@@ -43,6 +44,8 @@ resolve_download_interfaces() {
       *\**)
         # Glob pattern — expand against active interfaces
         for iface in $active_ifaces; do
+          # Skip infrastructure interfaces useless for downloads
+          case "$iface" in lo|br*|ifb*) continue ;; esac
           # shellcheck disable=SC2254  # glob in case pattern is intentional
           case "$iface" in
             $token) result="$result $iface" ;;

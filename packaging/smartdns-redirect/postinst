@@ -31,6 +31,6 @@ if [ -x /opt/etc/init.d/S39smartdns-redirect ]; then
 fi
 
 echo "smartdns-redirect installed."
-echo "  Config:  $INSTALL_DIR/config/defaults.conf"
+echo "  User config: $INSTALL_DIR/config/config.conf"
 echo "  Status:  /opt/etc/init.d/S39smartdns-redirect status"
 echo "  Logs:    logread | grep smartdns-redirect"

@@ -27,7 +27,7 @@ if [ -x /opt/etc/init.d/S10cron ]; then
     /opt/etc/init.d/S10cron restart 2>/dev/null || true
 fi
 
-echo "geo-split installed. Edit config: $INSTALL_DIR/config/defaults.conf"
+echo "geo-split installed. User config: $INSTALL_DIR/config/config.conf"
 echo "Start: /opt/etc/init.d/S99geo-split start"
 
 # 4. Auto-start service (idempotent: safe for both fresh install and upgrade).
@@ -35,8 +35,8 @@ echo "Start: /opt/etc/init.d/S99geo-split start"
 # On fresh install: defaults (ROUTE_OUT=auto, ROUTE_IN=br0) are reasonable.
 echo "Starting geo-split..."
 if /opt/etc/init.d/S99geo-split start; then
-    echo "geo-split started. Config: $INSTALL_DIR/config/defaults.conf"
+    echo "geo-split started. User config: $INSTALL_DIR/config/config.conf"
 else
-    echo "Warning: geo-split start failed. Check config: $INSTALL_DIR/config/defaults.conf"
+    echo "Warning: geo-split start failed. Check user config: $INSTALL_DIR/config/config.conf"
     echo "Manual start: /opt/etc/init.d/S99geo-split start"
 fi

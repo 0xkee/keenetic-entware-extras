@@ -7,6 +7,22 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-05-31
+
+### Fixed
+- Routes in custom tables (1000/1001) now include `via <gateway>` when ISP
+  interface has a nexthop; fixes "host unreachable" on Ethernet ISPs that don't do proxy-ARP for scope-link routes
+
+### Added
+- `lib/ip.sh`: `detect_gateway(dev)` — auto-detect nexthop IP from ISP default route
+- `lib/ip.sh`: `resolve_target_gateway(dev)` — resolve gateway from config or auto-detect
+- `config/defaults.conf`: `ROUTE_GW` option (`auto`|`none`|explicit IP)
+  - `auto` (default) — detect from ISP route; uses `via` for Ethernet,
+    dev-only for point-to-point (LTE/PPP) where no gateway exists
+  - `none` — force legacy behavior (scope link, no gateway)
+  - explicit IP — fixed gateway for all geo-split routes
+- `status.sh`: display detected gateway in compact status output
+
 ## [0.10.8] - 2026-05-30
 
 ### Changed

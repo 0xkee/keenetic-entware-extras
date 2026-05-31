@@ -183,6 +183,15 @@ show_mode() {
   fi
   if [ -n "$_ck_active_out" ]; then
     echo "    Active out:  $_ck_active_out (tables $DOMAIN_ROUTE_TABLE,$SUBNET_ROUTE_TABLE)"
+    # Show gateway from first route in subnet table (if present)
+    local _active_gw
+    _active_gw=$(ip route show table "$SUBNET_ROUTE_TABLE" 2>/dev/null | \
+      sed -n 's/.*via \([^ ]*\).*/\1/p' | head -1)
+    if [ -n "$_active_gw" ]; then
+      echo "    Gateway:     $_active_gw"
+    else
+      echo "    Gateway:     — (dev-only, scope link)"
+    fi
   else
     echo "    Active out:  — detached"
   fi

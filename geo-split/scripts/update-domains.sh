@@ -100,13 +100,14 @@ resolve_domains() {
 
 # Fill domain routing table from cached resolved IPs
 _fill_domain_table() {
-  local dev
+  local dev gw
   dev=$(resolve_target_interface) || {
     log "No target interface, domain table fill deferred"
     return 0
   }
-  log "Route out: $dev"
-  fill_routes_batch "$DOMAIN_ROUTE_TABLE" "$DOMAINS_CACHE_FILE" "$dev" host
+  gw=$(resolve_target_gateway "$dev")
+  log "Route out: $dev${gw:+ via $gw}"
+  fill_routes_batch "$DOMAIN_ROUTE_TABLE" "$DOMAINS_CACHE_FILE" "$dev" host "$gw"
 }
 
 # --- main ---

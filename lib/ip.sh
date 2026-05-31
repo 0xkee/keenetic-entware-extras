@@ -56,6 +56,28 @@ detect_out_iface() {
   echo "$iface"
 }
 
+# Detect gateway (nexthop) IP for a given interface.
+# Searches default routes in main table first, then all tables.
+# For point-to-point interfaces (LTE, PPP) there is typically no gateway —
+# returns empty string in that case (caller should use dev-only routes).
+# Args: $1 - interface name
+# stdout: gateway IP or empty string
+detect_gateway() {
+  local dev="$1" gw
+
+  # Primary: main table default route for this device
+  gw=$(ip route show default dev "$dev" 2>/dev/null | \
+    sed -n 's/.*via \([^ ]*\).*/\1/p' | head -1)
+
+  # Fallback: all policy tables (Keenetic puts ISP routes in tables 4096+)
+  if [ -z "$gw" ]; then
+    gw=$(ip route show table all default dev "$dev" 2>/dev/null | \
+      sed -n 's/.*via \([^ ]*\).*/\1/p' | head -1)
+  fi
+
+  echo "$gw"
+}
+
 # Resolve target outgoing interface from ROUTE_OUT config.
 # ROUTE_OUT=auto|"" → auto-detect via detect_out_iface().
 # ROUTE_OUT=<name> → use directly.
@@ -74,6 +96,30 @@ resolve_target_interface() {
   echo "$iface"
 }
 
+# Resolve target gateway from ROUTE_GW config and target interface.
+# ROUTE_GW=auto|"" → auto-detect via detect_gateway($dev).
+# ROUTE_GW=<ip> → use directly.
+# ROUTE_GW=none → force no gateway (dev-only routes).
+# Args: $1 - target interface name
+# stdout: gateway IP or empty string (empty = use dev-only routes)
+resolve_target_gateway() {
+  local dev="$1" gw
+
+  case "${ROUTE_GW:-auto}" in
+    none|"")
+      gw=""
+      ;;
+    auto)
+      gw=$(detect_gateway "$dev")
+      ;;
+    *)
+      gw="$ROUTE_GW"
+      ;;
+  esac
+
+  echo "$gw"
+}
+
 # Check if a routing table already has routes loaded.
 # Returns: 0 if table has at least one route, 1 if empty.
 # Args: $1 - table number
@@ -88,10 +134,11 @@ is_table_filled() {
 # (mtime used by status.sh for table freshness display).
 # Args: $1 - table number, $2 - list file path, $3 - target device
 #        $4 - mode: "cidr" (default, each line is a CIDR) or "host" (first field + /32)
+#        $5 - gateway IP (optional; empty = dev-only route, scope link)
 # Requires: IP_FULL, TABLE_STAMP_PREFIX from config.conf; list_strip, list_count from lib/lists.sh; log from lib/common.sh
 # Optional: BATCH_FILE (base path, default /tmp/geo-routes); .${table}.batch is appended
 fill_routes_batch() {
-  local table="$1" file="$2" dev="$3" mode="${4:-cidr}"
+  local table="$1" file="$2" dev="$3" mode="${4:-cidr}" gw="${5:-}"
   local batch_file="${BATCH_FILE:-/tmp/geo-routes}.${table}.batch"
 
   if [ ! -f "$file" ]; then
@@ -99,9 +146,17 @@ fill_routes_batch() {
     return 0
   fi
 
+  # Build route target: "via <gw> dev <dev>" or just "dev <dev>" (point-to-point)
+  local route_target
+  if [ -n "$gw" ]; then
+    route_target="via $gw dev $dev"
+  else
+    route_target="dev $dev"
+  fi
+
   local count
   count=$(list_count "$file")
-  log "Loading $count routes into table $table via $dev (mode=$mode)..."
+  log "Loading $count routes into table $table ($route_target, mode=$mode)..."
 
   local t_start t_end elapsed
 
@@ -110,11 +165,11 @@ fill_routes_batch() {
       echo "route flush table $table"
       if [ "$mode" = "host" ]; then
         list_strip < "$file" | while read -r ip _rest; do
-          echo "route add $ip/32 dev $dev table $table"
+          echo "route add $ip/32 $route_target table $table"
         done
       else
         list_strip < "$file" | while read -r cidr; do
-          echo "route add $cidr dev $dev table $table"
+          echo "route add $cidr $route_target table $table"
         done
       fi
     } > "$batch_file"
@@ -134,11 +189,13 @@ fill_routes_batch() {
     t_start=$(date +%s)
     if [ "$mode" = "host" ]; then
       list_strip < "$file" | while read -r ip _rest; do
-        ip route add "$ip/32" dev "$dev" table "$table" 2>/dev/null || true
+        # shellcheck disable=SC2086  # route_target must word-split
+        ip route add "$ip/32" $route_target table "$table" 2>/dev/null || true
       done
     else
       list_strip < "$file" | while read -r cidr; do
-        ip route add "$cidr" dev "$dev" table "$table" 2>/dev/null || true
+        # shellcheck disable=SC2086  # route_target must word-split
+        ip route add "$cidr" $route_target table "$table" 2>/dev/null || true
       done
     fi
     t_end=$(date +%s)

@@ -7,6 +7,19 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-05-31
+
+### Added
+- `lib/ip.sh`: new `detect_gateway()` — auto-detects nexthop IP for ISP interface
+  (main table first, fallback to Keenetic policy tables 4096+)
+- `lib/ip.sh`: new `resolve_target_gateway()` — resolves ROUTE_GW config
+  (auto/none/<ip>) for policy routing setup
+
+### Changed
+- `lib/ip.sh`: `fill_routes_batch()` accepts optional `$5` gateway arg;
+  adds `via <gateway>` to routes when ISP interface has a nexthop —
+  fixes Ethernet ISP compatibility (previously all routes were scope-link)
+
 ## [0.9.5] - 2026-05-29
 
 ### Added

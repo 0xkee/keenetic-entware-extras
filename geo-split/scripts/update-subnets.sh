@@ -167,13 +167,14 @@ download_subnets() {
 
 # Fill subnet routing table from cached list
 _fill_subnet_table() {
-  local dev
+  local dev gw
   dev=$(resolve_target_interface) || {
     log "No target interface, subnet table fill deferred"
     return 0
   }
-  log "Route out: $dev"
-  fill_routes_batch "$SUBNET_ROUTE_TABLE" "$SUBNET_LIST_FILE" "$dev"
+  gw=$(resolve_target_gateway "$dev")
+  log "Route out: $dev${gw:+ via $gw}"
+  fill_routes_batch "$SUBNET_ROUTE_TABLE" "$SUBNET_LIST_FILE" "$dev" cidr "$gw"
 }
 
 # --- main ---

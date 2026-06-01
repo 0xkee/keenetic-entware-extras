@@ -37,6 +37,13 @@ is_entware() {
   [ -d /opt/etc ]
 }
 
+# Check if a service is enabled (symlink exists in /opt/etc/init.d/).
+# Args: $1 - init script name (e.g. "S99geo-split")
+# Returns: 0 if enabled, 1 if disabled
+is_service_enabled() {
+  [ -L "/opt/etc/init.d/$1" ]
+}
+
 # Detect router LAN IP address (Keenetic br0 bridge).
 # Method: br0 is the standard LAN bridge on Keenetic routers.
 # Fallback: ip route get → source IP (may return VPN/WAN on tunneled setups).

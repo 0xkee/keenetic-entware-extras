@@ -7,6 +7,19 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-06-01
+
+### Changed
+- Init script moved to `init.d/S99geo-split` (symlink in `/opt/etc/init.d/`);
+  enables graceful user disable by removing the symlink
+- postinst/prerm manage init.d symlink lifecycle
+- NDM hook (`ndm-hook.sh`) respects disabled state via `is_service_enabled`
+- Cron refresh calls real script path (works even if symlink restored later)
+
+### Added
+- `status.sh`: `"enabled"` field in JSON output; text mode shows "⚠ Disabled"
+  warning when service symlink is absent
+
 ## [0.11.0] - 2026-05-31
 
 ### Fixed

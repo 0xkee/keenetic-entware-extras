@@ -1,5 +1,6 @@
 #!/opt/bin/sh
 # nginx-webui init script for Entware.
+# Real script lives in package dir; symlink in /opt/etc/init.d/ enables boot.
 # Standalone init (no rc.func) — safe alongside stock nginx.
 # Config: /opt/keenetic-entware-extras/webui/config/nginx.conf (separate instance on port 8080).
 # shellcheck disable=SC1091  # sourced files resolved at runtime on router
@@ -99,8 +100,17 @@ case "${1:-}" in
         $NGINX -c "$CONF" -s reload 2>&1
         echo "$DESC reloaded."
         ;;
+    enable)
+        ln -sf "$INSTALL_DIR/init.d/$(basename "$0")" "/opt/etc/init.d/$(basename "$0")"
+        start
+        ;;
+    disable)
+        stop
+        rm -f "/opt/etc/init.d/$(basename "$0")"
+        echo "nginx-webui disabled (persistent until 'enable')"
+        ;;
     *)
-        echo "Usage: $0 {start|stop|restart|check|status|reload}"
+        echo "Usage: $0 {start|stop|restart|check|status|reload|enable|disable}"
         exit 1
         ;;
 esac

@@ -4,13 +4,19 @@
 set -eu
 
 INSTALL_DIR="/opt/keenetic-entware-extras/geo-split"
+INIT_SCRIPT="$INSTALL_DIR/init.d/S99geo-split"
+INIT_LINK="/opt/etc/init.d/S99geo-split"
 
-# 1. Create NDM hook symlink
+# 1. Create init.d symlink (enables boot start + CLI access)
+ln -sf "$INIT_SCRIPT" "$INIT_LINK"
+
+# 2. Create NDM hook symlink
 NDM_DIR="/opt/etc/ndm/ifstatechanged.d"
 mkdir -p "$NDM_DIR"
 ln -sf "$INSTALL_DIR/scripts/ndm-hook.sh" "$NDM_DIR/geo-split-hook"
 
-# 2. Update cron jobs (remove old, add new — safe on upgrade)
+# 3. Update cron jobs (remove old, add new — safe on upgrade)
+# Cron calls real script path (not symlink) so it works even if user re-enables later
 CRON_FILE="/opt/etc/crontab"
 if [ -f "$CRON_FILE" ]; then
     sed -i '/geo-split/d' "$CRON_FILE"
@@ -19,10 +25,10 @@ fi
 OFFSET=$(awk 'BEGIN{srand(); printf "%d", rand()*15}')
 {
     echo "# geo-split: periodic refresh (checks cache freshness, reloads if stale)"
-    echo "${OFFSET}-59/15 * * * * root /opt/etc/init.d/S99geo-split refresh"
+    echo "${OFFSET}-59/15 * * * * root $INIT_SCRIPT refresh >/dev/null 2>&1"
 } >> "$CRON_FILE"
 
-# 3. Restart crond to pick up changes
+# 4. Restart crond to pick up changes
 if [ -x /opt/etc/init.d/S10cron ]; then
     /opt/etc/init.d/S10cron restart 2>/dev/null || true
 fi
@@ -30,11 +36,11 @@ fi
 echo "geo-split installed. User config: $INSTALL_DIR/config/config.conf"
 echo "Start: /opt/etc/init.d/S99geo-split start"
 
-# 4. Auto-start service (idempotent: safe for both fresh install and upgrade).
+# 5. Auto-start service (idempotent: safe for both fresh install and upgrade).
 # On upgrade: prerm stopped the service → restart with new code.
 # On fresh install: defaults (ROUTE_OUT=auto, ROUTE_IN=br0) are reasonable.
 echo "Starting geo-split..."
-if /opt/etc/init.d/S99geo-split start; then
+if "$INIT_LINK" start; then
     echo "geo-split started. User config: $INSTALL_DIR/config/config.conf"
 else
     echo "Warning: geo-split start failed. Check user config: $INSTALL_DIR/config/config.conf"

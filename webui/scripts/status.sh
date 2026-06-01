@@ -164,7 +164,13 @@ json_output() {
   local ports_val="$_st_port_addrs"
   [ -z "$ports_val" ] && ports_val="$LISTEN_PORT" || true
 
+  # Enabled: symlink exists in /opt/etc/init.d/
+  local enabled_val=1
+  is_service_enabled "S80nginx-webui" && enabled_val=0
+
   printf '{'
+  json_kv_bool "enabled" "$enabled_val"
+  printf ','
   json_kv_bool "running" "$([ "$_st_running" = "true" ] && echo 0 || echo 1)"
   printf ','
   json_kv_bool "ok" "$STATUS_OK"
@@ -232,6 +238,9 @@ fi
 
 echo "nginx-webui status:"
 echo "  Service:"
+if ! is_service_enabled "S80nginx-webui"; then
+  echo "    ⚠ Disabled (not auto-starting)"
+fi
 status_show_process
 show_config
 show_listen_conf

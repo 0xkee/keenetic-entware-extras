@@ -2,7 +2,8 @@
 # prerm — runs before package files are removed.
 set -eu
 
-S80="/opt/etc/init.d/S80nginx-webui"
-if [ -x "$S80" ]; then
-    "$S80" stop 2>/dev/null || true
-fi
+# 1. Stop service (|| true: symlink may be absent if user disabled)
+/opt/etc/init.d/S80nginx-webui stop 2>/dev/null || true
+
+# 2. Remove init.d symlink
+rm -f /opt/etc/init.d/S80nginx-webui || true

@@ -7,6 +7,19 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-01
+
+### Changed
+- Init script moved to `init.d/S39smartdns-redirect` (symlink in `/opt/etc/init.d/`);
+  enables graceful user disable by removing the symlink
+- postinst/prerm manage init.d symlink lifecycle
+- Netfilter hook respects disabled state via `is_service_enabled`
+- Watchdog respects disabled state (exits immediately if service disabled)
+
+### Added
+- `status.sh`: `"enabled"` field in JSON output; text mode shows "⚠ Disabled"
+  warning when service symlink is absent
+
 ## [0.2.3] - 2026-05-15
 
 ### Changed

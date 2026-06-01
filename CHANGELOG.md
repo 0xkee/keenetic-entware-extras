@@ -7,6 +7,14 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-06-01
+
+### Added
+- `lib/common.sh`: `is_service_enabled()` — checks if init.d symlink exists
+  (used by hooks/cron to respect user disable)
+- `scripts/kee-status.sh`: "Disabled" status in yellow for services with
+  removed init.d symlink
+
 ## [0.10.0] - 2026-05-31
 
 ### Added

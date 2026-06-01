@@ -5,7 +5,8 @@
 set -eu
 
 INSTALL_DIR="/opt/keenetic-entware-extras/webui"
-S80="/opt/etc/init.d/S80nginx-webui"
+INIT_SCRIPT="$INSTALL_DIR/init.d/S80nginx-webui"
+INIT_LINK="/opt/etc/init.d/S80nginx-webui"
 
 # shellcheck source=/dev/null
 . /opt/keenetic-entware-extras/lib/common.sh
@@ -32,9 +33,8 @@ EOF
     echo "cron.daily/logrotate wrapper created"
 fi
 
-# 3. Deploy init script
-cp "$INSTALL_DIR/rootfs/opt/etc/init.d/S80nginx-webui" "$S80"
-chmod 755 "$S80"
+# 3. Create init.d symlink (enables boot start + CLI access)
+ln -sf "$INIT_SCRIPT" "$INIT_LINK"
 
 # 3a. Disable default Entware nginx (port 80 conflicts with Keenetic stock web UI)
 if [ -x /opt/etc/init.d/S80nginx ]; then
@@ -43,7 +43,7 @@ if [ -x /opt/etc/init.d/S80nginx ]; then
 fi
 
 # 4. (Re)start nginx-webui
-"$S80" restart || true
+"$INIT_LINK" restart || true
 
 echo "webui installed. Dashboard: http://${ROUTER_IP:-<router-ip>}:8080/custom/"
 echo "Config: $INSTALL_DIR/config/nginx.conf"

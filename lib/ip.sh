@@ -120,12 +120,30 @@ resolve_target_gateway() {
   echo "$gw"
 }
 
+# Count routes in a routing table.
+# Uses /proc/net/fib_triestat (instant, no route dump) with fallback to wc -l.
+# Args: $1 - table number
+# stdout: route count (integer)
+table_route_count() {
+  local table="$1" count
+  # Fast path: kernel FIB trie stats (reads ~2KB file vs dumping 11K routes)
+  if [ -f /proc/net/fib_triestat ]; then
+    count=$(awk "/^Id ${table}:/{f=1} f&&/Prefixes:/{print \$2;exit}" /proc/net/fib_triestat)
+    if [ -n "$count" ]; then
+      echo "$count"
+      return
+    fi
+  fi
+  # Fallback: enumerate routes (works everywhere)
+  ip route show table "$table" 2>/dev/null | wc -l
+}
+
 # Check if a routing table already has routes loaded.
 # Returns: 0 if table has at least one route, 1 if empty.
 # Args: $1 - table number
 is_table_filled() {
   local table="$1"
-  ip route show table "$table" 2>/dev/null | grep -q .
+  [ "$(table_route_count "$table")" -gt 0 ]
 }
 
 # Flush and fill a routing table from a list file via ip-full -batch.

@@ -30,10 +30,13 @@ start() {
         echo "already running."
         return 0
     fi
-    # Self-healing: generate listen.conf if missing (e.g. after spike deploy)
-    if [ ! -f "$_CONFIG_DIR/listen.conf" ]; then
+    # Self-healing: generate listen.conf if missing or outdated format
+    # (e.g. after spike deploy or upgrade from version without $stock_httpd)
+    if [ ! -f "$_CONFIG_DIR/listen.conf" ] || ! grep -q 'stock_httpd' "$_CONFIG_DIR/listen.conf"; then
         _IP="$(detect_router_ip)"
-        echo "listen ${_IP:-0.0.0.0}:8080;" > "$_CONFIG_DIR/listen.conf"
+        # shellcheck disable=SC2016  # $stock_httpd is an nginx variable, not shell
+        printf 'listen %s:8080;\nset $stock_httpd http://%s:80;\n' \
+            "${_IP:-0.0.0.0}" "${_IP:-127.0.0.1}" > "$_CONFIG_DIR/listen.conf"
     fi
     # Clear stale PID (Keenetic /tmp survives firmware updates)
     rm -f "$PIDFILE"
@@ -109,8 +112,13 @@ case "${1:-}" in
         rm -f "/opt/etc/init.d/$(basename "$0")"
         echo "nginx-webui disabled (persistent until 'enable')"
         ;;
+    update-listen)
+        # Force re-detect LAN IP → regenerate listen.conf → restart
+        rm -f "$_CONFIG_DIR/listen.conf"
+        stop; start
+        ;;
     *)
-        echo "Usage: $0 {start|stop|restart|check|status|reload|enable|disable}"
+        echo "Usage: $0 {start|stop|restart|check|status|reload|enable|disable|update-listen}"
         exit 1
         ;;
 esac

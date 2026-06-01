@@ -1,38 +1,35 @@
-# Backup files
+# === Standard ignores ===
 *.bak
 *~
-
-# Editor files
 *.swp
 *.swo
-
-# OS files
 .DS_Store
 Thumbs.db
-
-# Secrets / credentials
 *.key
 *.pem
 secrets/
-
-# Generated / temp
 *.tmp
 *.log
 
-# Generated lists (fetched subnets, resolved domain IPs)
+# === Generated / built ===
+dist/*.ipk
 geo-split-data/lists/ru-subnets.txt
 geo-split-data/lists/domains-resolved.txt
 geo-split-data/lists/geoip/*.zone
 
-# Remote host config (contains host-specific data)
-.project/target-hosts.json
+# === Private content (symlinks to ../kee-private/) ===
+# These are symlinks transparent to IDE/Roo but invisible to git
+AGENTS.md
+awg-manager
+.project
+.roo
+.clinerules
+.playwright-mcp
+docs
+plans
+backups
+private
+keenetic-entware-extras.code-workspace
 
-# Stock firmware backup (11MB, local-only reference)
-docs/knowledge/keenetic-webui-research/stock-backup-*
-docs/knowledge/keenetic-webui-research/stock-styles/*
-
-# Built packages
-dist/*.ipk
-.playwright-mcp/*
-docs/knowledge/stock-firmware/*.bin
-docs/knowledge/stock-firmware/_extracted/
+# === Temporary / one-time ===
+.git-backup/

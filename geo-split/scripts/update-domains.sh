@@ -144,7 +144,7 @@ main() {
 
     # Diff check: skip route table update if IPs unchanged
     if [ -f "$DOMAINS_CACHE_FILE" ] && cmp -s "$DOMAINS_CACHE_FILE" "${DOMAINS_CACHE_FILE}.new"; then
-      touch "$DOMAINS_CACHE_FILE"
+      touch -d "@$t_start" "$DOMAINS_CACHE_FILE"
       rm -f "${DOMAINS_CACHE_FILE}.new"
       log "Domain IPs unchanged — routes kept as-is"
       return 0
@@ -152,6 +152,7 @@ main() {
 
     # IPs changed (or first run) — commit new cache and update routes
     mv "${DOMAINS_CACHE_FILE}.new" "$DOMAINS_CACHE_FILE"
+    touch -d "@$t_start" "$DOMAINS_CACHE_FILE"
     _fill_domain_table
     return 0
   fi

@@ -7,6 +7,18 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-06-01
+
+### Fixed
+- Stock httpd proxy: replaced hardcoded `upstream keenetic_ui { server 127.0.0.1:80 }`
+  with dynamic `$stock_httpd` variable (LAN IP from `listen.conf`). Fixes 403 error
+  when "Web access from the Internet" is disabled — stock httpd rejects requests
+  from loopback in this configuration.
+
+### Added
+- Init command `update-listen`: force re-detect LAN IP and restart
+  (`S80nginx-webui update-listen`)
+
 ## [0.10.0] - 2026-06-01
 
 ### Changed

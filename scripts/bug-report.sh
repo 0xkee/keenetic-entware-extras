@@ -4,6 +4,8 @@
 set -eu
 
 BASE="/opt/keenetic-entware-extras"
+# shellcheck disable=SC1091
+. "$BASE/lib/ip.sh"
 SEP="──────────────────────────────────────────────"
 
 section() {
@@ -165,9 +167,9 @@ if command -v ip >/dev/null 2>&1; then
 
     printf "\nRoute counts:\n"
     printf "  table 1000 (domains):  %s routes\n" \
-        "$(ip route show table 1000 2>/dev/null | wc -l)"
+        "$(table_route_count 1000)"
     printf "  table 1001 (subnets):  %s routes\n" \
-        "$(ip route show table 1001 2>/dev/null | wc -l)"
+        "$(table_route_count 1001)"
 
     printf "\nDefault gateway (table 1000): "
     gw="$(ip route show table 1000 2>/dev/null | grep "^default" | head -1)"

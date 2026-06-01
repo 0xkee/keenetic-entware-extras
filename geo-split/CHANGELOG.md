@@ -7,6 +7,18 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.12.3] - 2026-06-01
+
+### Improved
+- Performance: `check_mode()` in status.sh now reads only 5 routes per table
+  instead of all ~11K to detect active interface (head -5 optimization)
+- Performance: `check_routes()` uses `/proc/net/fib_triestat` to count routes
+  instantly instead of dumping 8K+ lines through `ip route | wc -l`
+
+### Added
+- `table_route_count()` helper in lib/ip.sh — zero-cost route counting via
+  kernel FIB trie stats with fallback to `wc -l`
+
 ## [0.12.2] - 2026-06-01
 
 ### Fixed

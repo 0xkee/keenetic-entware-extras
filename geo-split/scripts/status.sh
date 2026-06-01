@@ -27,9 +27,11 @@ check_mode() {
   if [ -n "${SUBNET_URL:-}" ]; then
     _ck_geo_zone=$(basename "$SUBNET_URL" .zone | tr '[:lower:]' '[:upper:]')
   fi
+  # head -5: all routes in a table share the same dev (filled by fill_routes_batch),
+  # so a few lines suffice to extract unique interface names (~11K → 10 lines).
   _ck_active_out=$( {
-    ip route show table "$DOMAIN_ROUTE_TABLE" 2>/dev/null
-    ip route show table "$SUBNET_ROUTE_TABLE" 2>/dev/null
+    ip route show table "$DOMAIN_ROUTE_TABLE" 2>/dev/null | head -5
+    ip route show table "$SUBNET_ROUTE_TABLE" 2>/dev/null | head -5
   } | sed -n 's/.*dev \([^ ]*\).*/\1/p' | sort -u | tr '\n' ' ' | sed 's/ $//')
   # Gateway: extract "via <IP>" from first route, or "scope link" if none
   local _gw_ip
@@ -65,8 +67,8 @@ ${_pfx}${_iface}: #${SUBNET_ROUTE_TABLE} subnets"
 
 # Sets: _ck_domain_routes, _ck_subnet_routes
 check_routes() {
-  _ck_domain_routes=$(ip route show table "$DOMAIN_ROUTE_TABLE" 2>/dev/null | wc -l)
-  _ck_subnet_routes=$(ip route show table "$SUBNET_ROUTE_TABLE" 2>/dev/null | wc -l)
+  _ck_domain_routes=$(table_route_count "$DOMAIN_ROUTE_TABLE")
+  _ck_subnet_routes=$(table_route_count "$SUBNET_ROUTE_TABLE")
   [ "$_ck_domain_routes" -gt 0 ] || STATUS_OK=1
   [ "$_ck_subnet_routes" -gt 0 ] || STATUS_OK=1
 }

@@ -7,6 +7,15 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-06-01
+
+### Fixed
+- Domain cache freshness drift: `touch -d "@$t_start"` anchors mtime to operation
+  start, not end. Prevents +cron_interval delay when resolve takes >0s.
+
+### Added
+- Dependency: `coreutils-touch` (GNU touch with `-d` support for BusyBox routers)
+
 ## [0.12.1] - 2026-06-01
 
 ### Changed

@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-06-01
+
+### Changed
+- `kee-status.sh`: parse status word from sub-script first line instead of
+  fragile grep/exit-code heuristic; added echo separator between packages in `-d`
+
 ## [0.11.0] - 2026-06-01
 
 ### Added

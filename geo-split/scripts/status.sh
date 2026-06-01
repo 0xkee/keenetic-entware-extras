@@ -20,9 +20,10 @@ _st_version=""
 # --- Check functions ---
 # Pure data collection. May set STATUS_OK=1 on failures.
 
-# Sets: _ck_geo_zone, _ck_active_out
+# Sets: _ck_geo_zone, _ck_active_out, _ck_gateway
 check_mode() {
   _ck_geo_zone=""
+  _ck_gateway=""
   if [ -n "${SUBNET_URL:-}" ]; then
     _ck_geo_zone=$(basename "$SUBNET_URL" .zone | tr '[:lower:]' '[:upper:]')
   fi
@@ -30,6 +31,15 @@ check_mode() {
     ip route show table "$DOMAIN_ROUTE_TABLE" 2>/dev/null
     ip route show table "$SUBNET_ROUTE_TABLE" 2>/dev/null
   } | sed -n 's/.*dev \([^ ]*\).*/\1/p' | sort -u | tr '\n' ' ' | sed 's/ $//')
+  # Gateway: extract "via <IP>" from first route, or "scope link" if none
+  local _gw_ip
+  _gw_ip=$(ip route show table "$SUBNET_ROUTE_TABLE" 2>/dev/null | \
+    sed -n 's/.*via \([^ ]*\).*/\1/p' | head -1)
+  if [ -n "$_gw_ip" ]; then
+    _ck_gateway="via $_gw_ip"
+  elif [ -n "$_ck_active_out" ]; then
+    _ck_gateway="scope link"
+  fi
 }
 
 # Sets: _ck_rules_detail (newline-separated, "!" prefix for failed)
@@ -402,7 +412,7 @@ json_output() {
     json_kv "route_out" "${_ck_active_out:-detached}"
   fi
   printf ','
-  json_kv_bool "ndm_hook" "$_ck_ndm_hook_ok"
+  json_kv "gateway" "${_ck_gateway:-none}"
   printf ','
   json_kv_num "subnets" "$_ck_subnet_routes"
   printf ','
@@ -414,7 +424,7 @@ json_output() {
   printf ','
   json_kv_num "domain_freshness" "$_ck_domain_freshness_seconds"
   printf ','
-  json_kv "_s1" ""
+  json_kv_bool "ndm_hook" "$_ck_ndm_hook_ok"
   printf ','
   json_kv_num "domain_sources" "$_ck_domain_sources"
   printf ','
@@ -473,11 +483,22 @@ if [ "${1:-}" = "--json" ]; then
   exit "$STATUS_OK"
 fi
 
-echo "geo-split status:"
+# Pre-compute status word for title line
+_status_word="✓ Alive"
 if ! is_service_enabled "S99geo-split"; then
-  echo "  Service:     ⚠ Disabled (not auto-starting)"
-  echo
+  _status_word="⚠ Disabled"
+else
+  # Quick core checks (show functions may re-run, harmless)
+  check_ip_rules
+  check_routes
+  status_check_uptime "$PIDFILE"
+  if [ "$STATUS_OK" -ne 0 ]; then
+    _status_word="✗ Fail"
+  fi
 fi
+
+echo "geo-split status: $_status_word"
+
 show_mode
 echo
 show_ip_rules

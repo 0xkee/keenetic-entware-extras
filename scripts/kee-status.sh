@@ -141,11 +141,18 @@ echo "keenetic-entware-extras status:"
 
 OVERALL_RC=0
 FOUND=0
+_PKG_SEP=""
 
 for script in "$BASE"/*/scripts/status.sh; do
   # Glob may expand to literal if no matches exist
   [ -f "$script" ] || continue
   FOUND=1
+
+  # Print separator between packages in --details mode
+  if [ -n "$DETAILS" ] && [ -n "$_PKG_SEP" ]; then
+    echo
+  fi
+  _PKG_SEP=1
 
   # Derive package name: strip BASE prefix, take first path segment
   pkg="${script#"$BASE"/}"
@@ -157,30 +164,45 @@ for script in "$BASE"/*/scripts/status.sh; do
   rc=$?
   set -e
 
-  if [ "$rc" -eq 0 ]; then
-    print_pkg_row "$pkg" "Alive" "$C_GREEN"
-    # --details: show full output even for healthy packages
-    if [ -n "$DETAILS" ] && [ -n "$output" ]; then
-      printf "%s\n" "$output" | indent_output
-    fi
-  elif printf "%s" "$output" | grep -q "Disabled"; then
-    print_pkg_row "$pkg" "Disabled" "$C_YELLOW"
-    if [ -n "$DETAILS" ] && [ -n "$output" ]; then
-      printf "%s\n" "$output" | indent_output
-    fi
-  else
-    OVERALL_RC=1
-    print_pkg_row "$pkg" "FAIL" "$C_RED"
-    if [ -n "$output" ]; then
-      if [ -n "$DETAILS" ]; then
+  # Parse status from first line: "<name> status: <marker> <word>"
+  first_line=$(printf "%s" "$output" | head -1)
+  case "$first_line" in
+    *Alive*)    status="alive" ;;
+    *Disabled*) status="disabled" ;;
+    *Fail*)     status="fail" ;;
+    *)
+      # Fallback: use exit code (for scripts not yet updated)
+      if [ "$rc" -eq 0 ]; then status="alive"; else status="fail"; fi
+      ;;
+  esac
+
+  case "$status" in
+    alive)
+      print_pkg_row "$pkg" "Alive" "$C_GREEN"
+      if [ -n "$DETAILS" ] && [ -n "$output" ]; then
         printf "%s\n" "$output" | indent_output
-      else
-        printf "%s\n" "$output" | filter_errors
       fi
-    else
-      printf "    %s(no output, exit code %d)%s\n" "$C_DIM" "$rc" "$C_RESET"
-    fi
-  fi
+      ;;
+    disabled)
+      print_pkg_row "$pkg" "Disabled" "$C_YELLOW"
+      if [ -n "$DETAILS" ] && [ -n "$output" ]; then
+        printf "%s\n" "$output" | indent_output
+      fi
+      ;;
+    fail)
+      OVERALL_RC=1
+      print_pkg_row "$pkg" "FAIL" "$C_RED"
+      if [ -n "$output" ]; then
+        if [ -n "$DETAILS" ]; then
+          printf "%s\n" "$output" | indent_output
+        else
+          printf "%s\n" "$output" | filter_errors
+        fi
+      else
+        printf "    %s(no output, exit code %d)%s\n" "$C_DIM" "$rc" "$C_RESET"
+      fi
+      ;;
+  esac
 done
 
 if [ "$FOUND" -eq 0 ]; then

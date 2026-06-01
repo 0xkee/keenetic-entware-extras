@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-06-01
+
+### Changed
+- `status.sh`: status word (`✓ Alive` / `⚠ Disabled` / `✗ Fail`) printed on
+  title line; removed separate "Service: ⚠ Disabled" line
+
 ## [0.3.0] - 2026-06-01
 
 ### Changed

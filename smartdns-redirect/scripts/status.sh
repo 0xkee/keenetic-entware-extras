@@ -284,11 +284,16 @@ if [ "${1:-}" = "--json" ]; then
   exit "$STATUS_OK"
 fi
 
-echo "smartdns-redirect status:"
+# Determine status word for title line
+_status_word="✓ Alive"
 if ! is_service_enabled "S39smartdns-redirect"; then
-  echo "  Service:     ⚠ Disabled (not auto-starting)"
-  echo
+  _status_word="⚠ Disabled"
+elif [ "$STATUS_OK" -ne 0 ]; then
+  _status_word="✗ Fail"
 fi
+
+echo "smartdns-redirect status: $_status_word"
+
 show_mode
 echo
 show_rules

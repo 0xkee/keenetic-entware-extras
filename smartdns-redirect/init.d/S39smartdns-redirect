@@ -1,6 +1,6 @@
 #!/opt/bin/sh
 # smartdns-redirect init script for Entware.
-# Installed to /opt/etc/init.d/S39smartdns-redirect.
+# Real script lives in package dir; symlink in /opt/etc/init.d/ enables boot.
 # S39 = runs AFTER S38smartdns (upstream DNS must be ready first).
 # shellcheck disable=SC3043  # 'local' supported by ash/busybox sh
 # shellcheck disable=SC1091  # sourced files resolved at runtime on router
@@ -38,8 +38,17 @@ case "${1:-}" in
   status)
     "$SCRIPTS/status.sh"
     ;;
+  enable)
+    ln -sf "$INSTALL_DIR/init.d/$(basename "$0")" "/opt/etc/init.d/$(basename "$0")"
+    "$0" start
+    ;;
+  disable)
+    "$0" stop
+    rm -f "/opt/etc/init.d/$(basename "$0")"
+    echo "smartdns-redirect disabled (persistent until 'enable')"
+    ;;
   *)
-    echo "Usage: $0 {start|stop|restart|reload|status}"
+    echo "Usage: $0 {start|stop|restart|reload|status|enable|disable}"
     exit 1
     ;;
 esac

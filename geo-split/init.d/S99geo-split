@@ -1,6 +1,6 @@
 #!/opt/bin/sh
 # geo-split init script for Entware.
-# Installed to /opt/etc/init.d/S99geo-split by install.sh.
+# Real script lives in package dir; symlink in /opt/etc/init.d/ enables boot/cron.
 # INSTALL_DIR is patched by install.sh via sed to match actual install path.
 # shellcheck disable=SC3043  # 'local' supported by ash/busybox sh
 # shellcheck disable=SC1091  # sourced files resolved at runtime on router
@@ -42,6 +42,7 @@ case "${1:-}" in
     ;;
   refresh)
     # Cron: loaders check freshness + fill tables if stale. No ip rules.
+    is_service_enabled "S99geo-split" || exit 0
     "$SCRIPTS/update-subnets.sh" &
     "$SCRIPTS/update-domains.sh" &
     wait
@@ -63,8 +64,17 @@ case "${1:-}" in
     "$SCRIPTS/update-domains.sh" --force
     echo "Domain update complete."
     ;;
+  enable)
+    ln -sf "$INSTALL_DIR/init.d/$(basename "$0")" "/opt/etc/init.d/$(basename "$0")"
+    "$0" start
+    ;;
+  disable)
+    "$0" stop
+    rm -f "/opt/etc/init.d/$(basename "$0")"
+    echo "geo-split disabled (persistent until 'enable')"
+    ;;
   *)
-    echo "Usage: $0 {start|stop|restart|status|refresh|update|update-subnets|update-domains}"
+    echo "Usage: $0 {start|stop|restart|status|refresh|update|update-subnets|update-domains|enable|disable}"
     exit 1
     ;;
 esac

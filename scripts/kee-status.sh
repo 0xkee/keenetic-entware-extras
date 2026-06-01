@@ -73,11 +73,12 @@ if { [ -t 1 ] || [ -n "$FORCE_COLOR" ]; } \
    && [ -z "${NO_COLOR:-}" ] && [ -z "$NO_COLOR_OPT" ]; then
   C_GREEN=$(printf '\033[1;92m')   # bold bright green — Alive
   C_RED=$(printf '\033[1;91m')     # bold bright red   — FAIL label
+  C_YELLOW=$(printf '\033[1;93m')  # bold bright yellow — Disabled
   C_XMARK=$(printf '\033[31m')     # plain red         — ✗ glyph (visible but not shouting)
   C_DIM=$(printf '\033[2m')        # dim               — notes
   C_RESET=$(printf '\033[0m')
 else
-  C_GREEN=""; C_RED=""; C_XMARK=""; C_DIM=""; C_RESET=""
+  C_GREEN=""; C_RED=""; C_YELLOW=""; C_XMARK=""; C_DIM=""; C_RESET=""
 fi
 
 # ---------------------------------------------------------------------------
@@ -159,6 +160,11 @@ for script in "$BASE"/*/scripts/status.sh; do
   if [ "$rc" -eq 0 ]; then
     print_pkg_row "$pkg" "Alive" "$C_GREEN"
     # --details: show full output even for healthy packages
+    if [ -n "$DETAILS" ] && [ -n "$output" ]; then
+      printf "%s\n" "$output" | indent_output
+    fi
+  elif printf "%s" "$output" | grep -q "Disabled"; then
+    print_pkg_row "$pkg" "Disabled" "$C_YELLOW"
     if [ -n "$DETAILS" ] && [ -n "$output" ]; then
       printf "%s\n" "$output" | indent_output
     fi

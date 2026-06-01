@@ -7,6 +7,20 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-06-01
+
+### Changed
+- Init script moved to `init.d/S80nginx-webui` (symlink in `/opt/etc/init.d/`);
+  enables graceful user disable by removing the symlink
+- postinst creates symlink instead of copying init script
+- prerm stops service and removes symlink
+- API routes: start/stop actions now call `enable`/`disable` commands
+  (persistent state that survives reboot; hooks respect it)
+
+### Added
+- `status.sh`: `"enabled"` field in JSON output; text mode shows "⚠ Disabled"
+  warning when service symlink is absent
+
 ## [0.9.0] - 2026-05-26
 
 ### Changed

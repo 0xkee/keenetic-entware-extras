@@ -129,14 +129,15 @@ local text_routes = {
 }
 
 -- Action routes: POST-only commands (start/stop/update)
+-- enable/disable: persistent on/off (survives reboot, hooks respect it)
 local action_routes = {
-    -- Start/Stop
-    ["/api/geo-split/start"]           = "/opt/etc/init.d/S99geo-split start 2>&1",
-    ["/api/geo-split/stop"]            = "/opt/etc/init.d/S99geo-split stop 2>&1",
+    -- Start/Stop (enable/disable for persistent state)
+    ["/api/geo-split/start"]           = base .. "/geo-split/init.d/S99geo-split enable 2>&1",
+    ["/api/geo-split/stop"]            = base .. "/geo-split/init.d/S99geo-split disable 2>&1",
     ["/api/smartdns/start"]            = base .. "/smartdns-conf-ru-split/scripts/toggle.sh enable 2>&1",
     ["/api/smartdns/stop"]             = base .. "/smartdns-conf-ru-split/scripts/toggle.sh disable 2>&1",
-    ["/api/smartdns-redirect/start"]   = "/opt/etc/init.d/S39smartdns-redirect start 2>&1",
-    ["/api/smartdns-redirect/stop"]    = "/opt/etc/init.d/S39smartdns-redirect stop 2>&1",
+    ["/api/smartdns-redirect/start"]   = base .. "/smartdns-redirect/init.d/S39smartdns-redirect enable 2>&1",
+    ["/api/smartdns-redirect/stop"]    = base .. "/smartdns-redirect/init.d/S39smartdns-redirect disable 2>&1",
     -- Update (geo-split only, runs in background)
     -- Wrap in subshell (...&) so run_cmd's appended '; echo "::EXIT:$?"'
     -- does not produce "&;" which is a syntax error in BusyBox ash.

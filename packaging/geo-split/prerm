@@ -5,7 +5,10 @@ set -eu
 # 1. Stop service
 /opt/etc/init.d/S99geo-split stop 2>/dev/null || true
 
-# 2. Remove NDM hook symlink
+# 2. Remove init.d symlink
+rm -f /opt/etc/init.d/S99geo-split || true
+
+# 3. Remove NDM hook symlink
 rm -f /opt/etc/ndm/ifstatechanged.d/geo-split-hook
 
 # 3. Remove cron jobs

@@ -12,6 +12,9 @@ _CONFIG_DIR="$(cd "$SCRIPT_DIR/../config" && pwd)"
 . "$_CONFIG_DIR/defaults.conf"
 [ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
 
+# Guard: exit if user disabled the service
+is_service_enabled "S39smartdns-redirect" || exit 0
+
 # Exit silently if disabled (empty INTERFACES == package inactive).
 [ -n "${INTERFACES:-}" ] || exit 0
 

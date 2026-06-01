@@ -7,7 +7,10 @@ if [ -x /opt/etc/init.d/S39smartdns-redirect ]; then
     /opt/etc/init.d/S39smartdns-redirect stop 2>/dev/null || true
 fi
 
-# 2. Remove NDM netfilter hook symlink
+# 2. Remove init.d symlink
+rm -f /opt/etc/init.d/S39smartdns-redirect || true
+
+# 3. Remove NDM netfilter hook symlink
 rm -f /opt/etc/ndm/netfilter.d/smartdns-redirect-hook
 
 # 3. Remove cron jobs

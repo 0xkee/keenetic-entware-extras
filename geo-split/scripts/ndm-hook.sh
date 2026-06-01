@@ -11,8 +11,12 @@ REAL_PATH="$(readlink -f "$0" 2>/dev/null || readlink "$0")"
 HOOK_DIR="$(dirname "$REAL_PATH")"
 _CONFIG_DIR="$HOOK_DIR/../config"
 
+. /opt/keenetic-entware-extras/lib/common.sh
 . "$_CONFIG_DIR/defaults.conf"
 [ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
+
+# Guard: exit if user disabled the service
+is_service_enabled "S99geo-split" || exit 0
 
 # NDM hook filter
 [ "${1:-}" != "hook" ] && exit 0

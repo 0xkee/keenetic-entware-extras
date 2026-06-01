@@ -34,6 +34,7 @@
 ## 🟡 Важные
 
 - [ ] добавить Upstream в status + webui (Ok когда доступен)
+- [ ] + таймер на лейбл , когда сервис stopped (disabled)?
 - [ ] **upstream: использовать LAN IP вместо 127.0.0.1** — stock httpd на некоторых моделях (NC-1012 Giga у cryoPanda) возвращает 403 при запросах с loopback. На router-1 (NC-4110) работает нормально (200). Текущий `nginx.conf:68` хардкодит `upstream keenetic_ui { server 127.0.0.1:80; }` → `/auth` и `/rci/` проксируются на localhost → 403 → авторизация через :8080 невозможна.
   - **Решение:** расширить `listen.conf` — добавить `set $stock_httpd http://<LAN_IP>:80;`, убрать блок `upstream keenetic_ui`, заменить `proxy_pass http://keenetic_ui` → `proxy_pass $stock_httpd` в locations `/auth` и `/rci/`.
   - **Файлы:** `config/nginx.conf` (удалить upstream, proxy_pass через переменную), `rootfs/opt/etc/init.d/S80nginx-webui:35` (расширить генерацию listen.conf), `packaging/webui/postinst` (аналогично).

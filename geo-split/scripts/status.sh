@@ -377,7 +377,13 @@ json_output() {
 
   # STATUS_OK already set by check functions above
 
+  # Enabled: symlink exists in /opt/etc/init.d/
+  local enabled_val=1
+  is_service_enabled "S99geo-split" && enabled_val=0
+
   printf '{'
+  json_kv_bool "enabled" "$enabled_val"
+  printf ','
   json_kv_bool "running" "$([ "$running" = "true" ] && echo 0 || echo 1)"
   printf ','
   json_kv_bool "ok" "$STATUS_OK"
@@ -468,6 +474,10 @@ if [ "${1:-}" = "--json" ]; then
 fi
 
 echo "geo-split status:"
+if ! is_service_enabled "S99geo-split"; then
+  echo "  Service:     ⚠ Disabled (not auto-starting)"
+  echo
+fi
 show_mode
 echo
 show_ip_rules

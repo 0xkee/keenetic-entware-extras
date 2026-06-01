@@ -4,13 +4,18 @@
 set -eu
 
 INSTALL_DIR="/opt/keenetic-entware-extras/smartdns-redirect"
+INIT_SCRIPT="$INSTALL_DIR/init.d/S39smartdns-redirect"
+INIT_LINK="/opt/etc/init.d/S39smartdns-redirect"
 
-# 1. Create NDM netfilter hook symlink
+# 1. Create init.d symlink (enables boot start + CLI access)
+ln -sf "$INIT_SCRIPT" "$INIT_LINK"
+
+# 2. Create NDM netfilter hook symlink
 NDM_DIR="/opt/etc/ndm/netfilter.d"
 mkdir -p "$NDM_DIR"
 ln -sf "$INSTALL_DIR/scripts/netfilter-hook.sh" "$NDM_DIR/smartdns-redirect-hook"
 
-# 2. Update cron jobs (remove old, add new — safe on upgrade)
+# 3. Update cron jobs (remove old, add new — safe on upgrade)
 CRON_FILE="/opt/etc/crontab"
 if [ -f "$CRON_FILE" ]; then
     sed -i '/smartdns-redirect/d' "$CRON_FILE"
@@ -20,15 +25,13 @@ fi
     echo "*/5 * * * * root $INSTALL_DIR/scripts/watchdog.sh >/dev/null 2>&1"
 } >> "$CRON_FILE"
 
-# 3. Restart crond to pick up changes
+# 4. Restart crond to pick up changes
 if [ -x /opt/etc/init.d/S10cron ]; then
     /opt/etc/init.d/S10cron restart 2>/dev/null || true
 fi
 
-# 4. Start service (|| true: don't fail install if upstream DNS not ready)
-if [ -x /opt/etc/init.d/S39smartdns-redirect ]; then
-    /opt/etc/init.d/S39smartdns-redirect start || true
-fi
+# 5. Start service (|| true: don't fail install if upstream DNS not ready)
+"$INIT_LINK" start || true
 
 echo "smartdns-redirect installed."
 echo "  User config: $INSTALL_DIR/config/config.conf"

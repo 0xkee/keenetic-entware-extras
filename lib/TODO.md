@@ -4,6 +4,7 @@
 
 ---
 
+- [ ] зачем нам 2 buiuld-ipk и make? можем мигрировать на make?
 - [x] format_age и поискать во всех проектах и вынести общее сюда, в либу
       → вынесено в `lib/common.sh`. Попутно:
       - `installed_pkg_version <pkg>` вынесено туда же (3 дубля `show_version`)

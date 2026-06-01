@@ -1,5 +1,5 @@
 Package: keenetic-entware-extras
-Version: 0.11.1
+Version: 0.12.0
 Architecture: all
 Maintainer: 0xkee
 Depends: cron

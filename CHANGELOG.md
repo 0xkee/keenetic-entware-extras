@@ -7,6 +7,22 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-06-01
+
+### Improved
+- `scripts/bug-report.sh` — major diagnostic enhancement:
+  - New section: service enabled/disabled state (symlink detection)
+  - New section: user config.conf existence per package
+  - New section: geo-split effective config (ROUTE_OUT, ROUTE_GW, ROUTE_IN, tables)
+  - New section: VPN/tunnel interfaces list (nwg/awg/ovpn/tun/tap)
+  - Routes section: ISP auto-detection via `detect_out_iface()` + `detect_gateway()`
+  - Routes section: shows route type (via gateway vs scope-link) for both tables
+  - WebUI upstream (stock httpd) reachability probe in connectivity section
+  - Added `coreutils-touch` to opkg package grep
+  - Added `watchdog` to logread filter
+  - Added `/proc/net/fib_triestat` availability indicator
+  - Increased logread tail from 15 to 20 lines
+
 ## [0.11.1] - 2026-06-01
 
 ### Changed

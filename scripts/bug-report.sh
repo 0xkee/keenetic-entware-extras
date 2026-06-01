@@ -30,6 +30,7 @@ fi
 
 printf "\nKernel: %s\n" "$(uname -r 2>/dev/null || echo 'unknown')"
 printf "Arch:   %s\n" "$(uname -m 2>/dev/null || echo 'unknown')"
+printf "FIB trie stats: %s\n" "$([ -f /proc/net/fib_triestat ] && echo 'available' || echo 'not available (old kernel)')"
 
 # ─── 2. Memory & disk ────────────────────────────────────────────────────────
 
@@ -45,7 +46,7 @@ if [ -f /proc/meminfo ]; then
             "$mem_total" "$mem_used" "$mem_avail" \
             "$((mem_used * 100 / mem_total))"
     else
-        cat /proc/meminfo | head -5
+        head -5 /proc/meminfo
     fi
 else
     free 2>/dev/null || echo "  (unavailable)"
@@ -61,13 +62,66 @@ section "Installed packages (related)"
 
 if command -v opkg >/dev/null 2>&1; then
     opkg list-installed 2>/dev/null \
-        | grep -E "geo-split|smartdns|webui|keenetic-entware|nginx|^cron |^aggregate |^bind-dig |^ca-certificates |^curl |^ip-full |^iptables |^logrotate " \
+        | grep -E "geo-split|smartdns|webui|keenetic-entware|nginx|^cron |^aggregate |^bind-dig |^ca-certificates |^coreutils-touch |^curl |^ip-full |^iptables |^logrotate " \
         || echo "  (none found)"
 else
     echo "opkg: not found"
 fi
 
-# ─── 4. Service status ───────────────────────────────────────────────────────
+# ─── 4. Service state (enabled/disabled) ─────────────────────────────────────
+
+section "Service state (enabled/disabled)"
+
+for init_name in S99geo-split S39smartdns-redirect S80nginx-webui; do
+    if [ -L "/opt/etc/init.d/$init_name" ]; then
+        printf "  %-26s ENABLED (symlink)\n" "$init_name"
+    elif [ -f "$BASE/geo-split/init.d/$init_name" ] \
+      || [ -f "$BASE/smartdns-redirect/init.d/$init_name" ] \
+      || [ -f "$BASE/webui/init.d/$init_name" ]; then
+        printf "  %-26s DISABLED (no symlink)\n" "$init_name"
+    else
+        printf "  %-26s not installed\n" "$init_name"
+    fi
+done
+
+# ─── 5. User configs ─────────────────────────────────────────────────────────
+
+section "User configs (config.conf)"
+
+for pkg in geo-split smartdns-redirect smartdns-conf-ru-split webui; do
+    conf="$BASE/$pkg/config/config.conf"
+    if [ -f "$conf" ]; then
+        printf "  %-28s EXISTS (%d lines)\n" "$pkg/config.conf" "$(wc -l < "$conf")"
+    elif [ -d "$BASE/$pkg/config" ]; then
+        printf "  %-28s (defaults only)\n" "$pkg/config.conf"
+    fi
+done
+
+# ─── 6. geo-split config ─────────────────────────────────────────────────────
+
+section "geo-split config (effective)"
+
+_gs_conf="$BASE/geo-split/config"
+if [ -d "$_gs_conf" ]; then
+    # Run in subshell to avoid polluting our environment
+    (
+        _CONFIG_DIR="$_gs_conf"
+        # shellcheck disable=SC1091
+        . "$_gs_conf/defaults.conf"
+        [ -f "$_gs_conf/config.conf" ] && . "$_gs_conf/config.conf"
+        printf "  ROUTE_OUT:             %s\n" "${ROUTE_OUT:-auto}"
+        printf "  ROUTE_GW:              %s\n" "${ROUTE_GW:-auto}"
+        printf "  ROUTE_IN:              %s\n" "${ROUTE_IN:-br0}"
+        printf "  DOMAIN_ROUTE_TABLE:    %s\n" "${DOMAIN_ROUTE_TABLE:-1000}"
+        printf "  SUBNET_ROUTE_TABLE:    %s\n" "${SUBNET_ROUTE_TABLE:-1001}"
+        printf "  DOWNLOAD_INTERFACES:   %s\n" "${DOWNLOAD_INTERFACES:-default *}"
+        printf "  DOMAINS_UPDATE_INTERVAL: %ss\n" "${DOMAINS_UPDATE_INTERVAL:-3600}"
+    )
+else
+    echo "  (geo-split not installed)"
+fi
+
+# ─── 7. Service status ───────────────────────────────────────────────────────
 
 section "Service status"
 
@@ -85,7 +139,7 @@ else
     done
 fi
 
-# ─── 5. DNS check ────────────────────────────────────────────────────────────
+# ─── 8. DNS check ────────────────────────────────────────────────────────────
 
 section "DNS check"
 
@@ -130,7 +184,7 @@ else
     echo "  (not found)"
 fi
 
-# ─── 6. Connectivity ─────────────────────────────────────────────────────────
+# ─── 9. Connectivity ─────────────────────────────────────────────────────────
 
 section "Connectivity"
 
@@ -157,7 +211,19 @@ else
     echo "  curl/wget: not installed"
 fi
 
-# ─── 7. Routes & rules (geo-split) ──────────────────────────────────────────
+# WebUI upstream (stock httpd) probe
+if [ -f "$BASE/webui/config/listen.conf" ]; then
+    printf "\nWebUI upstream (stock httpd):\n"
+    _upstream=$(sed -n 's|.*stock_httpd *http://\([^;]*\);|\1|p' "$BASE/webui/config/listen.conf")
+    if [ -n "$_upstream" ] && command -v curl >/dev/null 2>&1; then
+        _code=$(curl -so /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 3 "http://$_upstream/" 2>/dev/null) || _code="000"
+        printf "  %s → %s\n" "$_upstream" "$_code"
+    else
+        printf "  upstream: %s (not probed)\n" "${_upstream:-(unknown)}"
+    fi
+fi
+
+# ─── 10. Routes & rules (geo-split) ──────────────────────────────────────────
 
 section "Routes & rules"
 
@@ -171,12 +237,41 @@ if command -v ip >/dev/null 2>&1; then
     printf "  table 1001 (subnets):  %s routes\n" \
         "$(table_route_count 1001)"
 
-    printf "\nDefault gateway (table 1000): "
-    gw="$(ip route show table 1000 2>/dev/null | grep "^default" | head -1)"
-    printf "%s\n" "${gw:-(no default — host routes only)}"
-    printf "Default gateway (table 1001): "
-    gw="$(ip route show table 1001 2>/dev/null | grep "^default" | head -1)"
-    printf "%s\n" "${gw:-(no default — host routes only)}"
+    # ISP interface and gateway (auto-detected)
+    printf "\nISP detection (auto):\n"
+    _out_iface=$(detect_out_iface)
+    if [ -n "$_out_iface" ]; then
+        _gw=$(detect_gateway "$_out_iface")
+        printf "  Interface: %s\n" "$_out_iface"
+        printf "  Gateway:   %s\n" "${_gw:-(none — point-to-point/LTE)}"
+    else
+        printf "  (no ISP interface detected)\n"
+    fi
+
+    # Actual route type in tables
+    printf "\nRoute type in tables:\n"
+    _sample=$(ip route show table 1001 2>/dev/null | head -1)
+    if [ -n "$_sample" ]; then
+        if echo "$_sample" | grep -q "via "; then
+            _rgw=$(echo "$_sample" | sed -n 's/.*via \([^ ]*\).*/\1/p')
+            printf "  table 1001: via %s (gateway mode)\n" "$_rgw"
+        else
+            printf "  table 1001: dev-only (scope link, no gateway)\n"
+        fi
+    else
+        printf "  table 1001: (empty)\n"
+    fi
+    _sample=$(ip route show table 1000 2>/dev/null | head -1)
+    if [ -n "$_sample" ]; then
+        if echo "$_sample" | grep -q "via "; then
+            _rgw=$(echo "$_sample" | sed -n 's/.*via \([^ ]*\).*/\1/p')
+            printf "  table 1000: via %s (gateway mode)\n" "$_rgw"
+        else
+            printf "  table 1000: dev-only (scope link, no gateway)\n"
+        fi
+    else
+        printf "  table 1000: (empty)\n"
+    fi
 
     printf "\nSample routes (table 1000, first 3):\n"
     ip route show table 1000 2>/dev/null | head -3 | sed 's/^/  /'
@@ -184,7 +279,7 @@ else
     echo "ip: not found"
 fi
 
-# ─── 8. Netfilter rules (smartdns-redirect) ─────────────────────────────────
+# ─── 11. Netfilter rules (smartdns-redirect) ─────────────────────────────────
 
 section "Netfilter (DNS redirect)"
 
@@ -196,7 +291,7 @@ else
     echo "iptables: not found"
 fi
 
-# ─── 9. Network interfaces ──────────────────────────────────────────────────
+# ─── 12. Network interfaces ──────────────────────────────────────────────────
 
 section "Network interfaces (UP only, no IPs)"
 
@@ -210,11 +305,22 @@ if command -v ip >/dev/null 2>&1; then
         | grep -E "^(br|lo)" \
         | awk '{printf "  %-16s", $1; for(i=3;i<=NF;i++){if($i~/^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|127\.|fe80:|fd)/)printf " %s",$i}; printf "\n"}' \
         | head -10
+
+    # VPN/tunnel interfaces (critical for geo-split routing)
+    printf "\nVPN/tunnel interfaces:\n"
+    _vpn_ifaces=$(ip -brief link show 2>/dev/null \
+        | grep -E "^(nwg|awg|ovpn|l2tp|pptp|tun|tap|wg)" \
+        | awk '{printf "  %-16s %s\n", $1, $2}')
+    if [ -n "$_vpn_ifaces" ]; then
+        echo "$_vpn_ifaces"
+    else
+        echo "  (none detected)"
+    fi
 else
     echo "  (ip command not found)"
 fi
 
-# ─── 10. Logs (last 20 lines) ────────────────────────────────────────────────
+# ─── 13. Logs (tail) ─────────────────────────────────────────────────────────
 
 section "Logs (tail)"
 
@@ -234,8 +340,8 @@ if [ -f /opt/var/log/geo-split.log ]; then
 fi
 
 if command -v logread >/dev/null 2>&1; then
-    printf "\n--- logread (geo-split|smartdns|nginx-webui, last 15) ---\n"
-    logread 2>/dev/null | grep -E "geo-split|smartdns|nginx-webui" | tail -15 || echo "  (nothing)"
+    printf "\n--- logread (geo-split|smartdns|nginx-webui|watchdog, last 20) ---\n"
+    logread 2>/dev/null | grep -E "geo-split|smartdns|nginx-webui|watchdog" | tail -20 || echo "  (nothing)"
 fi
 
 # ─── Footer ──────────────────────────────────────────────────────────────────

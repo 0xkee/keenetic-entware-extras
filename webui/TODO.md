@@ -33,7 +33,7 @@
 
 ## 🟡 Важные
 
-- [ ] добавить Upstream в status + webui (Ok когда доступен)
+- [x] добавить Upstream в status + webui (Ok когда доступен) ✅ — `check_upstream()` в status.sh: парсит listen.conf для IP, curl probe. JSON: `details.upstream` (addr) + `checks.upstream` ("ok"|"warn"). Карточка рендерит автоматически через `parseDetails`.
 - [ ] + таймер на лейбл , когда сервис stopped (disabled)?
 - [x] **upstream: использовать LAN IP вместо 127.0.0.1** ✅ — удалён блок `upstream keenetic_ui`, `proxy_pass $stock_httpd` (nginx-переменная из `listen.conf`). Self-healing в init-скрипте генерирует listen.conf с `set $stock_httpd http://<LAN_IP>:80;` при старте. Команда `update-listen` для ручного обновления IP.
 

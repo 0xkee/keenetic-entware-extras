@@ -7,6 +7,14 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-06-01
+
+### Changed
+- `status.sh`: status word (`✓ Alive` / `⚠ Disabled` / `✗ Fail`) printed on title line
+  for machine-parseable extraction by `kee-status`
+- `status.sh` JSON: added `gateway` field (`via <IP>` or `scope link`);
+  reorganized grid — `ndm_hook` moved to row 4 (was row 2)
+
 ## [0.12.0] - 2026-06-01
 
 ### Changed

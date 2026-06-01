@@ -185,7 +185,16 @@ if [ "${1:-}" = "--json" ]; then
   exit "$STATUS_OK"
 fi
 
-echo "smartdns-conf-ru-split status:"
+# Determine status word for title line
+# Note: smartdns init (S38smartdns) is a regular file from opkg, not our symlink;
+# this package has no standalone "disabled" state — it's always either running or failed.
+_status_word="✓ Alive"
+if [ "$STATUS_OK" -ne 0 ]; then
+  _status_word="✗ Fail"
+fi
+
+echo "smartdns-conf-ru-split status: $_status_word"
+
 echo "  Service:"
 if [ "$_ck_enabled" = "true" ]; then
   echo "    Mode:        split-DNS (enabled) ✓"

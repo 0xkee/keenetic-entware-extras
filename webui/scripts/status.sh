@@ -287,11 +287,17 @@ if [ "${1:-}" = "--json" ]; then
   exit "$STATUS_OK"
 fi
 
-echo "nginx-webui status:"
-echo "  Service:"
+# Determine status word for title line
+_status_word="✓ Alive"
 if ! is_service_enabled "S80nginx-webui"; then
-  echo "    ⚠ Disabled (not auto-starting)"
+  _status_word="⚠ Disabled"
+elif [ "$STATUS_OK" -ne 0 ]; then
+  _status_word="✗ Fail"
 fi
+
+echo "nginx-webui status: $_status_word"
+
+echo "  Service:"
 status_show_process
 show_config
 show_listen_conf

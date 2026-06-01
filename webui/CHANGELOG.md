@@ -5,7 +5,12 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
-## [Unreleased]
+## [0.11.0] - 2026-06-01
+
+### Added
+- `status.sh`: upstream (stock httpd) reachability check — `"upstream"` field
+  in details (address string) + `checks.upstream` ("ok"|"warn") in JSON output;
+  text mode shows "Upstream:" section. Dashboard card renders automatically.
 
 ## [0.10.1] - 2026-06-01
 

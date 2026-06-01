@@ -22,6 +22,9 @@ _st_running="false" _st_mem_kb="0"
 _st_uptime_seconds=0
 _st_port_ok="false" _st_port_addrs=""
 _st_version=""
+_ck_upstream_ok=1
+_ck_upstream_addr=""
+_ck_upstream_code=""
 
 # --- Check functions (specific to webui) ---
 
@@ -64,6 +67,37 @@ check_logrotate() {
     _ck_logrotate_ok="true"
   else
     _ck_logrotate_ok="false"
+  fi
+}
+
+# Check stock Keenetic httpd (upstream) reachability.
+# Parses listen.conf for $stock_httpd variable, then probes with curl.
+# Sets: _ck_upstream_ok (0=reachable, 1=unreachable), _ck_upstream_addr
+check_upstream() {
+  _ck_upstream_ok=1
+  _ck_upstream_addr=""
+
+  # Extract upstream address from listen.conf (format: set $stock_httpd http://IP:PORT;)
+  if [ -f "$LISTEN_CONF" ]; then
+    _ck_upstream_addr=$(sed -n 's|.*stock_httpd *http://\([^;]*\);|\1|p' "$LISTEN_CONF")
+  fi
+  [ -z "$_ck_upstream_addr" ] && _ck_upstream_addr="127.0.0.1:80"
+
+  # Probe: HTTP with short timeout (avoid blocking status for long)
+  if command -v curl >/dev/null 2>&1; then
+    _ck_upstream_code=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 3 \
+      "http://${_ck_upstream_addr}/" 2>/dev/null) || true
+    if [ -n "$_ck_upstream_code" ] && [ "$_ck_upstream_code" != "000" ]; then
+      _ck_upstream_ok=0
+    fi
+  else
+    # Fallback: check TCP port listening via netstat
+    local up_port
+    up_port="${_ck_upstream_addr##*:}"
+    if netstat -tln 2>/dev/null | grep -q ":${up_port} "; then
+      _ck_upstream_ok=0
+      _ck_upstream_code="listening"
+    fi
   fi
 }
 
@@ -118,6 +152,15 @@ show_logrotate() {
   fi
 }
 
+# Show upstream (stock httpd) reachability.
+show_upstream() {
+  if [ "$_ck_upstream_ok" = 0 ]; then
+    echo "    Stock httpd: ${_ck_upstream_addr} → ${_ck_upstream_code} ✓"
+  else
+    echo "    Stock httpd: ${_ck_upstream_addr} → ${_ck_upstream_code:-timeout} ✗"
+  fi
+}
+
 # Show HTTP endpoint checks (static page + API).
 show_http() {
   if ! command -v curl >/dev/null 2>&1; then
@@ -146,6 +189,7 @@ show_http() {
 # Collect structured data and emit JSON for webui.
 json_output() {
   local config_ok_val=1 lua_module_ok_val=1 http_ok_val=1 logrotate_ok_val=1
+  local upstream_ok_val="$_ck_upstream_ok"
   local mem_formatted=""
 
   [ "$_ck_config_ok" = "true" ] && config_ok_val=0 || true
@@ -181,6 +225,8 @@ json_output() {
   printf ','
   json_kv_bool "config" "$config_ok_val"
   printf ','
+  json_kv "upstream" "$_ck_upstream_addr"
+  printf ','
   json_kv_bool "lua_module" "$lua_module_ok_val"
   printf ','
   json_kv_bool "http" "$http_ok_val"
@@ -207,6 +253,8 @@ json_output() {
   json_check "http" "$(if [ "$http_ok_val" = 0 ]; then printf ok; else printf fail; fi)"
   printf ','
   json_check "logrotate" "$(if [ "$logrotate_ok_val" = 0 ]; then printf ok; else printf warn; fi)"
+  printf ','
+  json_check "upstream" "$(if [ "$upstream_ok_val" = 0 ]; then printf ok; else printf warn; fi)"
   printf '}}\n'
 }
 
@@ -222,6 +270,7 @@ check_config
 check_listen_conf
 check_lua_module
 check_logrotate
+check_upstream
 
 # Determine STATUS_OK
 [ "$_st_running" = "false" ] && STATUS_OK=1
@@ -230,6 +279,8 @@ check_logrotate
 [ "$_ck_listen_conf_ok" = "false" ] && STATUS_OK=1
 [ "$_ck_lua_module_ok" = "false" ] && STATUS_OK=1
 [ "$_ck_logrotate_ok" = "false" ] && STATUS_OK=1
+# Note: upstream_ok is not fatal — stock httpd could be temporarily down
+# but webui still serves custom dashboard. Reported as "warn" in checks.
 
 if [ "${1:-}" = "--json" ]; then
   json_output
@@ -249,6 +300,9 @@ status_show_port "$LISTEN_PORT"
 echo
 echo "  HTTP:"
 show_http
+echo
+echo "  Upstream:"
+show_upstream
 echo
 echo "  Logrotate:"
 show_logrotate

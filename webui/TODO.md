@@ -33,6 +33,13 @@
 
 ## 🟡 Важные
 
+- [ ] добавить Upstream в status + webui (Ok когда доступен)
+- [ ] **upstream: использовать LAN IP вместо 127.0.0.1** — stock httpd на некоторых моделях (NC-1012 Giga у cryoPanda) возвращает 403 при запросах с loopback. На router-1 (NC-4110) работает нормально (200). Текущий `nginx.conf:68` хардкодит `upstream keenetic_ui { server 127.0.0.1:80; }` → `/auth` и `/rci/` проксируются на localhost → 403 → авторизация через :8080 невозможна.
+  - **Решение:** расширить `listen.conf` — добавить `set $stock_httpd http://<LAN_IP>:80;`, убрать блок `upstream keenetic_ui`, заменить `proxy_pass http://keenetic_ui` → `proxy_pass $stock_httpd` в locations `/auth` и `/rci/`.
+  - **Файлы:** `config/nginx.conf` (удалить upstream, proxy_pass через переменную), `rootfs/opt/etc/init.d/S80nginx-webui:35` (расширить генерацию listen.conf), `packaging/webui/postinst` (аналогично).
+  - **Trade-off:** потеря upstream keepalive (nginx не пулит соединения при variable в proxy_pass). Допустимо: 1-5 req/min к stock httpd, latency localhost→localhost <1ms, 4 keepalive соединения на роутере с 2 юзерами — оверинжиниринг.
+  - **Источник:** баг cryoPanda (2026-06-01), docs/bugs/cryopanda-route-out-ignored/
+
 - [ ] **Sidebar menu: config-driven при реанимации** — если будем возвращать sidebar меню (`injectSidebar`), сделать его config-driven аналогично dashboard card (CUSTOM_ITEMS/SERVICE_APIS → shared config в `EW.*` или `__ewConfig`). Не хардкодить список пунктов в inject.js.
 
 - [x] **Refresh button: emoji → SVG sprite** ✅ — устарело, старый iframe-based index.html заменён на tab-архитектуру (app.js)

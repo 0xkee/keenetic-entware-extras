@@ -176,7 +176,7 @@ if json_cmd then
         ngx.say(output)
     else
         -- Fallback: script failed before JSON output
-        ngx.say('{"ok":false,"error":"' .. json_escape(output) .. '"}')
+        ngx.say('{"running":false,"ok":false,"error":"' .. json_escape(output) .. '"}')
     end
     return
 end

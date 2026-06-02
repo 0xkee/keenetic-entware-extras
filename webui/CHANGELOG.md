@@ -7,6 +7,15 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.11.2] - 2026-06-02
+
+### Improved
+- Error diagnostics: show actual script error message when status API fails
+  (previously showed generic "Unknown format"). Applies to both custom dashboard
+  (app.js) and stock dashboard card (inject.js).
+- api-router.lua: fallback error response now includes `"running":false` for
+  proper status display in both UIs.
+
 ## [0.11.1] - 2026-06-01
 
 ### Changed

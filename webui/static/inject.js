@@ -802,6 +802,10 @@
      */
     function parseServiceStatus(data) {
         var state = data.running ? 'running' : 'stopped';
+        // Handle error response from api-router fallback
+        if (!data.running && data.error) {
+            state = 'error';
+        }
         // Determine chip state from checks or fallback
         if (data.running) {
             if (data.checks) {

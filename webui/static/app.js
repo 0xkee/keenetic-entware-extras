@@ -242,6 +242,12 @@ function fetchStatus(url, id) {
                 if (el) {
                     el.innerHTML = '<pre class="ew-details-pre">' + escapeHtml(data.output) + '</pre>';
                 }
+            } else if (data.error) {
+                setStatus(id, "error", "Script error");
+                var el = document.getElementById("details-" + id);
+                if (el) {
+                    el.innerHTML = '<pre class="ew-details-pre ew-details-pre--error">' + escapeHtml(data.error) + '</pre>';
+                }
             } else {
                 setStatus(id, "warn", "Unknown format");
             }

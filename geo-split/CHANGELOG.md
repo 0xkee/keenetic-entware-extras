@@ -7,6 +7,14 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.12.5] - 2026-06-02
+
+### Fixed
+- WebUI "Unknown format": BusyBox sed SIGPIPE write error in `check_mode()` when
+  extracting gateway from 8K+ route table via `sed | head -1` pipeline; stderr
+  leaked into JSON output through api-router's `2>&1` redirect. Replaced with
+  single-process awk that exits on first match (no pipe, no SIGPIPE).
+
 ## [0.12.4] - 2026-06-02
 
 ### Fixed

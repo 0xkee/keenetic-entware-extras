@@ -31,5 +31,8 @@ backups
 private
 keenetic-entware-extras.code-workspace
 
+# === IDE local settings ===
+.vscode/
+
 # === Temporary / one-time ===
 .git-backup/

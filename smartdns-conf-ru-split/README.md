@@ -1,5 +1,7 @@
 # smartdns-conf-ru-split
 
+> 📖 **[Руководство пользователя](docs/user-manual.ru.md)** — пошаговая установка, настройка, troubleshooting.
+
 SmartDNS split-DNS конфигурация для российского интернета на Keenetic/Entware.
 
 ## Что это
@@ -26,17 +28,17 @@ Split DNS: разделение DNS-запросов по зонам.
 
 ```sh
 # Скопировать на роутер
-scp -O smartdns-conf-ru-split_0.1.2_all.ipk root@<router-ip>:/tmp/
+scp -O smartdns-conf-ru-split_<ver>_all.ipk root@<router-ip>:/tmp/
 
 # Установить
-opkg install /tmp/smartdns-conf-ru-split_0.1.2_all.ipk
+opkg install /tmp/smartdns-conf-ru-split_<ver>_all.ipk
 ```
 
 ### Из репозитория (для разработчиков)
 
 ```sh
 ./scripts/build-ipk.sh smartdns-conf-ru-split
-# Результат: dist/smartdns-conf-ru-split_0.1.2_all.ipk
+# Результат: dist/smartdns-conf-ru-split_<ver>_all.ipk
 ```
 
 ## Настройка Keenetic
@@ -126,7 +128,7 @@ smartdns-conf-ru-split status:
 
   System:
     Uptime:      2h 15m 30s ✓
-    Version:     0.1.2
+    Version:     x.y.z
 
   DNS Tests:
     ya.ru:         5.255.255.242 (ru-group) ✓
@@ -161,4 +163,4 @@ smartdns-conf-ru-split/
 
 ## Версионирование
 
-Текущая версия: **0.1.2** ([packaging/smartdns-conf-ru-split/control](../packaging/smartdns-conf-ru-split/control))
+Версия: см. [`packaging/smartdns-conf-ru-split/control`](../packaging/smartdns-conf-ru-split/control)

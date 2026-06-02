@@ -1,5 +1,7 @@
 # webui
 
+> 📖 **[Руководство пользователя](docs/user-manual.ru.md)** — пошаговая установка, настройка, troubleshooting.
+
 Веб-панель мониторинга для Keenetic/Entware — дашборд статуса сервисов + патчинг штатного WebUI с инъекцией кастомного меню и карточек.
 
 Типичные сценарии:
@@ -12,7 +14,7 @@
 Основной способ — через opkg:
 
 ```sh
-opkg install webui_0.7.0_all.ipk
+opkg install webui_<ver>_all.ipk
 ```
 
 Зависимости (`keenetic-entware-extras`, `nginx`, `nginx-mod-lua`, `logrotate`) устанавливаются автоматически.
@@ -188,7 +190,7 @@ nginx-webui status:
 
   System:
     Uptime:      5d 3h 12m ✓
-    Version:     0.7.0
+    Version:     x.y.z
 ```
 
 **Exit code:** `0` — всё в порядке, `1` — есть проблемы (✗ в выводе).
@@ -241,7 +243,7 @@ nginx-webui status:
 
 ```sh
 ./scripts/build-ipk.sh webui
-# Результат: dist/webui_0.7.0_all.ipk
+# Результат: dist/webui_<ver>_all.ipk
 ```
 
 Деплой без .ipk:

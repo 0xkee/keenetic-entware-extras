@@ -1,5 +1,7 @@
 # smartdns-redirect
 
+> 📖 **[Руководство пользователя](docs/user-manual.ru.md)** — пошаговая установка, настройка, troubleshooting.
+
 Universal DNS DNAT для Keenetic/Entware — перехват LAN `:53` и редирект на локальный DNS-резолвер.
 
 ## Что это
@@ -29,8 +31,8 @@ iptables REDIRECT на `PREROUTING` для интерфейса `br0` (LAN): в�
 ### Через .ipk (рекомендуется)
 
 ```sh
-scp -O smartdns-redirect_0.1.1_all.ipk root@<router-ip>:/tmp/
-opkg install /tmp/smartdns-redirect_0.1.1_all.ipk
+scp -O smartdns-redirect_<ver>_all.ipk root@<router-ip>:/tmp/
+opkg install /tmp/smartdns-redirect_<ver>_all.ipk
 ```
 
 `postinst` автоматически:

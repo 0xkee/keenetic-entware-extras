@@ -1,5 +1,7 @@
 # geo-split-data
 
+> 📖 **[Руководство пользователя](docs/user-manual.ru.md)**
+
 GeoIP subnet data and domain lists for [geo-split](../geo-split/).
 
 ## Contents
@@ -14,7 +16,7 @@ GeoIP subnet data and domain lists for [geo-split](../geo-split/).
 ## Установка
 
 ```sh
-opkg install /tmp/geo-split-data_0.3.0_all.ipk
+opkg install /tmp/geo-split-data_<ver>_all.ipk
 ```
 
 > **conffiles:** Файлы `lists/domains.txt` и `lists/ru-whitelist.txt` объявлены как conffiles —
@@ -65,6 +67,5 @@ Zone fetching is integrated into `scripts/build-ipk.sh`:
 ## Package info
 
 - **Package:** `geo-split-data`
-- **Version:** 0.3.0
 - **Depends:** `keenetic-entware-extras`
 - **Architecture:** all

@@ -25,7 +25,9 @@ awg-manager
 .roo
 .clinerules
 .playwright-mcp
-docs
+/docs
+docs/*
+!docs/user-manual*
 plans
 backups
 private

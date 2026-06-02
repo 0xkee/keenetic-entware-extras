@@ -36,7 +36,7 @@ check_mode() {
   # Gateway: extract "via <IP>" from first route, or "scope link" if none
   local _gw_ip
   _gw_ip=$(ip route show table "$SUBNET_ROUTE_TABLE" 2>/dev/null | \
-    sed -n 's/.*via \([^ ]*\).*/\1/p' | head -1)
+    awk '/via /{for(i=1;i<=NF;i++)if($i=="via"){print $(i+1);exit}}')
   if [ -n "$_gw_ip" ]; then
     _ck_gateway="via $_gw_ip"
   elif [ -n "$_ck_active_out" ]; then
@@ -198,7 +198,7 @@ show_mode() {
     # Show gateway from first route in subnet table (if present)
     local _active_gw
     _active_gw=$(ip route show table "$SUBNET_ROUTE_TABLE" 2>/dev/null | \
-      sed -n 's/.*via \([^ ]*\).*/\1/p' | head -1)
+      awk '/via /{for(i=1;i<=NF;i++)if($i=="via"){print $(i+1);exit}}')
     if [ -n "$_active_gw" ]; then
       echo "    Gateway:     $_active_gw"
     else

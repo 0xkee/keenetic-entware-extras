@@ -7,6 +7,11 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.12.4] - 2026-06-02
+
+### Fixed
+- Package: `scripts/bug-report.sh` was missing from .ipk build
+
 ## [0.12.3] - 2026-06-01
 
 ### Improved

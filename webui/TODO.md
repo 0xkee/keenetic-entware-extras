@@ -57,7 +57,25 @@
 - [x] **Toggle switches: подключить к backend** ✅ — inject.js wires toggle → `POST /api/{service}/start|stop`, обработка ответов, re-fetch
 - [ ] **Webui pluggable modules** — сделать архитектуру расширяемой (geo, smartdns как модули)
 
-## 🟢 Мелкие / Cleanup
+## 🔴 Custom Dashboard UX (v0.12.0 + v0.13.0)
+
+- [x] **Scroll fix** — stock CSS `overflow:hidden` блокирует скролл на `/custom/`. Fix: `html,body { overflow-y:auto!important }` в `layout.css`
+- [x] **Auth для POST API** — `access_by_lua` subrequest к /auth для action-роутов (start/stop/update). GET status остаётся без auth (read-only)
+- [x] **Hash-routing для табов** — чтение `location.hash` при загрузке → activeTab. Поддержка `#geo-split`, `#smartdns`, `#smartdns-redirect`, `#webui`
+- [x] **Toggle buttons на кастомной странице** — start/stop кнопки в каждой карточке сервиса (аналог inject.js dashboard card)
+- [x] **System info panel** ✅ — `fetchSystemInfo()` в header: hostname, uptime, RAM%, /opt disk% с progress bar. Color-coded (blue/yellow/red)
+- [x] **Mobile tabs scroll** ✅ — `overflow-x:auto` + hidden scrollbar для `.ndw-tabs__list`, `flex-shrink:0` на табах
+- [x] **Loading skeleton** ✅ — shimmer animation (`ew-skeleton`) вместо "Loading..." при fetch
+- [ ] **Last Updated timestamp** — индикатор последнего успешного fetch
+- [ ] **Retry кнопка при ошибке** — визуальный error boundary с action
+
+## 🟡 Безопасность
+
+- [x] **CORS whitelist** ✅ — `Access-Control-Allow-Origin: $scheme://$host` для `/api/*`
+- [x] **Rate limiting** ✅ — `limit_req zone=api_post burst=3 nodelay` для POST (map-based: GET не ограничен)
+- [ ] **Concurrent action guard** — проверка running background process перед запуском нового
+
+## � Мелкие / Cleanup
 
 - [x] **Dashboard card header: кликабельный заголовок** — `<span>` с hover underline, ведёт на /custom/
 - [x] **Dashboard card: drag-and-drop icon** — SVG sprite 6 dots

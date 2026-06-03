@@ -105,15 +105,19 @@ function setDetails(id, data) {
     var html = "";
     for (var i = 0; i < entries.length; i++) {
         var e = entries[i];
-        if (e.isSpacer) continue;
-        var valColor = e.isError ? "var(--error, #f44336)" : "var(--primary-text)";
+        if (e.isSpacer) { html += '<div class="ew-detail-item"></div>'; continue; }
+        var valStyle = e.isError ? ' style="color:var(--error,#f44336)"'
+            : e.isWarning ? ' style="color:var(--status-caution-text,#ffbb57)"' : '';
         var valHtml;
         if (e.lines) {
             valHtml = e.lines.map(function(l) {
                 return l.isError ? '<span style="color:var(--error,#f44336)">' + escapeHtml(l.text) + '</span>' : escapeHtml(l.text);
             }).join('<br>');
+        } else if (e.value.indexOf(' ') !== -1 && e.value.indexOf(':') !== -1 && !e.isTimer) {
+            // Break long values with spaces+colons (ports, addresses) into lines
+            valHtml = e.value.split(' ').map(function(s) { return escapeHtml(s); }).join('<br>');
         } else {
-            valHtml = '<span style="color:' + valColor + '">' + escapeHtml(e.value) + '</span>';
+            valHtml = escapeHtml(e.value);
         }
         var updateBtn = '';
         if (e.updateAction) {
@@ -121,12 +125,9 @@ function setDetails(id, data) {
                 '<svg class="ndw-svg-icon svg-restart-dims" style="width:14px;height:14px;fill:currentColor"><use href="/assets/sprite/sprite.svg#restart"></use></svg></button>';
         }
         var dataAttr = e.freshnessKey ? ' data-freshness-key="' + e.freshnessKey + '"' : '';
-        html += '<div class="ew-service-row">' +
-            '<div class="ew-service-info">' +
-            '<span style="color:var(--text-gray)">' + escapeHtml(e.label) + '</span>' +
-            '</div>' +
-            '<span' + dataAttr + '>' + valHtml + '</span>' + updateBtn +
-            '</div>';
+        html += '<div class="ew-detail-item">' +
+            '<div class="ew-detail-label">' + escapeHtml(e.label) + '</div>' +
+            '<div class="ew-detail-value"' + valStyle + dataAttr + '>' + valHtml + updateBtn + '</div></div>';
     }
     el.innerHTML = html;
 }
@@ -1015,6 +1016,31 @@ function saveConfig(svcId) {
     .then(function(data) {
         if (saveBtn) saveBtn.disabled = false;
         if (data.ok) {
+            // webui self-restart: keep modal open, poll until back online
+            if (data.output === 'restarting') {
+                if (statusEl) {
+                    statusEl.textContent = 'Restarting...';
+                    statusEl.className = 'ew-modal__status';
+                }
+                if (saveBtn) saveBtn.disabled = true;
+                var pollTimer = setInterval(function() {
+                    fetch('/api/' + svcId + '/status', { signal: AbortSignal.timeout(2000) })
+                        .then(function(r) { return r.json(); })
+                        .then(function() {
+                            clearInterval(pollTimer);
+                            if (statusEl) {
+                                statusEl.textContent = '\u2713 Restarted';
+                                statusEl.className = 'ew-modal__status ew-modal__status--ok';
+                            }
+                            setTimeout(function() {
+                                closeConfigModal();
+                                fetchStatus('/api/' + svcId + '/status', svcId, true);
+                            }, 800);
+                        })
+                        .catch(function() { /* still restarting, keep polling */ });
+                }, 1500);
+                return;
+            }
             if (statusEl) {
                 statusEl.textContent = '\u2713 Saved';
                 statusEl.className = 'ew-modal__status ew-modal__status--ok';

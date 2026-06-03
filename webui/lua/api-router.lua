@@ -282,7 +282,7 @@ local config_registry = {
     ["webui"] = {
         defaults = base .. "/webui/config/defaults.conf",
         config   = base .. "/webui/config/config.conf",
-        restart  = "echo restarting && (sleep 1 && " .. base .. "/webui/init.d/S80nginx-webui restart) >/dev/null 2>&1 &",
+        restart  = "exec 3>&- 4>&- 5>&- 6>&- 7>&- 8>&- 9>&- 10>&- 11>&- 12>&- 13>&- 14>&- 15>&-; " .. base .. "/webui/init.d/S80nginx-webui restart >/dev/null 2>&1",
         keys     = { "LISTEN_PORT", "INJECT_SIDEBAR", "DASH_POLL_INTERVAL" }
     }
 }
@@ -419,6 +419,14 @@ local function write_config(svc_id, body)
     end
 
     -- Restart service
+    -- webui requires deferred restart (background & doesn't work from io.popen in nginx-lua)
+    if svc_id == "webui" then
+        local restart_cmd = shell_env .. " " .. reg.restart
+        ngx.timer.at(1, function()
+            os.execute(restart_cmd)
+        end)
+        return '{"ok":true,"output":"restarting"}'
+    end
     local output, ok, _ = run_cmd(reg.restart)
     output = output:gsub("%s+$", "")
     if ok then

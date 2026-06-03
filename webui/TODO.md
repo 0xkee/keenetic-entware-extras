@@ -35,6 +35,7 @@
 
 - [x] добавить Upstream в status + webui (Ok когда доступен) ✅ — `check_upstream()` в status.sh: парсит listen.conf для IP, curl probe. JSON: `details.upstream` (addr) + `checks.upstream` ("ok"|"warn"). Карточка рендерит автоматически через `parseDetails`.
 - [ ] + таймер на лейбл , когда сервис stopped (disabled)?
+- [ ] **Status flicker fix** — при ошибке fetch статус кратко мелькает "Error: Failed to fetch", потом возвращается к "Running" (некорректно). Нужно: не мелькать loading, при ошибке показывать адекватное состояние (retry без сброса текущего отображения, stale-while-revalidate).
 - [x] **upstream: использовать LAN IP вместо 127.0.0.1** ✅ — удалён блок `upstream keenetic_ui`, `proxy_pass $stock_httpd` (nginx-переменная из `listen.conf`). Self-healing в init-скрипте генерирует listen.conf с `set $stock_httpd http://<LAN_IP>:80;` при старте. Команда `update-listen` для ручного обновления IP.
 
 - [ ] **Sidebar menu: config-driven при реанимации** — если будем возвращать sidebar меню (`injectSidebar`), сделать его config-driven аналогично dashboard card (CUSTOM_ITEMS/SERVICE_APIS → shared config в `EW.*` или `__ewConfig`). Не хардкодить список пунктов в inject.js.

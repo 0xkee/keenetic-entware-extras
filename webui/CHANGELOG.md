@@ -7,6 +7,19 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-06-03
+
+### Added
+- Summary tab: cards display in responsive 2-column grid layout (auto 1-column on narrow screens).
+- Dashboard-style detail items: label above value, no horizontal dividers, auto-fill multi-column grid.
+- Long values with spaces+colons (ports, addresses) auto-wrap into multi-line.
+- WebUI "Save & Restart": modal shows "Restarting..." and polls until server returns.
+
+### Fixed
+- WebUI config save now properly restarts nginx (was silently failing due to
+  inherited listen socket FD from io.popen + background `&` not working in nginx-lua).
+  Fix: `ngx.timer.at()` deferred restart + `exec 3>&- ... 15>&-` FD cleanup.
+
 ## [0.15.1] - 2026-06-03
 
 ### Fixed

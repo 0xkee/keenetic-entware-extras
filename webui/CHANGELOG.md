@@ -7,6 +7,18 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.16.6] - 2026-06-03
+
+### Changed
+- Performance: `worker_processes 2` — parallel request handling, eliminates
+  queue starvation when multiple tabs poll simultaneously (up to 10 tabs).
+- Performance: replaced `curl --max-time 3` upstream probe with instant
+  `netstat -tln` port check in status.sh — saves up to 3s per webui/status call.
+- `FETCH_TIMEOUT` increased from 10s to 15s — prevents false timeout errors
+  during peak polling load on slow connections.
+- RAM indicator: added tooltip explaining conservative MemAvailable-based
+  calculation (accounts for non-reclaimable kernel slab/conntrack).
+
 ## [0.16.5] - 2026-06-03
 
 ### Fixed

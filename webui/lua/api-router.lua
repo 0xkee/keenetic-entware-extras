@@ -92,7 +92,13 @@ local function system_info()
         end
     end
 
-    -- memory from /proc/meminfo
+    -- Memory from /proc/meminfo.
+    -- Uses MemAvailable (kernel estimate of truly allocatable memory) rather than
+    -- naive (total - free - buffers - cached). MemAvailable accounts for non-reclaimable
+    -- slab (conntrack tables, dentry cache) and page-table overhead — gives realistic
+    -- "memory pressure" reading. May show ~15% higher usage than stock Keenetic UI
+    -- which uses the naive formula; this is correct: slab memory on routers with heavy
+    -- iptables/conntrack cannot be freed and IS genuinely consumed.
     local mem_total = 0
     local mem_available = 0
     local meminfo = read_file("/proc/meminfo")

@@ -4,6 +4,36 @@
  * in main-*.js and cannot be reused — we implement our own minimal versions.
  */
 
+/* Override stock Keenetic Angular CSS that sets overflow:hidden on html/body.
+ * Without this, the custom page loaded at /custom/ has no scrollbar when
+ * stock styles-*.css is applied (Angular uses overflow:hidden for modals). */
+html, body {
+    overflow-y: auto !important;
+    height: auto !important;
+}
+
+/* ── Scrollbar — stock Keenetic style (thin, dark) ───────────────── */
+/* Firefox */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--stroke, #4d545f) var(--background, #1b2434);
+}
+/* WebKit (Chrome, Safari, WebView) */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: var(--background, #1b2434);
+}
+::-webkit-scrollbar-thumb {
+    background: var(--stroke, #4d545f);
+    border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-gray, #949b9f);
+}
+
 body {
     font-family: 'Roboto', sans-serif;
     margin: 0; padding: 0;
@@ -13,26 +43,65 @@ body {
 }
 
 /* ── Page wrapper ─────────────────────────────────────────────────── */
-.ndw-page-wrapper { padding: 24px; max-width: 1200px; }
-.ndw-page-wrapper__header { margin-bottom: 16px; }
+.ndw-page-wrapper { padding: 24px 32px; }
+.ndw-page-wrapper__header {
+    display: flex; align-items: baseline;
+    justify-content: space-between; gap: 16px;
+    margin-bottom: 16px; flex-wrap: wrap;
+}
 .ndw-page-wrapper__title {
     font-size: 20px; font-weight: 500;
     color: var(--primary-text, #c2c2c2); margin: 0;
 }
 .ndw-page-wrapper__content { display: flex; flex-direction: column; gap: 16px; }
 
+/* ── System info bar ─────────────────────────────────────────────── */
+.ew-sysinfo {
+    display: flex; gap: 16px; align-items: center;
+    font-size: 12px; color: var(--text-gray, #949b9f);
+    flex-wrap: wrap;
+}
+.ew-sysinfo__item {
+    display: inline-flex; align-items: center; gap: 4px;
+    white-space: nowrap;
+}
+.ew-sysinfo__icon {
+    display: inline-flex; align-items: center;
+    color: var(--text-gray, #949b9f); opacity: 0.6;
+}
+.ew-sysinfo__label { opacity: 0.7; }
+.ew-sysinfo__value { color: var(--primary-text, #c2c2c2); }
+.ew-sysinfo__bar {
+    width: 48px; height: 4px; border-radius: 2px;
+    background: var(--disabled, #2f3745);
+    position: relative; overflow: hidden;
+}
+.ew-sysinfo__bar-fill {
+    position: absolute; top: 0; left: 0; height: 100%;
+    border-radius: 2px;
+    background: var(--primary-color, #0086cb);
+    transition: width .3s;
+}
+.ew-sysinfo__bar-fill--warn { background: var(--indicator-yellow, #f2e572); }
+.ew-sysinfo__bar-fill--crit { background: var(--error, #de3d3d); }
+
 /* ── Tabs ─────────────────────────────────────────────────────────── */
 .ndw-tabs { margin-bottom: 16px; }
 .ndw-tabs__list {
     display: flex; gap: 0;
     border-bottom: 2px solid var(--stroke, #4d545f);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* hide horizontal scrollbar */
 }
+.ndw-tabs__list::-webkit-scrollbar { display: none; }
 .ndw-tabs__tab {
     padding: 10px 20px; cursor: pointer;
     color: var(--text-gray, #949b9f);
     border-bottom: 2px solid transparent;
     margin-bottom: -2px; user-select: none;
     font-size: 14px;
+    white-space: nowrap; flex-shrink: 0;
 }
 .ndw-tabs__tab:hover { color: var(--primary-text, #c2c2c2); }
 .ndw-tabs__tab--active {
@@ -52,13 +121,15 @@ body {
     justify-content: space-between;
     margin-bottom: 16px;
 }
+.dashboard-card__header-left {
+    display: flex; align-items: center; gap: 12px;
+}
 .text-card-heading {
     font-size: 16px; font-weight: 700;
     letter-spacing: 1px; text-transform: uppercase;
     color: var(--primary-text, #c2c2c2);
 }
 .dashboard-card__header-buttons { display: flex; gap: 8px; }
-.dashboard-card__content { /* contains service rows */ }
 
 /* ── Status badges ────────────────────────────────────────────────── */
 .ndw-status { display: inline-block; }
@@ -126,6 +197,467 @@ body {
     line-height: 1.5; white-space: pre-wrap; word-break: break-word;
     color: var(--text-gray, #949b9f); padding: 8px 0; margin: 0;
 }
+
+/* ── Multi-column details grid ───────────────────────────────────── */
+/* Auto-fill columns based on available width. Each detail row becomes a
+ * grid item. Min column width 280px ensures readability on all screens. */
+.ew-details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 0 24px;
+}
+.ew-details-grid .ew-service-row {
+    border-top: 1px solid var(--stroke, #4d545f);
+    padding: 8px 0;
+}
+.ew-details-grid .ew-service-row:first-child { border-top: none; }
+/* In grid mode, top border only on items that are not in first row.
+ * Grid auto-fill handles this naturally — first items have border-top. */
+
+/* ── Toggle switch (reused from inject.css) ────────────────────────── */
+.ew-toggle {
+    position: relative; width: 36px; height: 20px;
+    flex-shrink: 0;
+}
+.ew-toggle input {
+    opacity: 0; width: 0; height: 0; position: absolute;
+}
+.ew-toggle__bar {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--disabled, #2f3745);
+    border-radius: 10px; cursor: pointer; transition: background .2s;
+}
+.ew-toggle__bar::after {
+    content: ''; position: absolute;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--text-gray, #949b9f);
+    bottom: 2px; left: 2px;
+    transition: transform .2s, background .2s;
+}
+.ew-toggle input:checked + .ew-toggle__bar {
+    background: var(--primary-color-disabled, #2e3d57);
+}
+.ew-toggle input:checked + .ew-toggle__bar::after {
+    transform: translateX(16px);
+    background: var(--primary-color, #0086cb);
+}
+.ew-toggle input:disabled + .ew-toggle__bar {
+    opacity: 0.5; cursor: not-allowed;
+}
+
+/* ── Loading skeleton ────────────────────────────────────────────── */
+.ew-skeleton {
+    height: 14px; border-radius: 4px;
+    background: linear-gradient(90deg,
+        var(--disabled, #2f3745) 25%,
+        var(--stroke, #4d545f) 50%,
+        var(--disabled, #2f3745) 75%);
+    background-size: 200% 100%;
+    animation: ew-shimmer 1.5s infinite;
+}
+.ew-skeleton--short { width: 80px; }
+.ew-skeleton--medium { width: 140px; }
+@keyframes ew-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* ── Summary mode: hide edit buttons ─────────────────────────────── */
+.ew-summary-mode .ew-edit-btn { display: none !important; }
+
+/* ── Modal Dialog (stock Keenetic style) ─────────────────────────── */
+.ew-modal-backdrop {
+    position: fixed; inset: 0; z-index: 9999;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+    animation: ew-fade-in .15s ease-out;
+}
+@keyframes ew-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+.ew-modal {
+    background: var(--dashboard-background, #1b2434);
+    border: 1px solid var(--dashboard-card-border, #4d545f);
+    border-radius: 8px;
+    width: 60%; min-width: 360px;
+    max-height: 85vh;
+    display: flex; flex-direction: column;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    animation: ew-slide-up .15s ease-out;
+}
+@keyframes ew-slide-up {
+    from { transform: translateY(16px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+.ew-modal__header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--dashboard-card-border, rgba(77,84,95,0.5));
+    flex-shrink: 0;
+}
+.ew-modal__title {
+    font-size: 18px; font-weight: 500; margin: 0;
+    color: var(--primary-text, #c2c2c2);
+}
+.ew-modal__close {
+    background: none; border: none; cursor: pointer;
+    font-size: 22px; line-height: 1;
+    color: var(--text-gray, #949b9f);
+    padding: 4px 8px; border-radius: 4px;
+    transition: color .15s, background .15s;
+}
+.ew-modal__close:hover {
+    color: var(--primary-text, #c2c2c2);
+    background: var(--disabled, #2f3745);
+}
+.ew-modal__body {
+    padding: 20px 24px;
+    overflow-y: auto;
+    flex: 1;
+    display: flex; flex-direction: column; gap: 20px;
+}
+.ew-modal__footer {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 24px;
+    border-top: 1px solid var(--dashboard-card-border, rgba(77,84,95,0.5));
+    flex-shrink: 0;
+}
+.ew-modal__footer-spacer { flex: 1; }
+.ew-modal__status {
+    font-size: 13px; margin-right: auto;
+    color: var(--text-gray, #949b9f);
+}
+.ew-modal__status--ok { color: var(--indicator-online, #7dce70); }
+.ew-modal__status--error { color: var(--error, #de3d3d); }
+
+/* ── Modal form fields ───────────────────────────────────────────── */
+.ew-modal__field {
+    display: flex; flex-direction: column; gap: 6px;
+}
+.ew-modal__field-header {
+    display: flex; align-items: center; gap: 0;
+}
+.ew-modal__label {
+    font-size: 12px; font-weight: 500;
+    color: var(--text-gray, #949b9f);
+    text-transform: uppercase; letter-spacing: 0.5px;
+}
+.ew-modal__reset {
+    margin-left: auto;
+    background: none; border: none; cursor: pointer;
+    color: var(--text-gray, #949b9f); opacity: 0.5;
+    padding: 4px 6px; border-radius: 4px;
+    transition: opacity .15s, color .15s, background .15s;
+}
+.ew-modal__reset:hover {
+    opacity: 1; color: var(--primary-color, #0086cb);
+    background: rgba(0, 134, 203, 0.1);
+}
+.ew-modal__reset--default {
+    opacity: 0.2; cursor: default;
+}
+.ew-modal__input {
+    background: var(--input-background, #141c29);
+    border: 1px solid var(--stroke, #4d545f);
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-size: 14px;
+    color: var(--primary-text, #c2c2c2);
+    outline: none;
+    width: 100%;
+    box-sizing: border-box;
+    transition: border-color .2s;
+}
+.ew-modal__input:focus {
+    border-color: var(--primary-color, #0086cb);
+}
+/* Number input — dark spinners, compact width */
+.ew-modal__input[type="number"] {
+    color-scheme: dark;
+    max-width: 160px;
+}
+/* Custom select wrapper */
+.ew-modal__select-wrap {
+    position: relative;
+    display: inline-block;
+    max-width: 280px;
+    width: 100%;
+}
+.ew-modal__select {
+    width: 100%;
+    appearance: none;
+    -webkit-appearance: none;
+    background: var(--input-background, #141c29);
+    border: 1px solid var(--stroke, #4d545f);
+    border-radius: 4px;
+    padding: 10px 36px 10px 12px;
+    font-size: 14px;
+    color: var(--primary-text, #c2c2c2);
+    outline: none;
+    cursor: pointer;
+    transition: border-color .2s;
+}
+.ew-modal__select:focus {
+    border-color: var(--primary-color, #0086cb);
+}
+.ew-modal__select option {
+    background: var(--card-background, #1c2433);
+    color: var(--primary-text, #c2c2c2);
+    padding: 8px;
+}
+.ew-modal__select-arrow {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    opacity: 0.5;
+}
+/* Help icon (?) with CSS tooltip */
+.ew-modal__help {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: var(--disabled, #2f3745);
+    color: var(--text-gray, #949b9f);
+    font-size: 10px;
+    font-weight: 700;
+    cursor: help;
+    flex-shrink: 0;
+    margin-left: 6px;
+    position: relative;
+    transition: background .15s, color .15s;
+}
+.ew-modal__help:hover,
+.ew-modal__help:focus {
+    background: var(--primary-color, #0086cb);
+    color: #fff;
+}
+.ew-modal__help::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 0;
+    top: calc(100% + 6px);
+    background: var(--card-background, #1c2433);
+    border: 1px solid var(--stroke, #4d545f);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--primary-text, #c2c2c2);
+    white-space: normal;
+    width: max-content;
+    max-width: 280px;
+    line-height: 1.4;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .15s, visibility .15s;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.ew-modal__help:hover::after,
+.ew-modal__help:focus::after {
+    opacity: 1;
+    visibility: visible;
+}
+/* Radio + Text compound field */
+.ew-modal__radio-text {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+.ew-modal__radio-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--disabled, #2f3745);
+    border-radius: 20px;
+    padding: 6px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background .15s;
+}
+.ew-modal__radio-item:hover {
+    background: rgba(0, 134, 203, 0.12);
+}
+.ew-modal__radio-item:has(input:checked) {
+    background: rgba(0, 134, 203, 0.18);
+}
+.ew-modal__radio-item input[type="radio"] {
+    -webkit-appearance: none; appearance: none;
+    width: 16px; height: 16px; flex-shrink: 0;
+    border: 2px solid var(--stroke, #4d545f);
+    border-radius: 50%;
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+}
+.ew-modal__radio-item input[type="radio"]:checked {
+    border-color: var(--primary-color, #0086cb);
+}
+.ew-modal__radio-item input[type="radio"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 3px; top: 3px;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--primary-color, #0086cb);
+}
+.ew-modal__radio-label {
+    color: var(--primary-text, #c2c2c2);
+    font-weight: 500;
+    white-space: nowrap;
+}
+.ew-modal__radio-item--custom {
+    gap: 6px;
+}
+.ew-modal__radio-input {
+    background: var(--input-background, #141c29);
+    border: 1px solid var(--stroke, #4d545f);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 13px;
+    color: var(--primary-text, #c2c2c2);
+    width: 130px;
+    outline: none;
+    transition: border-color .2s, opacity .2s;
+}
+.ew-modal__radio-input:focus {
+    border-color: var(--primary-color, #0086cb);
+}
+.ew-modal__radio-input:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+/* Interface radio pills (single-select) */
+.ew-modal__ifaces--radio .ew-modal__iface-item input[type="checkbox"] {
+    display: none;
+}
+.ew-modal__ifaces--radio .ew-modal__iface-item input[type="radio"] {
+    -webkit-appearance: none; appearance: none;
+    width: 16px; height: 16px; flex-shrink: 0;
+    border: 2px solid var(--stroke, #4d545f);
+    border-radius: 50%;
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+}
+.ew-modal__ifaces--radio .ew-modal__iface-item input[type="radio"]:checked {
+    border-color: var(--primary-color, #0086cb);
+}
+.ew-modal__ifaces--radio .ew-modal__iface-item input[type="radio"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 3px; top: 3px;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--primary-color, #0086cb);
+}
+.ew-modal__ifaces--radio .ew-modal__iface-item:has(input:checked) {
+    background: rgba(0, 134, 203, 0.18);
+}
+/* Toggle fields — switch left, label, help, reset right; hint below */
+.ew-modal__toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.ew-modal__label--clickable {
+    cursor: pointer;
+}
+.ew-modal__label--clickable:hover {
+    color: var(--primary-text, #c2c2c2);
+}
+.ew-modal__toggle { margin: 0; }
+.ew-modal__toggle .ew-toggle__bar,
+.ew-modal__toggle .ew-toggle__bar::after {
+    transition: all .08s;
+}
+.ew-modal__hint {
+    font-size: 11px;
+    color: var(--text-gray, #949b9f); opacity: 0.7;
+}
+/* Interface checkboxes */
+.ew-modal__ifaces {
+    display: flex; flex-wrap: wrap; gap: 8px;
+}
+.ew-modal__iface-item {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--disabled, #2f3745);
+    border: none;
+    border-radius: 20px;
+    padding: 6px 14px 6px 8px;
+    cursor: pointer;
+    font-size: 13px;
+}
+.ew-modal__iface-item:hover {
+    background: rgba(0, 134, 203, 0.12);
+}
+.ew-modal__iface-item:has(input:checked) {
+    background: rgba(0, 134, 203, 0.18);
+}
+.ew-modal__iface-item input[type="checkbox"] {
+    -webkit-appearance: none; appearance: none;
+    width: 18px; height: 18px; flex-shrink: 0;
+    border: 2px solid var(--stroke, #4d545f);
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+}
+.ew-modal__iface-item input[type="checkbox"]:checked {
+    background: var(--primary-color, #0086cb);
+    border-color: var(--primary-color, #0086cb);
+}
+.ew-modal__iface-item input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 4px; top: 1px;
+    width: 6px; height: 10px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+.ew-modal__iface-name {
+    color: var(--primary-text, #c2c2c2);
+    font-weight: 500; white-space: nowrap;
+}
+.ew-modal__iface-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    flex-shrink: 0;
+}
+.ew-modal__iface-dot--up { background: var(--indicator-online, #7dce70); }
+.ew-modal__iface-dot--down { background: var(--error, #de3d3d); }
+
+/* ── Spinner (stock Keenetic style) ──────────────────────────────── */
+.ew-modal__spinner {
+    display: flex; align-items: center; justify-content: center;
+    padding: 32px 0;
+}
+.ew-spinner {
+    width: 32px; height: 32px;
+    border: 3px solid var(--disabled, #2f3745);
+    border-top-color: var(--primary-color, #0086cb);
+    border-radius: 50%;
+    animation: ew-spin .8s linear infinite;
+}
+@keyframes ew-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Editor messages */
+.ew-editor-msg {
+    font-size: 13px;
+    color: var(--text-gray, #949b9f);
+    padding: 8px 0;
+}
+.ew-editor-msg--error { color: var(--error, #de3d3d); }
 
 /* Hidden utility */
 .ew-hidden { display: none !important; }

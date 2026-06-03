@@ -71,11 +71,14 @@ check_logrotate() {
 }
 
 # Check stock Keenetic httpd (upstream) reachability.
-# Parses listen.conf for $stock_httpd variable, then probes with curl.
+# Parses listen.conf for $stock_httpd variable, then checks TCP port.
+# Uses netstat (instant) instead of curl (up to 3s blocking) to avoid
+# stalling the nginx worker queue when called via io.popen in --json mode.
 # Sets: _ck_upstream_ok (0=reachable, 1=unreachable), _ck_upstream_addr
 check_upstream() {
   _ck_upstream_ok=1
   _ck_upstream_addr=""
+  _ck_upstream_code=""
 
   # Extract upstream address from listen.conf (format: set $stock_httpd http://IP:PORT;)
   if [ -f "$LISTEN_CONF" ]; then
@@ -83,21 +86,12 @@ check_upstream() {
   fi
   [ -z "$_ck_upstream_addr" ] && _ck_upstream_addr="127.0.0.1:80"
 
-  # Probe: HTTP with short timeout (avoid blocking status for long)
-  if command -v curl >/dev/null 2>&1; then
-    _ck_upstream_code=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 3 \
-      "http://${_ck_upstream_addr}/" 2>/dev/null) || true
-    if [ -n "$_ck_upstream_code" ] && [ "$_ck_upstream_code" != "000" ]; then
-      _ck_upstream_ok=0
-    fi
-  else
-    # Fallback: check TCP port listening via netstat
-    local up_port
-    up_port="${_ck_upstream_addr##*:}"
-    if netstat -tln 2>/dev/null | grep -q ":${up_port} "; then
-      _ck_upstream_ok=0
-      _ck_upstream_code="listening"
-    fi
+  # Check TCP port listening via netstat (instant, no network I/O)
+  local up_port
+  up_port="${_ck_upstream_addr##*:}"
+  if netstat -tln 2>/dev/null | grep -q ":${up_port} "; then
+    _ck_upstream_ok=0
+    _ck_upstream_code="listening"
   fi
 }
 

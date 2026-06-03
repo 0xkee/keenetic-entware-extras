@@ -6,7 +6,7 @@
 
 var POLL_ACTIVE = 5000;       // 5s when page is visible
 var POLL_BACKGROUND = 60000;  // 60s when hidden (background tab)
-var FETCH_TIMEOUT = 10000;    // 10 seconds
+var FETCH_TIMEOUT = 15000;    // 15 seconds (allows for queued io.popen in nginx)
 
 var autoRefreshTimer = null;
 var activeTab = "all";
@@ -376,6 +376,9 @@ function fetchSystemInfo() {
             var el = document.getElementById("sysinfo");
             if (!el) return;
 
+            // RAM: used = total - MemAvailable (kernel-estimated truly free memory).
+            // More accurate than (total - free - buffers - cached) — accounts for
+            // non-reclaimable slab/conntrack. May show ~15% higher than stock UI.
             var memPct = 0;
             if (data.memory && data.memory.total_kb > 0) {
                 var used = data.memory.total_kb - data.memory.available_kb;
@@ -412,7 +415,10 @@ function fetchSystemInfo() {
                     '<span class="ew-sysinfo__value">' + cpuPct + '%</span>' +
                     '<span class="ew-sysinfo__bar"><span class="ew-sysinfo__bar-fill' + cpuClass + '" style="width:' + cpuPct + '%"></span></span>' +
                 '</span>' +
-                '<span class="ew-sysinfo__item">' +
+                '<span class="ew-sysinfo__item" title="' +
+                    'Available: ' + Math.round(data.memory.available_kb / 1024) + ' MB / ' + Math.round(data.memory.total_kb / 1024) + ' MB\n' +
+                    'Conservative estimate — accounts for memory locked by kernel (conntrack, routing tables, slab cache) that cannot be freed.\n' +
+                    'May show ~15% higher usage than stock UI — this is normal and not a cause for concern.' + '">' +
                     '<span class="ew-sysinfo__icon">' + SYSINFO_ICONS.ram + '</span>' +
                     '<span class="ew-sysinfo__label">RAM</span>' +
                     '<span class="ew-sysinfo__value">' + memPct + '%</span>' +

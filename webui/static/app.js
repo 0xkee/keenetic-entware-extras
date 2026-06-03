@@ -7,10 +7,10 @@
 var POLL_ACTIVE = 5000;       // 5s when page is visible
 var POLL_BACKGROUND = 60000;  // 60s when hidden (background tab)
 var FETCH_TIMEOUT = 10000;    // 10 seconds
-var LOADING_DELAY = 3000;     // show "Loading..." only if fetch takes > 3s (periodic refresh)
 
 var autoRefreshTimer = null;
 var activeTab = "all";
+var _inflightControllers = {};  // { serviceId: AbortController } — cancel stale in-flight requests
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -73,8 +73,16 @@ function setStatus(id, state, text) {
 
 var GEO_FAST_POLL = 1000;  // 1s when background update is running
 
-/** Ticker for live uptime/freshness counters — updates status badges. */
+/** Ticker for live uptime/freshness counters — updates status badges.
+ *  Guard: only updates if the badge is currently in ok/caution state (not error/stopped).
+ *  This prevents the ticker from overwriting error or stopped badges. */
 var ticker = EW.createTicker(function(id, currentSeconds, extra) {
+    var el = document.getElementById("status-" + id);
+    if (!el) return;
+    var inner = el.querySelector('.status');
+    if (!inner) return;
+    // Only tick if status is currently success or caution (service is running)
+    if (!inner.classList.contains('status--success') && !inner.classList.contains('status--caution')) return;
     setStatus(id, (extra && extra.state) || "ok", "Running " + EW.formatUptimeStock(currentSeconds));
 });
 
@@ -203,38 +211,38 @@ function applyHashRoute() {
 
 /**
  * Fetch structured JSON from status API and render card.
- * On initial load (skipLoading=false): shows Loading immediately.
- * On periodic refresh (skipLoading=true): keeps current status visible,
- * shows Loading only if response takes longer than LOADING_DELAY.
+ * On error: shows error badge immediately. The ticker CSS guard (checks
+ * status--success/caution class) prevents uptime counter from overwriting
+ * the error badge. Next successful fetch restores the true state.
+ * On initial load (skipLoading=false): shows Loading skeleton first.
  * @param {string} url - API URL
  * @param {string} id - service id
- * @param {boolean} [skipLoading] - true for periodic refresh (don't flash Loading)
+ * @param {boolean} [skipLoading] - true to skip initial Loading indicator
  */
 function fetchStatus(url, id, skipLoading) {
-    var loadingTimer = null;
+    // Abort any previous in-flight request for this service (prevents race condition
+    // where a stale success response arrives after a newer error, overwriting it)
+    if (_inflightControllers[id]) {
+        _inflightControllers[id].abort();
+    }
+
     if (!skipLoading) {
         setStatus(id, "loading", "Loading...");
-    } else {
-        loadingTimer = setTimeout(function() {
-            setStatus(id, "loading", "Loading...");
-        }, LOADING_DELAY);
     }
 
     var controller = new AbortController();
+    _inflightControllers[id] = controller;
     var timer = setTimeout(function() { controller.abort(); }, FETCH_TIMEOUT);
 
     fetch(url, { signal: controller.signal })
         .then(function(resp) {
             clearTimeout(timer);
-            if (loadingTimer) clearTimeout(loadingTimer);
-            if (!resp.ok) {
-                setStatus(id, "error", "HTTP " + resp.status);
-                return;
-            }
+            if (!resp.ok) throw new Error("HTTP " + resp.status);
             return resp.json();
         })
         .then(function(data) {
             if (!data) return;
+            _inflightControllers[id] = null;
 
             // Structured JSON from status.sh --json
             if (data.running !== undefined) {
@@ -309,9 +317,9 @@ function fetchStatus(url, id, skipLoading) {
                 }
             } else if (data.error) {
                 setStatus(id, "error", "Script error");
-                var el = document.getElementById("details-" + id);
-                if (el) {
-                    el.innerHTML = '<pre class="ew-details-pre ew-details-pre--error">' + escapeHtml(data.error) + '</pre>';
+                var el2 = document.getElementById("details-" + id);
+                if (el2) {
+                    el2.innerHTML = '<pre class="ew-details-pre ew-details-pre--error">' + escapeHtml(data.error) + '</pre>';
                 }
             } else {
                 setStatus(id, "warn", "Unknown format");
@@ -319,11 +327,15 @@ function fetchStatus(url, id, skipLoading) {
         })
         .catch(function(err) {
             clearTimeout(timer);
-            if (loadingTimer) clearTimeout(loadingTimer);
+            // Ignore AbortError from superseded requests (new fetch replaced this one)
+            if (err.name === "AbortError" && _inflightControllers[id] !== controller) return;
+            _inflightControllers[id] = null;
+            // Show error immediately — ticker CSS guard prevents overwrite
+            ticker.removeUptimeBaseline(id);
             if (err.name === "AbortError") {
                 setStatus(id, "error", "Timeout (" + (FETCH_TIMEOUT / 1000) + "s)");
             } else {
-                setStatus(id, "error", "Error: " + err.message);
+                setStatus(id, "error", escapeHtml(err.message));
             }
         });
 }

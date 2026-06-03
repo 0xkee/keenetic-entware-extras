@@ -7,6 +7,16 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.16.5] - 2026-06-03
+
+### Fixed
+- Status flicker eliminated. Root cause: race condition where in-flight successful
+  response arrived after newer error, overwriting Error badge with Running.
+  Fix: `_inflightControllers` aborts previous request on new poll start.
+  Ticker CSS-class guard (`status--success`/`status--caution`) prevents uptime
+  counter from overwriting error/stopped badge. inject.js: always-show-ERROR on
+  catch (its ticker already had guard). Removed LOADING_DELAY and complex state machine.
+
 ## [0.16.0] - 2026-06-03
 
 ### Added

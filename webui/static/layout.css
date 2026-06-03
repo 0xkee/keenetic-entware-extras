@@ -198,21 +198,26 @@ body {
     color: var(--text-gray, #949b9f); padding: 8px 0; margin: 0;
 }
 
-/* ── Multi-column details grid ───────────────────────────────────── */
-/* Auto-fill columns based on available width. Each detail row becomes a
- * grid item. Min column width 280px ensures readability on all screens. */
+/* ── Multi-column details grid (dashboard style) ─────────────────── */
+/* Label above value, no horizontal dividers, auto-fill adapts to width. */
 .ew-details-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 0 24px;
+    grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
+    gap: 16px 24px;
+    padding-top: 8px;
 }
-.ew-details-grid .ew-service-row {
-    border-top: 1px solid var(--stroke, #4d545f);
-    padding: 8px 0;
+.ew-detail-item { overflow-wrap: anywhere; }
+.ew-detail-label {
+    color: var(--text-gray, #949b9f);
+    font-size: 13px;
+    line-height: 20px;
 }
-.ew-details-grid .ew-service-row:first-child { border-top: none; }
-/* In grid mode, top border only on items that are not in first row.
- * Grid auto-fill handles this naturally — first items have border-top. */
+.ew-detail-value {
+    color: var(--primary-text, #c2c2c2);
+    font-size: 14px;
+    line-height: 22px;
+    min-height: 16px;
+}
 
 /* ── Toggle switch (reused from inject.css) ────────────────────────── */
 .ew-toggle {
@@ -262,7 +267,16 @@ body {
     100% { background-position: -200% 0; }
 }
 
-/* ── Summary mode: hide edit buttons ─────────────────────────────── */
+/* ── Summary mode: 2-column grid + hide edit buttons ─────────────── */
+.ew-summary-mode {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    align-items: start;
+}
+@media (max-width: 700px) {
+    .ew-summary-mode { grid-template-columns: 1fr; }
+}
 .ew-summary-mode .ew-edit-btn { display: none !important; }
 
 /* ── Modal Dialog (stock Keenetic style) ─────────────────────────── */

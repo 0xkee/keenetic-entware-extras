@@ -40,6 +40,8 @@ body {
     background: var(--background, #1b2434);
     color: var(--primary-text, #c2c2c2);
     min-height: 100vh;
+    background-image: radial-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+    background-size: 24px 24px;
 }
 
 /* ── Page wrapper ─────────────────────────────────────────────────── */
@@ -60,6 +62,10 @@ body {
     display: flex; gap: 16px; align-items: center;
     font-size: 12px; color: var(--text-gray, #949b9f);
     flex-wrap: wrap;
+    background: rgba(255, 255, 255, 0.015);
+    padding: 8px 14px;
+    border-radius: 6px;
+    border: 1px solid rgba(77, 84, 95, 0.3);
 }
 .ew-sysinfo__item {
     display: inline-flex; align-items: center; gap: 4px;
@@ -107,6 +113,7 @@ body {
 .ndw-tabs__tab--active {
     color: var(--primary-color, #0086cb);
     border-bottom-color: var(--primary-color, #0086cb);
+    text-shadow: 0 0 8px rgba(0, 134, 203, 0.3);
 }
 
 /* ── Dashboard card ───────────────────────────────────────────────── */
@@ -115,11 +122,25 @@ body {
     border-radius: 8px;
     background: var(--dashboard-background, #1b2434);
     padding: 24px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.02);
+    transition: border-color .2s, box-shadow .2s;
 }
+.dashboard-card:hover {
+    border-color: rgba(0, 134, 203, 0.3);
+    box-shadow: 0 2px 8px rgba(0, 134, 203, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+.dashboard-card--running { border-left: 3px solid var(--indicator-online, #7dce70); }
+.dashboard-card--stopped { border-left: 3px solid var(--text-gray, #949b9f); }
+.dashboard-card--error { border-left: 3px solid var(--error, #de3d3d); }
+.dashboard-card--running:hover { border-left-color: var(--indicator-online, #7dce70); }
+.dashboard-card--stopped:hover { border-left-color: var(--text-gray, #949b9f); }
+.dashboard-card--error:hover { border-left-color: var(--error, #de3d3d); }
 .dashboard-card__header {
     display: flex; align-items: center;
     justify-content: space-between;
     margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(0, 134, 203, 0.12);
 }
 .dashboard-card__header-left {
     display: flex; align-items: center; gap: 12px;
@@ -133,7 +154,7 @@ body {
 
 /* ── Status badges ────────────────────────────────────────────────── */
 .ndw-status { display: inline-block; }
-.status { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+.status { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; padding: 3px 10px; border-radius: 12px; }
 .status__icon {
     width: 8px; height: 8px; border-radius: 50%;
     background: var(--text-gray, #949b9f); flex-shrink: 0;
@@ -151,6 +172,9 @@ body {
 .status--warning .status__icon { background: var(--error, #de3d3d); }
 .status--warning .status__text { color: var(--error, #de3d3d); }
 .status__text { color: var(--primary-text, #c2c2c2); }
+.status--success { background: rgba(125, 206, 112, 0.08); }
+.status--caution { background: rgba(242, 229, 114, 0.08); }
+.status--warning { background: rgba(222, 61, 61, 0.08); }
 
 /* ── Buttons — 1:1 stock ndw-button replica ──────────────────────── */
 .ndw-button {
@@ -217,6 +241,7 @@ body {
     font-size: 14px;
     line-height: 22px;
     min-height: 16px;
+    white-space: nowrap;
 }
 
 /* ── Toggle switch (reused from inject.css) ────────────────────────── */
@@ -245,7 +270,9 @@ body {
 .ew-toggle input:checked + .ew-toggle__bar::after {
     transform: translateX(16px);
     background: var(--primary-color, #0086cb);
+    box-shadow: 0 0 6px rgba(0, 134, 203, 0.4);
 }
+.ew-toggle__bar:active::after { width: 20px; }
 .ew-toggle input:disabled + .ew-toggle__bar {
     opacity: 0.5; cursor: not-allowed;
 }
@@ -253,6 +280,7 @@ body {
 /* ── Loading skeleton ────────────────────────────────────────────── */
 .ew-skeleton {
     height: 14px; border-radius: 4px;
+    max-width: 100%;
     background: linear-gradient(90deg,
         var(--disabled, #2f3745) 25%,
         var(--stroke, #4d545f) 50%,
@@ -262,22 +290,35 @@ body {
 }
 .ew-skeleton--short { width: 80px; }
 .ew-skeleton--medium { width: 140px; }
+/* Inside details grid cells, skeletons use relative widths */
+.ew-details-grid .ew-skeleton--short { width: 60%; }
+.ew-details-grid .ew-skeleton--medium { width: 85%; }
 @keyframes ew-shimmer {
     0% { background-position: 200% 0; }
     100% { background-position: -200% 0; }
 }
 
-/* ── Summary mode: 2-column grid + hide edit buttons ─────────────── */
+/* ── Summary mode: auto-fill grid + condensed cards ──────────────── */
 .ew-summary-mode {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
     align-items: start;
 }
 @media (max-width: 700px) {
     .ew-summary-mode { grid-template-columns: 1fr; }
 }
+.ew-summary-mode .dashboard-card { cursor: pointer; }
 .ew-summary-mode .ew-edit-btn { display: none !important; }
+/* Hide low-priority details in summary mode */
+.ew-summary-mode .ew-detail-item[data-priority="low"] { display: none; }
+/* Force 3-column detail grid inside summary cards */
+.ew-summary-mode .ew-details-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px 24px;
+}
+/* Hide "View details" link — card click navigates instead */
+.ew-card-more { display: none !important; }
 
 /* ── Modal Dialog (stock Keenetic style) ─────────────────────────── */
 .ew-modal-backdrop {
@@ -672,6 +713,33 @@ body {
     padding: 8px 0;
 }
 .ew-editor-msg--error { color: var(--error, #de3d3d); }
+
+/* ── Boolean value icons ─────────────────────────────────────────── */
+.ew-bool-icon {
+    font-weight: 700;
+    font-size: 15px;
+}
+.ew-bool-icon--ok { color: var(--indicator-online, #7dce70); }
+.ew-bool-icon--fail { color: var(--error, #de3d3d); }
+
+/* ── Numeric value emphasis ──────────────────────────────────────── */
+.ew-detail-value--numeric {
+    font-family: 'JetBrains Mono', 'Roboto Mono', 'Courier New', monospace;
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: -0.3px;
+}
+
+/* ── Version badge ───────────────────────────────────────────────── */
+.ew-version-badge {
+    font-family: 'JetBrains Mono', 'Roboto Mono', 'Courier New', monospace;
+    font-size: 12px;
+    background: var(--disabled, #2f3745);
+    padding: 2px 8px;
+    border-radius: 4px;
+    display: inline-block;
+    letter-spacing: 0.5px;
+}
 
 /* Hidden utility */
 .ew-hidden { display: none !important; }

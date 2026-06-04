@@ -34,6 +34,8 @@
 ## 🟡 Важные
 
 - [x] добавить Upstream в status + webui (Ok когда доступен) ✅ — `check_upstream()` в status.sh: парсит listen.conf для IP, curl probe. JSON: `details.upstream` (addr) + `checks.upstream` ("ok"|"warn"). Карточка рендерит автоматически через `parseDetails`.
+- [ ] **Service icons: SVG иконки в card headers + tabs** — визуальная дифференциация (route/globe для Geo-Split, DNS для SmartDNS, shield для DNS Redirect, monitor для WebUI). Inline SVG в `SERVICE_APIS`. (target-gui: #1, #3)
+- [ ] **System info: donut rings вместо thin bars** — SVG кольца 24×24 с заливкой по %, заменят текущие 48×4px полоски. Уникальная фича (stock dashboard не имеет system info). (target-gui: #2 Tech)
 - [ ] + таймер на лейбл , когда сервис stopped (disabled)?
 - [x] **Status flicker fix** ✅ — stale-while-revalidate: при ошибке fetch НЕ перезаписывать badge если есть предыдущие данные. Error показывается только при 3+ подряд неудачах или если данных ещё не было. app.js: `_hasGoodData`/`_consecutiveErrors`/`ERRORS_BEFORE_SHOW`. inject.js: `.catch()` в `fetchDashboardStatuses()` молчит если chip уже имеет данные.
 - [x] **upstream: использовать LAN IP вместо 127.0.0.1** ✅ — удалён блок `upstream keenetic_ui`, `proxy_pass $stock_httpd` (nginx-переменная из `listen.conf`). Self-healing в init-скрипте генерирует listen.conf с `set $stock_httpd http://<LAN_IP>:80;` при старте. Команда `update-listen` для ручного обновления IP.

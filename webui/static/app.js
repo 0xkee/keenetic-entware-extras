@@ -8,6 +8,32 @@ var POLL_ACTIVE = 5000;       // 5s when page is visible
 var POLL_BACKGROUND = 60000;  // 60s when hidden (background tab)
 var FETCH_TIMEOUT = 15000;    // 15 seconds (allows for queued io.popen in nginx)
 
+/** Key detail labels shown in Summary mode per service. Others are hidden via CSS. */
+var SUMMARY_KEYS = {
+    'geo-split':         ['geo_zone', 'subnets', 'domains', 'route_out', 'gateway'],
+    'smartdns':          ['ports', 'rules'],
+    'smartdns-redirect': ['interfaces', 'upstream'],
+    'webui':             ['ports', 'http']
+};
+
+/** Get skeleton count for a service: cached from last API response, or default 6. */
+function getSkeletonCount(id) {
+    try {
+        var cached = JSON.parse(localStorage.getItem('ew-skel-counts') || '{}');
+        return cached[id] || 6;
+    } catch (e) { return 6; }
+}
+/** Save real field count after first API response to localStorage. */
+function saveSkeletonCount(id, count) {
+    try {
+        var cached = JSON.parse(localStorage.getItem('ew-skel-counts') || '{}');
+        if (cached[id] !== count) {
+            cached[id] = count;
+            localStorage.setItem('ew-skel-counts', JSON.stringify(cached));
+        }
+    } catch (e) { /* ignore */ }
+}
+
 var autoRefreshTimer = null;
 var activeTab = "all";
 var _inflightControllers = {};  // { serviceId: AbortController } — cancel stale in-flight requests
@@ -48,7 +74,8 @@ function setStatus(id, state, text) {
     var iconHtml = "";
 
     if (state === "loading") {
-        statusClass = "status status--loading";
+        el.innerHTML = '<div class="ew-skeleton ew-skeleton--medium"></div>';
+        return;
     } else if (state === "ok") {
         statusClass = "status status--success";
         iconHtml = '<div class="status__icon"></div>';
@@ -111,13 +138,18 @@ function setDetails(id, data) {
 
     var entries = EW.parseDetails(data.details, { isRunning: data.running });
     var html = "";
+    var summaryKeys = SUMMARY_KEYS[id] || [];
     for (var i = 0; i < entries.length; i++) {
         var e = entries[i];
         if (e.isSpacer) { html += '<div class="ew-detail-item"></div>'; continue; }
         var valStyle = e.isError ? ' style="color:var(--error,#f44336)"'
             : e.isWarning ? ' style="color:var(--status-caution-text,#ffbb57)"' : '';
         var valHtml;
-        if (e.lines) {
+        if (e.value === 'Ok') {
+            valHtml = '<span class="ew-bool-icon ew-bool-icon--ok">\u2713</span>';
+        } else if (e.value === 'Fail') {
+            valHtml = '<span class="ew-bool-icon ew-bool-icon--fail">\u2717</span>';
+        } else if (e.lines) {
             valHtml = e.lines.map(function(l) {
                 return l.isError ? '<span style="color:var(--error,#f44336)">' + escapeHtml(l.text) + '</span>' : escapeHtml(l.text);
             }).join('<br>');
@@ -127,17 +159,43 @@ function setDetails(id, data) {
         } else {
             valHtml = escapeHtml(e.value);
         }
+        var isVersion = (e.label.toLowerCase() === 'version');
+        if (isVersion) {
+            valHtml = '<span class="ew-version-badge">' + escapeHtml(e.value) + '</span>';
+        }
+        var isNumericOnly = /^\d[\d,.]*[KMG]?[Bb]?$/.test(e.value.trim());
+        var numClass = isNumericOnly ? ' ew-detail-value--numeric' : '';
         var updateBtn = '';
         if (e.updateAction) {
             updateBtn = ' <button class="ew-update-btn" data-action="' + e.updateAction + '" data-tooltip="Force Reload">' +
                 '<svg class="ndw-svg-icon svg-restart-dims" style="width:14px;height:14px;fill:currentColor"><use href="/assets/sprite/sprite.svg#restart"></use></svg></button>';
         }
         var dataAttr = e.freshnessKey ? ' data-freshness-key="' + e.freshnessKey + '"' : '';
-        html += '<div class="ew-detail-item">' +
+        // Determine priority for summary condensed mode
+        var priority = (summaryKeys.indexOf(e.key) !== -1) ? 'high' : 'low';
+        html += '<div class="ew-detail-item" data-priority="' + priority + '">' +
             '<div class="ew-detail-label">' + escapeHtml(e.label) + '</div>' +
-            '<div class="ew-detail-value"' + valStyle + dataAttr + '>' + valHtml + updateBtn + '</div></div>';
+            '<div class="ew-detail-value' + numClass + '"' + valStyle + dataAttr + '>' + valHtml + updateBtn + '</div></div>';
     }
+    // Cache real field count for next page load skeleton rendering
+    var realCount = entries.filter(function(e) { return !e.isSpacer; }).length;
+    saveSkeletonCount(id, realCount);
     el.innerHTML = html;
+}
+
+/**
+ * Update left accent border color on card based on service state.
+ * @param {string} id - service id
+ * @param {boolean} running
+ * @param {boolean} hasError
+ */
+function updateCardAccent(id, running, hasError) {
+    var card = document.getElementById("card-" + id);
+    if (!card) return;
+    card.classList.remove("dashboard-card--running", "dashboard-card--stopped", "dashboard-card--error");
+    if (hasError) card.classList.add("dashboard-card--error");
+    else if (running) card.classList.add("dashboard-card--running");
+    else card.classList.add("dashboard-card--stopped");
 }
 
 // ── Tab switching ────────────────────────────────────────────────────────────
@@ -265,6 +323,7 @@ function fetchStatus(url, id, skipLoading) {
                     }
                 } else {
                     setStatus(id, "fail", "Stopped");
+                    updateCardAccent(id, false, false);
                 }
 
                 // Update toggle switch state
@@ -282,6 +341,7 @@ function fetchStatus(url, id, skipLoading) {
                     }
                 }
                 setDetails(id, data);
+                updateCardAccent(id, data.running, hasFail);
                 // Update uptime baseline (store badge state for ticker)
                 if (data.running && data.details && data.details.uptime) {
                     ticker.setUptimeBaseline(id, data.details.uptime, { state: badgeState });
@@ -529,6 +589,7 @@ function buildUI() {
         var card = document.createElement("div");
         card.className = "dashboard-card";
         card.id = "card-" + svc.id;
+        card.dataset.service = svc.id;
 
         var toggleHtml = '';
         if (svc.id !== 'webui') {
@@ -563,9 +624,30 @@ function buildUI() {
                         '<div class="ew-skeleton ew-skeleton--medium"></div>' +
                     '</div>' +
                 '</div></div>' +
-                '<div id="details-' + svc.id + '" class="ew-details-grid"></div>' +
+                '<div id="details-' + svc.id + '" class="ew-details-grid">' +
+                    (function() {
+                        var s='', n=getSkeletonCount(svc.id), highCount=(SUMMARY_KEYS[svc.id]||[]).length||3;
+                        for(var j=0;j<n;j++) {
+                            var pri = j < highCount ? 'high' : 'low';
+                            s+='<div class="ew-detail-item" data-priority="'+pri+'"><div class="ew-skeleton ew-skeleton--short"></div><div class="ew-skeleton ew-skeleton--medium" style="margin-top:4px"></div></div>';
+                        }
+                        return s;
+                    })() +
+                '</div>' +
+                '<div class="ew-card-more"><a href="#' + svc.id + '" data-tab="' + svc.id + '">View details \u2192</a></div>' +
             '</div>';
         cardsContainer.appendChild(card);
+    });
+
+    // Event delegation: click card in summary mode → switch to single service tab
+    cardsContainer.addEventListener("click", function(evt) {
+        if (activeTab !== "all") return;
+        // Don't hijack clicks on toggles, buttons, or links inside cards
+        if (evt.target.closest(".ew-toggle, .ndw-button, a, button")) return;
+        var card = evt.target.closest(".dashboard-card");
+        if (card && card.dataset.service) {
+            switchTab(card.dataset.service);
+        }
     });
 }
 

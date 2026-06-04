@@ -7,6 +7,27 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-06-04
+
+### Added
+- Visual polish: card box-shadow + hover glow, status chip backgrounds,
+  header accent separator, system info bar styling, tab active glow,
+  toggle micro-animation, background dot grid pattern.
+- Boolean icons: "Ok" → green ✓, "Fail" → red ✗ in detail grids.
+- Left accent border: green (running), gray (stopped), red (error) on cards.
+- Numeric values in monospace font (15px, JetBrains Mono fallback).
+- Version badge: monospace pill chip for version fields.
+- Summary condensed mode: only 3-5 key metrics per service card in Summary tab,
+  3-column detail grid, "View details →" link to full service tab.
+- Smart loading skeletons: cached field count from localStorage, priority-aware.
+- Created `webui/.project/target-gui.md` — GUI design principles document.
+
+### Fixed
+- `SUMMARY_KEYS` for geo-split: `active_out` → `gateway` (matches actual API key).
+
+### Removed
+- Refresh pulse animation on status badges (violated "Тишина" principle).
+
 ## [0.16.6] - 2026-06-03
 
 ### Changed

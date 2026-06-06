@@ -1,472 +1,469 @@
-# Глубокое сравнение: geo-split vs keen-pbr
+# Глубокое сравнение: keenetic-entware-extras vs keen-pbr
 
-**Дата**: 2026-04-11  
-**keen-pbr**: v2.2.2 ([maksimkurb/keen-pbr](https://github.com/maksimkurb/keen-pbr))  
-**geo-split**: v0.1.0 (local)
+**Дата обновления**: 2026-06-04  
+**keen-pbr**: v3.0.6 BETA ([maksimkurb/keen-pbr](https://github.com/maksimkurb/keen-pbr))  
+**keenetic-entware-extras**: v0.12.x (экосистема из 6 пакетов)
 
 ---
 
 ## 1. Обзор проектов
 
-| | **geo-split** | **keen-pbr** |
+| | **keenetic-entware-extras** | **keen-pbr** |
 |---|---|---|
-| **Назначение** | Селективная GEO-маршрутизация (целые страновые подсети) | Policy-based routing (per-domain, per-IP, per-list) |
-| **Язык** | POSIX sh (~1200 строк) | Go (~3700 строк) + sh (~150 строк) |
-| **Тесты** | shellcheck | Go unit tests (~5000 строк) |
-| **Версия** | 0.1.0 | 2.2.2 |
-| **Конфиг** | `config.conf` (shell vars) | `keen-pbr.conf` (TOML) |
-| **Платформа** | Keenetic + Entware | Keenetic + Entware |
-| **Лицензия** | нет (private) | MIT |
-| **Сообщество** | 1 автор | GitHub + Telegram чат |
-| **CI/CD** | нет | GitHub Actions (multi-arch build) |
+| **Назначение** | GEO-маршрутизация + DNS split + DNS redirect + WebUI | Universal policy-based routing daemon |
+| **Архитектура** | 6 .ipk пакетов с shared libs | Единый C++ демон + TypeScript WebUI |
+| **Язык (back-end)** | POSIX sh (~2800 строк) + Lua API (~540) | C++ (~57% кодовой базы) |
+| **Язык (front-end)** | JS/HTML/CSS (~1800 строк, vanilla) | TypeScript (~32% кодовой базы) |
+| **Тесты** | shellcheck | C++ unit tests |
+| **Конфиг** | shell vars (defaults.conf + config.conf per-package) | JSON (config.json) |
+| **Платформа** | Keenetic + Entware | Keenetic + OpenWrt + Debian |
+| **Лицензия** | MIT | GPL-3.0 |
+| **Сообщество** | 1 автор | 3 contributors, 122 stars, Telegram |
+| **CI/CD** | Makefile (build/lint/release) | GitHub Actions (multi-arch build) |
 | **opkg-репо** | нет (ручная сборка .ipk) | Собственный opkg-репозиторий |
+| **WebUI** | ✅ Nginx+Lua дашборд + stock injection | ✅ TypeScript SPA (встроен в бинарник) |
+| **REST API** | ✅ (nginx-lua, per-service) | ✅ (C++ HTTP server, :12121) |
+| **DNS управление** | ✅ SmartDNS split-DNS + DNS redirect | ❌ Только dnsmasq ipset |
+| **Keenetic NDM** | ✅ ndmc CLI для interface labels | ✅ RCI HTTP API для interface health |
+
+### Состав экосистемы keenetic-entware-extras
+
+| Пакет | Версия | Назначение |
+|--------|--------|------------|
+| `keenetic-entware-extras` | 0.12.1 | Базовый: shared libs (`common.sh`, `ip.sh`, `lists.sh`, `status.sh`) + `kee-status` CLI |
+| `geo-split` | 0.12.5 | GEO route-based маршрутизация (dual tables: domains + subnets) |
+| `geo-split-data` | 0.4.0 | Курированные данные: 140+ RU доменов, GeoIP зоны (EAEU: RU/BY/KZ/AM/KG) |
+| `smartdns-conf-ru-split` | 0.4.4 | Split-DNS: .ru/.рф/.su → Yandex/AdGuard DoT; * → Google/CF DoH |
+| `smartdns-redirect` | 0.3.1 | DNS DNAT: LAN :53 → SmartDNS :6053 (iptables nat REDIRECT, не mangle!) |
+| `webui` | 0.17.0 | Nginx+Lua дашборд на :8080, REST API, config editor, stock Keenetic sidebar |
 
 ---
 
-## 2. Архитектура маршрутизации (КРИТИЧЕСКОЕ отличие)
+## 2. Архитектура маршрутизации (ФУНДАМЕНТАЛЬНОЕ отличие)
 
-### Схема: geo-split (route-based)
-
-```mermaid
-flowchart LR
-  LAN["🖥 LAN клиент<br/>br0"] --> RULE{"ip rule<br/>iif br0 →<br/>table 1000"}
-  RULE -->|dst в table 1000| RT["📋 Table 1000<br/>13K per-subnet routes<br/>185.73.192.0/22 → dev X<br/>77.88.0.0/16 → dev X<br/>..."]
-  RT --> ISP["🌐 ISP / VPN<br/>lte_br1 / nwg0"]
-  RULE -->|dst НЕ в table| DEFAULT["🔀 Default route<br/>(main table)"]
-  DEFAULT --> VPN_DEF["🛡 VPN tunnel<br/>nwg0"]
-
-  classDef client fill:#c2d9f5,stroke:#2680eb,stroke-width:2px,color:#000
-  classDef decision fill:#f5efc2,stroke:#b3a326,stroke-width:2px,color:#000
-  classDef table fill:#c2f5c2,stroke:#339933,stroke-width:2px,color:#000
-  classDef target fill:#e4c2f5,stroke:#a933cc,stroke-width:2px,color:#000
-  classDef default fill:#d9d9d9,stroke:#333333,stroke-width:2px,color:#000
-  class LAN client
-  class RULE decision
-  class RT table
-  class ISP target
-  class DEFAULT,VPN_DEF default
-```
-
-> **Ключевое**: `skb->mark` не затрагивается → NDM per-device routing работает. HW NAT сохранён.
-
-### Схема: keen-pbr (fwmark-based)
-
-```mermaid
-flowchart LR
-  LAN2["🖥 LAN клиент"] --> DNS{"dnsmasq<br/>DNS запрос"}
-  DNS -->|domain в списке| IPSET["📦 ipset vpn1<br/>(hash:net)"]
-  DNS -->|не в списке| BYPASS["🔀 Обычный<br/>маршрут"]
-  LAN2 --> IPT["⚡ iptables mangle<br/>PREROUTING"]
-  IPT -->|dst в ipset| MARK["🏷 MARK<br/>set fwmark=1001"]
-  IPT -->|dst не в ipset| BYPASS
-  MARK --> FWRULE{"ip rule<br/>fwmark 1001 →<br/>table 1001"}
-  FWRULE --> RT2["📋 Table 1001<br/>default route<br/>→ dev nwg0"]
-  RT2 --> VPN2["🛡 VPN<br/>nwg0"]
-
-  classDef client fill:#c2d9f5,stroke:#2680eb,stroke-width:2px,color:#000
-  classDef dns fill:#c2f5f5,stroke:#1f9999,stroke-width:2px,color:#000
-  classDef ipset fill:#ddf5c2,stroke:#7abd1f,stroke-width:2px,color:#000
-  classDef ipt fill:#f5ccc2,stroke:#bd401f,stroke-width:2px,color:#000
-  classDef mark fill:#f5c2c2,stroke:#cc3333,stroke-width:2px,color:#000
-  classDef decision fill:#f5efc2,stroke:#b3a326,stroke-width:2px,color:#000
-  classDef table fill:#c2f5c2,stroke:#339933,stroke-width:2px,color:#000
-  classDef target fill:#e4c2f5,stroke:#a933cc,stroke-width:2px,color:#000
-  classDef default fill:#d9d9d9,stroke:#333333,stroke-width:2px,color:#000
-  class LAN2 client
-  class DNS dns
-  class IPSET ipset
-  class IPT ipt
-  class MARK mark
-  class FWRULE decision
-  class RT2 table
-  class VPN2 target
-  class BYPASS default
-```
-
-> **Ключевое**: `skb->mark` перезаписывается → конфликт с NDM per-device routing. HW NAT отключён.
-
-### Различие роли ipset
-
-| | **geo-split** | **keen-pbr** |
-|---|---|---|
-| **Роль ipset** | Вспомогательное хранилище (для `status.sh` диагностики) | **Ядро маршрутизации** (`iptables -m set --match-set`) |
-| **Используется в routing path?** | ❌ Нет — routing через per-subnet routes в table 1000 | ✅ Да — ipset match → fwmark → table |
-| **Что содержит** | Те же подсети, что и в route table (зеркало) | IP/CIDR из списков + domain IPs от dnsmasq |
-| **Если удалить ipset** | Маршрутизация продолжит работать | Маршрутизация **полностью сломается** |
-
-### geo-split: route-based (без fwmark)
+### keenetic-entware-extras: route-based (без fwmark)
 
 ```
-ip rule add iif br0 table 1000 priority 50   # domains
-ip rule add iif br0 table 1001 priority 51   # subnets
-ip route add 8.8.8.8/32 dev lte_br1 table 1000        # domain route
-ip route add 185.73.192.0/22 dev lte_br1 table 1001   # ×11K subnet routes
+ip rule add iif br0 table 1000 priority 50   # domains (/32 host routes)
+ip rule add iif br0 table 1001 priority 51   # subnets (GeoIP CIDRs)
+ip route add 8.8.8.8/32 via 176.65.44.1 dev eth3 table 1000       # domain route
+ip route add 185.73.192.0/22 via 176.65.44.1 dev eth3 table 1001  # subnet route × 8K
 ```
 
-**Механизм**: Per-subnet маршруты в custom table. Весь LAN-трафик (iif br0) проверяется по table 1000. Если destination попадает в маршрут — идёт через target interface. Если нет — проходит дальше по default route.
+**Механизм**: Dual-table per-subnet маршруты. Table 1000 (priority 50) — /32 host routes из DNS-resolution. Table 1001 (priority 51) — GeoIP CIDRs. Весь LAN-трафик (iif br0) проверяется сначала по table 1000, затем 1001.
 
 **Плюсы**:
-- ✅ **Совместим с Keenetic NDM per-device routing** — не трогает `skb->mark`
-- ✅ Нет зависимости от iptables/netfilter
-- ✅ HW NAT может оставаться включённым
-- ✅ Нет конфликта с другими fwmark-решениями
+- ✅ **Полная совместимость с Keenetic NDM per-device routing** — `skb->mark` не затронут
+- ✅ HW NAT сохранён (throughput не деградирует)
+- ✅ Нет зависимости от iptables mangle
+- ✅ Gateway auto-detect (Ethernet ISP `via <gw>`, LTE/PPP dev-only)
 
 **Минусы**:
-- ❌ Per-subnet маршруты (~13K) занимают память kernel route table
-- ❌ Нет per-domain routing через маршруты (компенсируется dig + ipset + /32 routes)
-- ❌ Невозможно маршрутизировать per-source IP через `iif`
+- ❌ ~8K маршрутов в kernel route table (после CIDR aggregation, was 13K)
+- ❌ Нет per-domain routing в реальном времени (обновление раз в час)
+- ❌ Невозможно маршрутизировать per-source IP (только per-interface: `iif`)
 
-### keen-pbr: fwmark-based (iptables mangle)
+### keen-pbr: fwmark-based (iptables mangle / nftables)
 
 ```
-iptables -t mangle -A PREROUTING -m set --match-set vpn1 dst -j MARK --set-mark 1001
-ip rule add fwmark 1001 table 1001 priority 1001
-ip route add default dev nwg0 table 1001
+iptables -t mangle -A PREROUTING -m set --match-set kpbr0 dst -j MARK --set-mark 0x00010000
+ip rule add fwmark 0x00010000/0x00FF0000 table 150
+ip route add default dev nwg0 table 150
 ```
 
-**Механизм**: IP/домены → ipset → iptables MARK → ip rule fwmark → custom table с default route через VPN.
+**Механизм**: IP/домены → ipset/nftables sets → fwmark → ip rule → custom table с default route.
 
 **Плюсы**:
-- ✅ Только 1 default route в таблице (не 13K routes)
-- ✅ Эффективный per-domain routing через dnsmasq ipset
-- ✅ Поддерживает множество ipset-ов с разными интерфейсами
-- ✅ Kill switch (blackhole route)
+- ✅ Только 1 default route в таблице (не 8K per-subnet routes)
+- ✅ Мгновенный domain routing через dnsmasq ipset
+- ✅ Множество outbounds с разными правилами
+- ✅ Kill switch (blackhole outbound)
+- ✅ Health checks + failover chains
+- ✅ `skip_marked_packets: true` — пропускает пакеты с чужими marks (уменьшает конфликт с NDM)
 
 **Минусы**:
-- ❌ **fwmark конфликтует с Keenetic NDM** per-device routing (оба используют `skb->mark`)
-- ❌ Требует отключения HW NAT (`disable_hwnat` в init script)
-- ❌ Зависимость от iptables/netfilter kernel modules
-- ❌ Требует компонент «Модули ядра подсистемы Netfilter»
+- ❌ fwmark **всё равно** конфликтует с Keenetic NDM per-device routing (хотя `skip_marked_packets` уменьшает проблему)
+- ❌ Требует отключения HW NAT
+- ❌ Зависимость от iptables/nftables kernel modules
+- ❌ Устройства должны быть в «Политике доступа по умолчанию» (подтверждено в keen-pbr docs)
 
-### Последствия fwmark-подхода keen-pbr
+### Использование iptables: принципиальная разница
 
-В `S80keen-pbr` при start выполняется `disable_hwnat`:
-```sh
-sysctl -w net.netfilter.nf_conntrack_fastnat=0
-```
-Это **отключает аппаратное ускорение NAT** для всей сети, что может снизить throughput роутера. geo-split этого не требует.
-
----
-
-## 3. Domain routing
-
-| | **geo-split** | **keen-pbr** |
+| | **keenetic-entware-extras** | **keen-pbr** |
 |---|---|---|
-| **Механизм** | `dig` → ipset + /32 routes | `dnsmasq` ipset integration |
-| **Момент резолва** | Cron (периодический) | При DNS-запросе клиента (real-time) |
-| **Отдельный DNS** | SmartDNS (автодетект порта 6153/6053) | dnsmasq (подменяет конфиг) |
-| **Новые IP домена** | Подхватываются при следующем cron-цикле | Подхватываются мгновенно при DNS-запросе |
-| **Приватные IP** | Фильтруются (10.x, 172.16-31.x, 192.168.x) | Не фильтруются |
-| **@include в списках** | Да (lib/lists.sh) | Нет (только flat lists) |
-
-**keen-pbr** здесь сильнее: dnsmasq-интеграция даёт **мгновенный** domain routing при первом же DNS-запросе. geo-split опирается на cron (15 мин) + dig, что создаёт задержку для новых IP.
-
-Однако geo-split **не подменяет dnsmasq**, а использует отдельный `dig` — что безопаснее в плане «не сломать DNS на роутере».
-
-⚠️ **Риск keen-pbr**: при установке `postinst` **заменяет** `/opt/etc/dnsmasq.conf` на свою версию (оригинал → `dnsmasq.conf.orig`). Если у пользователя кастомизированный dnsmasq.conf (например, интеграция со SmartDNS) — keen-pbr его перезапишет. При удалении keen-pbr восстановление `.orig` может потерять промежуточные изменения.
+| **iptables таблица** | `nat` (PREROUTING REDIRECT — только DNS) | `mangle` (PREROUTING MARK — весь routing) |
+| **Цель** | DNS redirect :53 → SmartDNS :6053 | Routing decision (fwmark → table) |
+| **Трогает skb->mark?** | ❌ Нет — REDIRECT не меняет mark | ✅ Да — `--set-mark` перезаписывает mark |
+| **Firewall backend** | iptables nat only | auto: nftables, iptables, или без (config) |
+| **Влияние на HW NAT** | ❌ Нет | ✅ Отключает |
 
 ---
 
-## 4. Конфигурация
+## 3. DNS pipeline
 
-### geo-split: shell variables
+### keenetic-entware-extras: полный DNS-стек (3 пакета)
+
+```
+LAN client → :53 → [smartdns-redirect: iptables nat REDIRECT] → SmartDNS :6053
+SmartDNS:
+  .ru/.рф/.su → Yandex DoT (77.88.8.8:853) + AdGuard DoT
+  *           → Google DoH + Cloudflare DoH
+  port :6153  → no-speed-check (для geo-split update-domains.sh)
+```
+
+**Преимущества**:
+- DoT/DoH шифрование DNS-запросов (защита от DPI)
+- Split по доменным зонам (.ru→российские DNS для правильной CDN геолокации)
+- Полная резолюция (max 16 A-records для каждого домена)
+- Не подменяет dnsmasq — безопаснее
+- Cache 20K + serve-expired + prefetch
+- Watchdog cron (проверка здоровья upstream DNS + iptables правил)
+- NDM netfilter hook (автовосстановление правил после iptables flush)
+
+### keen-pbr: dnsmasq ipset integration
+
+```json
+"dns": {
+  "system_resolver": { "address": "127.0.0.1" },
+  "dns_test_server": { "listen": "127.0.0.88:12153" },
+  "servers": [{ "tag": "quad9", "address": "9.9.9.9" }]
+}
+```
+
+keen-pbr в v3 имеет собственный DNS test server и может проверять доступность серверов для health checks. Основная DNS-интеграция — через dnsmasq ipset: при DNS-запросе resolved IP автоматически попадает в ipset.
+
+**Преимущества keen-pbr**:
+- Мгновенный domain routing при первом DNS-запросе
+- Не требует периодического dig-resolution
+- DNS test server для health checks
+
+**Недостатки keen-pbr DNS**:
+- Подменяет `/opt/etc/dnsmasq.conf`
+- Нет собственного DNS forward/resolve (только dnsmasq)
+- Нет DoT/DoH шифрования
+- Нет split-DNS по зонам
+
+### Сравнение domain routing
+
+| | **keenetic-entware-extras** | **keen-pbr** |
+|---|---|---|
+| **Domain → route** | dig → /32 routes (hourly) | dnsmasq ipset (real-time) |
+| **Скорость подхвата** | ~1 час | Мгновенно |
+| **DNS шифрование** | ✅ DoT/DoH | ❌ Plain UDP (dnsmasq) |
+| **Split-DNS по зонам** | ✅ .ru→Yandex, *→Google/CF | ❌ Нет |
+| **CDN геолокация** | ✅ Корректная | ❌ Может быть некорректной |
+| **Подменяет dnsmasq** | ❌ Нет | ✅ Да |
+| **Private IP filtering** | ✅ | ❌ |
+| **DNS health check** | ✅ Watchdog cron | ✅ DNS test server |
+
+---
+
+## 4. Поддержка GEO маршрутизации
+
+### keenetic-entware-extras: нативная GEO-специализация
 
 ```sh
-ROUTE_OUT="auto"            # "auto" | explicit interface name
-ROUTE_IN="br0"             # LAN interfaces for ip rule iif
-DOMAIN_ROUTE_TABLE="1000"
-SUBNET_ROUTE_TABLE="1001"
 SUBNET_URL="https://www.ipdeny.com/ipblocks/data/countries/ru.zone"
-SUBNET_LOADER="cidr-plain"
-DOMAINS_LIST_FILE="$_LISTS_DIR/domains.txt"
+SUBNET_LOADER="cidr-plain"     # или ripe-json
+SUBNET_AGGREGATE=1             # 13K → 8K после merge overlapping
 ```
 
-**Плюсы**: Простота, прозрачность, sourceable из любого скрипта.  
-**Минусы**: Нет валидации, нет структурированных данных, один ipset.
+- **Нативная GEO-задача**: специально построен для маршрутизации целых страновых зон
+- Pluggable loaders (cidr-plain, ripe-json)
+- CIDR aggregation (merge adjacent/overlapping → меньше маршрутов)
+- Multi-interface download failover с retries
+- Курированные данные: EAEU зоны (RU/BY/KZ/AM/KG) в пакете `geo-split-data`
+- 140+ RU доменов с geoblocking в whitelist
 
-### keen-pbr: TOML
+### keen-pbr: GEO через universal list mechanism
 
-```toml
-[[ipset]]
-  ipset_name = "vpn1"
-  lists = ["epic-games", "local"]
-  ip_version = 4
-  [ipset.routing]
-    interfaces = ["nwg0", "nwg1"]
-    fwmark = 1001
-    table = 1001
-    kill_switch = false
-
-[[list]]
-  list_name = "epic-games"
-  url = "https://..."
+```json
+"lists": {
+  "ru_geo": {
+    "url": "https://www.ipdeny.com/ipblocks/data/countries/ru.zone",
+    "ip_cidrs": []
+  }
+},
+"lists_autoupdate": {
+  "enabled": true,
+  "cron": "0 4 * * 0"
+}
 ```
 
-**Плюсы**: Структурированный TOML, множество ipset-ов, валидация через `config/validator.go`, upgrade конфига между версиями.  
-**Минусы**: Требует бинарный keen-pbr для парсинга.
+keen-pbr v3 **может** загружать GEO-списки IP через URL (поле `url` в списках + `lists_autoupdate`). Это позволяет реализовать GEO routing через единый механизм списков:
+- Загрузка CIDR-списков по URL
+- Автообновление по cron (еженедельно по умолчанию)
+- Те же ip_cidrs → ipset → fwmark routing
+
+**Но**: keen-pbr не специализирован на GEO — нет CIDR aggregation, нет multi-interface failover, нет size validation, нет pluggable loaders. Это **generic list mechanism**, который подходит для GEO, но без оптимизаций для больших (10K+) наборов.
 
 ---
 
-## 5. Интеграция с Keenetic
+## 5. WebUI и управление
 
-| | **geo-split** | **keen-pbr** |
+### keenetic-entware-extras: WebUI (nginx + Lua)
+
+- **Технология**: Nginx + nginx-mod-lua + vanilla JS/CSS/HTML
+- **Порт**: :8080 (конфигурируемый)
+- **Эндпоинты**: `/api/<service>/status|config|start|stop`
+- **Config editor**: per-service, save + auto-restart
+- **Dashboard**: status cards, system info (CPU/RAM/disk), auto-polling 30s
+- **Stock Keenetic injection**: inject.js добавляет sidebar секцию в stock router UI
+- **NDM integration**: `ndmc -c "show interface"` для human-readable interface labels
+- **Архитектура**: external nginx процесс, Lua скрипты запускают shell status.sh
+
+### keen-pbr: WebUI (встроенный в daemon)
+
+- **Технология**: C++ HTTP server + TypeScript SPA (встроен в бинарник)
+- **Порт**: :12121 (по умолчанию на localhost)
+- **API**: REST для управления конфигурацией и мониторинга
+- **Особенность**: WebUI встроен прямо в keen-pbr daemon — один бинарник, всё включено
+- **i18n**: интернационализация (commit: "Update i18n")
+- **Архитектура**: single-process daemon, WebUI served from embedded assets
+
+### Сравнение WebUI
+
+| | **keenetic-entware-extras** | **keen-pbr** |
 |---|---|---|
-| **NDM ifstatechanged** | ✅ `ndm-hook.sh` (symlink) | ✅ `50-keen-pbr-routing.sh` |
-| **NDM netfilter** | ❌ Не используется (route-based) | ✅ `50-keen-pbr-fwmarks.sh` (iptables) |
-| **Keenetic RCI API** | ❌ Не используется | ✅ HTTP API: interface status, DNS proxy config |
-| **Interface failover** | ✅ В NDM hook: auto-mode + re-attach | ✅ `ChooseBestInterface` (с RCI API) |
-| **HW NAT** | Не трогает | Принудительно отключает |
-| **DNS Override** | Нет | ✅ `override_dns` per-ipset |
-
-keen-pbr глубже интегрирован с Keenetic через RCI API (`http://localhost:79/rci/show/interface`). Это позволяет проверять не только UP/DOWN интерфейса, но и наличие сетевого соединения через Keenetic.
-
-geo-split использует стандартные `ip route show default` / `ip -o link show up` — проще, но менее точно.
-
-### Boot order: S80 vs S99
-
-- **keen-pbr**: S80 (ранний старт) — интерфейсы могут быть ещё не ready → компенсируется через два NDM hooks (netfilter.d + ifstatechanged.d пересоздают правила)
-- **geo-split**: S99 (последний старт) — все интерфейсы гарантированно up → сразу рабочий маршрут, но окно ~1-3 сек при boot без маршрутов
+| **Технология** | Nginx + Lua + vanilla JS | C++ server + TypeScript SPA |
+| **Интеграция** | Внешний процесс (nginx) | Встроен в daemon |
+| **Stock Keenetic injection** | ✅ inject.js в sidebar | ❌ Отдельная страница |
+| **Config editor** | ✅ Per-service | ✅ Полный конфиг |
+| **System info (CPU/RAM/Disk)** | ✅ | Неизвестно |
+| **Service start/stop** | ✅ Per-package enable/disable | ✅ |
+| **i18n** | ❌ (только RU) | ✅ (EN + RU) |
+| **Размер frontend** | ~1800 строк (vanilla) | TypeScript (~32% кодовой базы) |
+| **Bundled** | Отдельный .ipk (webui) | Встроен в бинарник |
 
 ---
 
-## 6. Data pipeline
+## 6. Интеграция с Keenetic
 
-### Схема: сравнение data pipeline
+| | **keenetic-entware-extras** | **keen-pbr** |
+|---|---|---|
+| **NDM ifstatechanged** | ✅ `ndm-hook.sh` (debounce + parallel refill) | ✅ hook (routing re-apply) |
+| **NDM netfilter** | ✅ `netfilter-hook.sh` (DNS rule recovery) | ✅ hook (fwmark re-apply) |
+| **Keenetic NDM CLI** | ✅ `ndmc -c "show interface"` (WebUI labels) | — |
+| **Keenetic RCI HTTP API** | — | ✅ `localhost:79/rci/` (interface health) |
+| **Interface failover** | ✅ NDM hook auto-mode + re-attach | ✅ Health checks + failover chains |
+| **HW NAT** | ✅ Не трогает | ❌ Отключает |
+| **skip_marked_packets** | — (не нужно, нет marks) | ✅ Уменьшает конфликт с NDM |
+| **Stock UI injection** | ✅ sidebar group | ❌ |
+| **OpenWrt support** | ❌ Только Keenetic/Entware | ✅ |
+| **Debian support** | ❌ | ✅ |
 
-```mermaid
-flowchart TB
-  subgraph GB["geo-split (POSIX sh)"]
-    direction TB
-    GB_CRON["⏰ cron 15min"] --> GB_SUB["update-subnets.sh<br/>curl → loader → filter"]
-    GB_CRON --> GB_DOM["update-domains.sh<br/>dig → filter private IPs"]
-    GB_SUB --> GB_CACHE["📄 ru-subnets.txt<br/>(13K CIDRs)"]
-    GB_DOM --> GB_DCACHE["📄 domains-resolved.txt<br/>(IPs + comments)"]
-    GB_CACHE --> GB_IPSET["load-ipset.sh<br/>ipset restore<br/>+ atomic swap"]
-    GB_DCACHE --> GB_IPSET
-    GB_IPSET --> GB_RULES["attach-rules.sh<br/>ip rule iif br0<br/>ip -batch 13K routes<br/>~1 сек"]
-    GB_RULES --> GB_DONE["✅ Маршруты<br/>активны"]
-  end
+**Важно**: оба проекта используют Keenetic NDM для интеграции, но по-разному:
+- **kee** использует `ndmc` CLI (получение interface descriptions для WebUI display)
+- **keen-pbr** использует RCI HTTP API `localhost:79/rci/` (получение interface state/health для routing decisions)
 
-  subgraph KP["keen-pbr (Go binary)"]
-    direction TB
-    KP_DL["keen-pbr download<br/>HTTP GET"] --> KP_FILES["📄 lists.d/*.lst<br/>+ MD5 checksum"]
-    KP_FILES --> KP_APPLY["keen-pbr apply<br/>parse → ipset restore"]
-    KP_APPLY --> KP_IPTABLES["iptables mangle<br/>MARK + ip rule fwmark<br/>+ ip route default"]
-    KP_IPTABLES --> KP_DONE["✅ Правила<br/>активны"]
-    KP_DNSMASQ["dnsmasq<br/>ipset=/.../vpn1"] -.->|real-time<br/>domain→IP| KP_APPLY
-    KP_CRON["⏰ cron daily"] --> KP_DL
-  end
+---
 
-  classDef cron fill:#f5efc2,stroke:#b3a326,stroke-width:2px,color:#000
-  classDef script fill:#c2d9f5,stroke:#2680eb,stroke-width:2px,color:#000
-  classDef cache fill:#ddf5c2,stroke:#7abd1f,stroke-width:2px,color:#000
-  classDef action fill:#e4c2f5,stroke:#a933cc,stroke-width:2px,color:#000
-  classDef done fill:#c2f5c2,stroke:#339933,stroke-width:2px,color:#000
-  classDef dns fill:#c2f5f5,stroke:#1f9999,stroke-width:2px,color:#000
-  classDef sub fill:#fafafa,stroke:#4d4d4d,stroke-width:2px,color:#000
+## 7. Data pipeline и надёжность
 
-  class GB_CRON,KP_CRON cron
-  class GB_SUB,GB_DOM,KP_DL script
-  class GB_CACHE,GB_DCACHE,KP_FILES cache
-  class GB_IPSET,GB_RULES,KP_APPLY,KP_IPTABLES action
-  class GB_DONE,KP_DONE done
-  class KP_DNSMASQ dns
-```
-
-### geo-split
+### keenetic-entware-extras
 
 ```
-[cron 15min]
-  → update-subnets.sh → loader (curl + filter) → ru-subnets.txt (13K CIDRs)
-  → update-domains.sh → dig → domains-resolved.txt (IPs)
-
+[cron 15min — smart cache check]
+  → update-subnets.sh:
+    - multi-interface failover (DOWNLOAD_INTERFACES: "default *")
+    - retry per interface (DOWNLOAD_RETRIES=2, DOWNLOAD_RETRY_DELAY=3s)
+    - size validation (≥100 lines = reject if too small)
+    - CIDR aggregation: 13K → 8K (via `aggregate` tool)
+    - last-iface cache (priority on next run)
+  → update-domains.sh:
+    - DNS auto-detect (SmartDNS :6153 → :6053 → system)
+    - dig all A-records (up to 16 per domain)
+    - private IP filtering (10.x, 172.x, 192.168.x)
+    - diff check (skip route update if IPs unchanged)
+    - deduplication by IP
 [S99geo-split start]
-  → load-ipset.sh → ipset restore + atomic swap (tmp → main)
-  → attach-rules.sh → ip rule + ip -batch (13K routes, ~1s)
+  → parallel: update-subnets.sh & update-domains.sh & wait
+  → attach-rules.sh → ip rule iif br0 table 1000,1001
 ```
-
-**Особенности**:
-- Atomic swap ipset (zero-downtime)
-- `ip-full -batch` для массовой загрузки маршрутов (~1 сек для 13K)
-- Multi-interface failover при загрузке (DOWNLOAD_INTERFACES с глобами)
-- Кэширование последнего удачного interface
-- PID lock для предотвращения параллельного запуска
-- Validation минимального размера (≥100 строк) — защита от пустых/битых ответов
 
 ### keen-pbr
 
 ```
-[keen-pbr download]   → HTTP GET → lists.d/*.lst (файлы, с MD5 checksums)
-[keen-pbr apply]      → parse lists → ipset restore (batch) + ip rule + ip route + iptables
-[S80keen-pbr start]   → disable_hwnat → keen-pbr apply
-[cron daily]          → download + apply
+[daemon startup]
+  → keen-pbr apply: parse config → ipset restore → fwmark rules
+  → health checks: periodic DNS test + interface UP verification
+  → failover: switch outbound if health check fails
+[lists_autoupdate cron "0 4 * * 0"]
+  → download lists by URL → apply
+[dnsmasq integration]
+  → real-time: DNS query → ipset → routing (immediate)
 ```
 
-**Особенности**:
-- MD5 checksum для пропуска неизменённых списков
-- Поддержка IPv6 (dual stack)
-- Multiple ipsets с разными interfaces
-- Buffered ipset writer через Go pipe
-- Config upgrade mechanism между версиями
-- Нет multi-interface failover, retry, size validation при загрузке
+### Сравнение надёжности
 
-### Масштаб данных
-
-| | **geo-split** | **keen-pbr** |
+| | **keenetic-entware-extras** | **keen-pbr** |
 |---|---|---|
-| **Типичный объём** | 13K+ CIDR (целая страна) | Десятки-сотни записей (per-service) |
-| **Route table** | 13K per-subnet routes | 1 default route на ipset |
-| **Загрузка маршрутов** | `ip-full -batch` (~1 сек для 13K) | `netlink.RouteAdd()` (1 вызов) |
-| **ipset restore** | 13K entries (~2 сек) | Десятки-сотни entries (~мгновенно) |
-
-keen-pbr не тестировался на 13K+ записях — другой use case. geo-split оптимизирован именно для country-level объёмов.
-
----
-
-## 7. Что есть в keen-pbr, чего нет в geo-split
-
-| Фича | Сложность добавления |
-|-------|-----------------|
-| **Multiple ipsets** (разные списки → разные VPN) | 🟡 Средняя |
-| **Kill switch** (blackhole route при падении VPN) | 🟢 Простая |
-| **IPv6 support** | 🟡 Средняя |
-| **DNS override** per-ipset | 🟡 Средняя |
-| **dnsmasq integration** (мгновенный domain routing) | 🔴 Сложная (архитектурное изменение) |
-| **Keenetic RCI API** (interface health check) | 🟡 Средняя |
-| **TOML config** | 🔵 Не нужна (противоречит target-arch) |
-| **Custom iptables rules** per-ipset | 🔴 Не нужна (route-based) |
-| **MD5 checksum** для списков | 🟢 Простая |
-| **Config upgrade** между версиями | 🟡 Средняя |
-| **self-check** диагностика | ✅ Уже есть `status.sh` |
-| **Собственный opkg репозиторий** | 🟡 CI/CD настройка |
+| **Download failover** | ✅ Multi-interface с retries | ❌ Нет (single attempt) |
+| **Size validation** | ✅ (≥100 lines reject) | ❌ Нет |
+| **Data aggregation** | ✅ CIDR merge (reduces count) | ❌ Нет |
+| **Health checks** | ✅ Watchdog (DNS + iptables) | ✅ Health checks + failover |
+| **Interface failover (routing)** | ✅ NDM hook re-attach | ✅ Health check → switch outbound |
+| **Outbound failover chains** | ❌ (single target) | ✅ Configurable chains |
+| **Kill switch** | ❌ | ✅ Blackhole outbound |
+| **strict_enforcement** | ❌ | ✅ (strict mode config) |
+| **PID lock** | ✅ (prevent parallel runs) | ✅ (daemon single instance) |
+| **Hot reload** | ✅ `refresh` command (no ip rule re-attach) | ✅ Config reload via API |
 
 ---
 
-## 8. Что есть в geo-split, чего нет в keen-pbr
+## 8. Что есть в keen-pbr, чего нет в kee
 
-| Фича | |
+| Фича | Значимость |
+|-------|:---:|
+| **Real-time domain routing** (dnsmasq ipset) | 🔴 Высокая |
+| **Kill switch** (blackhole outbound) | 🟡 Средняя |
+| **Failover chains** (automatic outbound switch) | 🟡 Средняя |
+| **IPv6 routing** (toggleable) | 🟡 Средняя |
+| **Multi-outbound** (разные списки → разные VPN) | 🟡 Средняя |
+| **Health checks** (DNS test + interface) | 🟡 Средняя |
+| **OpenWrt/Debian support** | 🟢 Малая (другой use case) |
+| **i18n** (EN + RU) | 🟢 Малая |
+| **WebUI встроен в daemon** (zero-dep) | 🟢 Малая (trade-off) |
+| **strict_enforcement** | 🟢 Малая |
+| **Config hot-reload via API** | 🟢 Малая |
+| **Embedded WebUI assets** (gzip served) | 🟢 Малая |
+
+---
+
+## 9. Что есть в kee, чего нет в keen-pbr
+
+| Фича | Категория |
 |-------|--|
-| **Route-based подход** (без fwmark конфликтов) | Архитектурное преимущество |
-| **HW NAT сохранён** | Performance преимущество |
-| **GEO-ориентированность** (13K+ страновых подсетей) | Другой use case |
-| **Pluggable loaders** (cidr-plain, ripe-json, custom) | Модульность данных |
-| **Multi-interface download failover** | Надёжность загрузки |
-| **Cache age tracking** (MAX_CACHE_AGE, DOMAINS_UPDATE_INTERVAL) | Умное обновление |
-| **ip-full -batch** (13K routes за ~1 сек) | Производительность |
-| **Atomic ipset swap** (zero-downtime update) | Минимальный downtime |
-| **@include** в списках (lib/lists.sh) | Модульность списков |
-| **Auto-detect ISP interface** | Plug-and-play |
-| **Background refresh** при boot (_refresh_if_stale) | Быстрый cold start |
-| **DNS resolver auto-detect** (SmartDNS 6153→6053→system) | Совместимость |
-| **PID lock** (предотвращение параллельных запусков) | Robustness |
+| **fwmark-free routing** (NDM per-device совместимость) | Архитектура |
+| **HW NAT сохранён** | Performance |
+| **Полный DNS-стек** (SmartDNS + split-DNS + redirect) | DNS |
+| **DoT/DoH шифрование DNS** | Безопасность |
+| **Split-DNS по зонам** (.ru→RU DNS, *→INT DNS) | DNS |
+| **Correct CDN geolocation** (split resolves) | DNS |
+| **Stock Keenetic sidebar injection** | UX |
+| **CIDR aggregation** (13K → 8K, reduces memory) | Performance |
+| **Multi-interface download failover** с retries | Надёжность |
+| **Download size validation** (reject corrupted) | Надёжность |
+| **Pluggable loaders** (cidr-plain, ripe-json, custom) | Модульность |
+| **Multi-country GeoIP zones** (EAEU: RU/BY/KZ/AM/KG) | Данные |
+| **Curated domain whitelist** (140+ RU domains) | Данные |
+| **Private IP filtering** in domain resolution | Correctness |
+| **DNS watchdog** (upstream health + iptables recovery) | Reliability |
+| **NDM netfilter hook** (DNS rule auto-recovery) | Reliability |
+| **Diff check** (skip route update if IPs unchanged) | Efficiency |
+| **ip-full -batch** (8K routes за ~1 сек) | Performance |
+| **Parallel execution** (subnets + domains simultaneously) | Performance |
+| **FIB trie stats** (instant route count, zero-cost status) | Performance |
+| **bug-report.sh** (safe diagnostics for forums) | Operations |
+| **Aggregated kee-status CLI** (all packages at once) | Operations |
+| **Enable/Disable persistent state** (hooks respect) | UX |
+| **Modular packages** (install only what you need) | Architecture |
+| **Zero binary footprint** (all interpreted scripts) | Resources |
 
 ---
 
-## 9. Количественное сравнение
+## 10. Количественное сравнение
 
-| Метрика | **geo-split** | **keen-pbr** |
+| Метрика | **keenetic-entware-extras** | **keen-pbr** |
 |---------|:-:|:-:|
-| Строки кода (prod) | ~1200 sh | ~3700 Go + ~150 sh |
-| Строки тестов | 0 (shellcheck) | ~5000 Go |
-| Зависимости runtime | ip-full, ipset, curl, dig | ipset, iptables, dnsmasq, wget |
-| Зависимости build | нет (sh — interpreted) | Go compiler, cross-compile |
-| Архитектур | any (POSIX sh — interpreted) | mips, mipsel, aarch64 (Go native binary) |
-| Размер бинарника | 0 (скрипты) | ~6-8 MB (Go binary) |
-| Файлов конфигурации | 1 (config.conf) | 3+ (keen-pbr.conf, dnsmasq.conf, defaults) |
-| NDM hooks | 1 (ifstatechanged) | 2 (ifstatechanged + netfilter) |
-| Cron частота | каждые 15 мин (smart cache check) | ежедневно |
-| Cold start время | ~1-2 сек (из кэша) | зависит от кол-ва записей |
+| Packages | 6 .ipk | 1 .ipk |
+| Backend language | POSIX sh + Lua | C++ |
+| Frontend language | Vanilla JS/HTML/CSS | TypeScript |
+| Config format | Shell vars | JSON |
+| Binary size | 0 (scripts) | ~2-4 MB (C++ + embedded WebUI) |
+| Runtime deps | ip-full, curl, dig, aggregate, SmartDNS, nginx, iptables | iptables/nftables, dnsmasq |
+| NDM hooks | 2 (ifstatechanged + netfilter) | 2 (ifstatechanged + netfilter) |
+| Cron jobs | 2 (geo-split */15, watchdog */5) | 1 (lists autoupdate weekly) |
+| Route table entries | ~8K (aggregated CIDRs) + ~300 (/32 domains) | 1 default route per outbound |
+| Cold start (from cache) | ~1-2 сек (ip -batch parallel) | ~мгновенно (ipset restore) |
+| DNS security | DoT/DoH (SmartDNS) | None (dnsmasq plain) |
+| Stars on GitHub | — (private repo) | 122 |
+| License | MIT | GPL-3.0 |
+| Platforms | Keenetic/Entware | Keenetic + OpenWrt + Debian |
 
 ---
 
-## 10. Ключевые архитектурные решения
+## 11. Ключевые архитектурные решения
 
-### Почему geo-split не использует fwmark
+### Почему kee не использует fwmark
 
-Документировано в `docs/keenetic-fwmark-analysis.md`: Keenetic NDM использует `skb->mark` для per-device routing. keen-pbr (и ruantiblock) конфликтуют с этим механизмом, потому что `iptables mangle MARK` перезаписывает тот же mark. Это означает:
+Keenetic NDM использует `skb->mark` для per-device routing. keen-pbr конфликтует с этим:
+- `iptables mangle MARK` перезаписывает тот же mark
+- `skip_marked_packets: true` в keen-pbr v3 уменьшает проблему (пропускает пакеты с чужими marks), но **не решает** её полностью — mark для keen-pbr всё равно затрагивает пакеты из "default policy"
+- Устройства **должны быть** в «Политике доступа по умолчанию» (документировано в keen-pbr docs)
+- HW NAT всё равно отключается
 
-1. **Per-device routing Keenetic** перестаёт работать для трафика, попавшего в keen-pbr ipset
-2. Устройства **должны быть в политике доступа по умолчанию** — keen-pbr README **прямо подтверждает**: «Ваши устройства должны быть в Политике доступа в интернет по умолчанию (раздел Приоритеты подключений → Применение политик). В противном случае устройство может игнорировать все правила keen-pbr.»
-
-geo-split использует `ip rule iif br0` + per-subnet routes, что **не касается mark** и поэтому совместимо с Keenetic NDM routing.
+keenetic-entware-extras использует `ip rule iif br0` + per-subnet routes → **mark не затронут**, per-device routing Keenetic работает полностью.
 
 ### Почему keen-pbr использует fwmark
 
 fwmark позволяет:
-- Поместить только 1 default route в таблицу (вместо 13K per-subnet routes)
-- Маршрутизировать на основе ipset match (destination is in ipset → mark → table → interface)
-- Поддерживать сложные правила через custom iptables rules
+- 1 default route vs 8K per-subnet маршрутов (экономия памяти)
+- ipset match для real-time domain routing
+- Множество outbounds с разными правилами
+- Health checks + automatic failover
 
-Это архитектурный trade-off: **простота + гибкость** vs **совместимость с NDM**.
+В v3 добавлен `skip_marked_packets` и configurable fwmark mask (`0x00FF0000`) для уменьшения конфликтов.
 
-### Почему keen-pbr на Go, а не на sh
+### Почему kee — модульная экосистема из 6 пакетов
 
-1. TOML parsing (нет нативного парсера в sh)
-2. Keenetic RCI API (HTTP + JSON)
-3. Type safety и unit tests
-4. Cross-compilation для разных архитектур
-5. Более сложная бизнес-логика (multiple ipsets, validators, config upgrades)
+1. **Независимые update циклы** — WebUI v0.17 не требует пересборки geo-split
+2. **Опциональность** — можно ставить только geo-split без DNS стека
+3. **Zero binaries** — нет 2-4 MB native бинарника, нет cross-compilation
+4. **Shared libs** — нет дублирования (common.sh, ip.sh, lists.sh, status.sh)
+5. **Отсутствие Go/C++ build chain** — shell scripts работают на любой arch без сборки
 
-Это создаёт overhead: Go binary ~6-8 MB на роутере с ограниченной памятью.
+### Почему keen-pbr перешёл с Go на C++
 
----
-
-## 11. Что можно позаимствовать из keen-pbr
-
-### Рекомендуется (совместимо с нашей архитектурой)
-
-1. ✓ **Kill switch** — blackhole route в table 1000 при падении VPN (для `vpn` mode)
-   - Механизм keen-pbr: VPN route (metric 100) + blackhole (metric 200). При падении VPN: default route удаляется → остаётся blackhole → трафик дропается
-   - Для geo-split: `ip route add blackhole default table 1000 metric 200` + логика удаления default route в `ndm-hook.sh` при VPN down
-   
-2. ✓ **MD5/checksum для списков** — пропускать перезагрузку ipset, если файл не изменился
-   - `md5sum` доступен в BusyBox
-
-3. ✓ **IPv6 support** — `hash:net family inet6` для ipset, dual-stack routes
-   - Требует ip6tables или ip6 route
-
-4. ✗ **Keenetic RCI API** — для проверки реального состояния интерфейса (connected + link up)
-   - `curl -s http://localhost:79/rci/show/interface | jq`
-
-### Под вопросом (сложная реализация / trade-offs)
-
-5. ✗ **dnsmasq ipset integration** — мгновенный domain routing
-   - ⚠️ Требует подмену конфига dnsmasq, что рискованно
-   - ⚠️ Не работает с DoH/DoT если клиент обходит DNS роутера
-   - Альтернатива: уменьшить DOMAINS_UPDATE_INTERVAL до 5 мин
-
-6. ✓ **Multiple ipsets** — разные списки → разные VPN/interfaces
-   - Потребует рефакторинг config.conf → array-based config
-   - ✓ Может быть реализовано как множество instansов geo-split
-
-### Не нужно (несовместимо / overkill)
-
-7. **TOML конфиг** — противоречит target-arch (simplicity 90%+)
-8. **Go binary** — добавляет ~6-8 MB и build complexity
-9. **iptables MARK** — фундаментально несовместимо с нашим route-based подходом
-10. **HW NAT disable** — ухудшает performance для всей сети
+keen-pbr v2.x был на Go, v3.x переписан на C++:
+1. Размер бинарника: Go ~6-8 MB → C++ ~2-4 MB (critical для роутеров с 128MB flash)
+2. Daemon mode: C++ daemon с event loop эффективнее Go process
+3. WebUI: embedded compiled TypeScript assets в бинарник (Go использовал отдельный React)
+4. Performance: C++ на embedded (MIPS/ARM) быстрее Go runtime
+5. nftables support: C++ проще интегрируется с netfilter через libmnl/libnftnl
 
 ---
 
 ## 12. Заключение
 
-**keen-pbr** и **geo-split** решают пересекающуюся, но не идентичную задачу с **фундаментально разными архитектурными подходами**:
+**keen-pbr v3** и **keenetic-entware-extras** — это **разные парадигмы**, каждая со своими объективными преимуществами:
 
-| | **keen-pbr** | **geo-split** |
+| | **keen-pbr** | **keenetic-entware-extras** |
 |---|---|---|
-| **Подход** | fwmark + ipset match + iptables | route-based + ip rule iif |
-| **Сильная сторона** | Гибкость (multi-ipset, dnsmasq, per-domain) | NDM-совместимость (no fwmark conflict, HW NAT) |
-| **Слабая сторона** | fwmark конфликт с Keenetic NDM | Нет real-time domain routing |
-| **Целевой пользователь** | "Хочу разные VPN для разных сервисов" | "Хочу весь трафик в страну X через ISP/VPN" |
-| **Зрелость** | Выше (v2.2.2, community, tests, CI) | Ниже (v0.1.0, 1 автор) |
-| **Сложность** | Выше (Go + TOML + RCI API) | Ниже (чистый POSIX sh) |
+| **Парадигма** | Universal PBR daemon (все задачи) | Specialized GEO routing + DNS ecosystem |
+| **Маршрутизация** | fwmark + ipset (1 route per outbound) | route-based (8K per-subnet routes) |
+| **DNS** | dnsmasq ipset (подмена конфига) | SmartDNS (DoT/DoH, split, redirect) |
+| **WebUI** | ✅ Встроен в daemon (TypeScript) | ✅ Nginx+Lua + stock injection |
+| **NDM compatibility** | ⚠️ Частичная (skip_marked_packets) | ✅ Полная (no fwmark) |
+| **HW NAT** | ❌ Отключен | ✅ Сохранён |
+| **Domain routing** | ✅ Real-time (dnsmasq) | ⚠️ Hourly (dig + cron) |
+| **GEO routing** | ✅ Через загрузку CIDR-списков | ✅ Нативная специализация (aggregation, loaders) |
+| **Failover** | ✅ Health checks + chains | ⚠️ NDM hook re-attach (single target) |
+| **Kill switch** | ✅ Blackhole outbound | ❌ Нет |
+| **DNS security** | ❌ Plain DNS | ✅ DoT/DoH |
+| **Cross-platform** | ✅ Keenetic + OpenWrt + Debian | ❌ Только Keenetic |
+| **Install complexity** | 🟢 `opkg install keen-pbr` | 🟡 6 пакетов ручная установка |
+| **Зрелость** | 🟢 v3.0.6, 122 stars, active community | 🟡 v0.12.x, 1 author, active development |
 
-Проекты **не являются конкурентами** — это разные инструменты для разных задач. keen-pbr — universal PBR toolkit; geo-split — специализированный GEO-routing, оптимизированный под Keenetic NDM.
+### Когда выбрать keen-pbr
 
-**Главное преимущество geo-split**: полная совместимость с Keenetic per-device routing (fwmark-free) без деградации производительности (HW NAT сохранён).
+- Нужен **per-service VPN** (разные сервисы через разные VPN)
+- Нужен **мгновенный** domain routing (страница не загрузится до cron —неприемлемо)
+- Нужен **kill switch** (blackhole при падении VPN)
+- Нужна кросс-платформенность (OpenWrt, Debian)
+- **Не** используется per-device routing Keenetic (все устройства в default policy)
+- Допустимо отключение HW NAT
 
-**Главное преимущество keen-pbr**: зрелость экосистемы (CI/CD, opkg-репо, community, тесты) и мгновенный domain routing через dnsmasq.
+### Когда выбрать keenetic-entware-extras
+
+- Критична **NDM per-device routing совместимость** (разные устройства → разные политики)
+- Критична **производительность** (HW NAT не должен быть отключен)
+- Нужен **DNS privacy** (DoT/DoH шифрование, split по зонам)
+- Задача — **GEO routing целой страны** (а не per-service VPN)
+- Нужна **интеграция в stock Keenetic WebUI** (sidebar injection)
+- Нужна **корректная CDN геолокация** (split-DNS: .ru через российские DNS)
+- Допустима **задержка** domain routing (~1 час, для GEO это приемлемо)
 
 ### Теоретическая совместимость
 
-Оба проекта можно использовать **одновременно** при условии: разные таблицы (gb: 1000, kpbr: 1001), разные ipset names, правильные priority. Но keen-pbr всё равно отключит HW NAT и fwmark-конфликт с NDM останется. На практике лучше выбрать одно.
+Оба проекта **можно** использовать одновременно: разные ip rule priorities, разные таблицы. smartdns-redirect (`nat REDIRECT`) не конфликтует с keen-pbr (`mangle MARK`). Но keen-pbr всё равно отключит HW NAT и fwmark-конфликт с NDM останется.

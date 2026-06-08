@@ -223,14 +223,15 @@ body {
 }
 
 /* ── Multi-column details grid (dashboard style) ─────────────────── */
-/* Label above value, no horizontal dividers, auto-fill adapts to width. */
+/* auto-fit + minmax(7rem, auto): columns grow to fit content width.
+   Items without min-width:0 contribute natural width to track sizing. */
 .ew-details-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(7rem, auto));
     gap: 16px 24px;
     padding-top: 8px;
 }
-.ew-detail-item { overflow-wrap: anywhere; min-width: 0; }
+.ew-detail-item { overflow-wrap: break-word; }
 .ew-detail-label {
     color: var(--text-gray, #949b9f);
     font-size: 13px;
@@ -241,10 +242,8 @@ body {
     font-size: 14px;
     line-height: 22px;
     min-height: 16px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
+.ew-dns-line { white-space: nowrap; }
 
 /* ── Toggle switch (reused from inject.css) ────────────────────────── */
 .ew-toggle {
@@ -284,10 +283,10 @@ body {
 .ew-details-grid .ew-skeleton--short { width: 60%; }
 .ew-details-grid .ew-skeleton--medium { width: 85%; }
 
-/* ── Summary mode: auto-fill grid + condensed cards ──────────────── */
+/* ── Summary mode: auto-fit grid cards ───────────────────────────── */
 .ew-summary-mode {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
     gap: 12px;
     align-items: start;
 }
@@ -298,11 +297,6 @@ body {
 .ew-summary-mode .ew-edit-btn { display: none !important; }
 /* Hide low-priority details in summary mode */
 .ew-summary-mode .ew-detail-item[data-priority="low"] { display: none; }
-/* Force 3-column detail grid inside summary cards */
-.ew-summary-mode .ew-details-grid {
-    grid-template-columns: repeat(3, 1fr);
-    gap: 16px 24px;
-}
 /* Hide "View details" link — card click navigates instead */
 .ew-card-more { display: none !important; }
 

@@ -5,7 +5,29 @@ All notable changes to `keenetic-entware-extras` (base package) are documented h
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
-## [Unreleased]
+## [0.14.0] - 2026-06-08
+
+### Added
+- `lib/geo.sh`: 15+ new unions — FATF, AIIB, NDB, OPEC/OPEC+ (split), offshore,
+  SWIFT-disconnected, Commonwealth, Francophonie, Lusophone, Global South,
+  Mediterranean, Greater China, East Asia+ASEAN, CELAC, US/EU-sanctioned, censored
+- `lib/geo.sh`: new "🚫 Sanctions & restrictions" section (us_sanctioned,
+  eu_sanctioned, swift_cut, censored)
+
+### Changed
+- `lib/geo.sh`: UTF emoji icons added to every union comment (displayed as labels
+  in WebUI union selector)
+- `lib/geo.sh`: OPEC split into core OPEC (13 members) and OPEC+ (with allies)
+
+## [0.13.0] - 2026-06-07
+
+### Added
+- `lib/geo.sh` — shared geo-zone library (40+ unions, `resolve_geo_zone()`)
+- Multi-zone GeoIP support in geo-split (GEO_ZONE config, all 240 countries)
+- Shared `/api/system/zones` endpoint for webui zone selection
+
+### Changed
+- Removed `smartdns-geo-conf/config/unions.conf` → data moved to `lib/geo.sh`
 
 ## [0.12.1] - 2026-06-02
 

@@ -6,6 +6,26 @@ local uri = ngx.var.uri
 local base = "/opt/keenetic-entware-extras"
 local shell_env = "export PATH=/opt/sbin:/opt/bin:/usr/sbin:/usr/bin:/sbin:/bin;"
 
+-- ── Status response cache ────────────────────────────────────────────────────
+-- Deduplicates concurrent polling from multiple browser tabs.
+-- Only one worker runs the script per TTL window; others get cached result.
+-- CLI `status.sh --json` is unaffected (called directly, not through nginx).
+local cache = ngx.shared.status_cache
+local CACHE_TTL = 5       -- default fresh cache lifetime (seconds)
+local STALE_TTL = 30      -- stale fallback while script is running (seconds)
+local LOCK_TTL = 15       -- max time to hold execution lock (seconds)
+local STATIC_TTL = 3600   -- static data cache (zones, unions) — 1 hour
+local IFACE_TTL = 60      -- interfaces list — changes rarely (VPN toggle)
+
+-- Per-endpoint TTL overrides: heavy scripts get longer cache to reduce CPU.
+-- POST actions (start/stop/config) invalidate cache instantly regardless of TTL.
+local ENDPOINT_TTLS = {
+    ["/api/geo-split/status"]        = 10,  -- detect_dns_port inside = 2×dig
+    ["/api/smartdns/status"]          = 15,  -- collect_dns_tests_json = N×dig +time=3
+    ["/api/smartdns-redirect/status"] = 5,   -- iptables -C (fast)
+    ["/api/webui/status"]             = 5,   -- netstat + pidof (fast)
+}
+
 --- Read entire file contents or return nil.
 -- @param path string — absolute file path
 -- @return string|nil
@@ -41,6 +61,46 @@ local function run_cmd(cmd)
 
     local exit_code = tonumber(code_str) or 1
     return output, (exit_code == 0), exit_code
+end
+
+--- Fetch cached response or run command with deduplication.
+-- @param key string — cache key (URI)
+-- @param cmd string — shell command to execute on cache miss
+-- @return string — JSON output
+local function cached_run(key, cmd)
+    -- Fast path: fresh cache hit
+    local cached = cache:get(key)
+    if cached then
+        return cached
+    end
+
+    -- Try to acquire execution lock (atomic set-if-not-exists)
+    local lock_key = key .. "::lock"
+    local ok, _ = cache:add(lock_key, true, LOCK_TTL)
+    if not ok then
+        -- Another worker is executing — return stale data if available
+        local stale = cache:get(key .. "::stale")
+        if stale then
+            return stale
+        end
+        -- No stale data (first ever request) — must wait and run ourselves
+    end
+
+    -- Execute the script
+    local output, _, _ = run_cmd(cmd)
+    output = output:gsub("%s+$", "")
+
+    -- Validate JSON and cache with per-endpoint TTL
+    if output:sub(1, 1) == "{" then
+        local ttl = ENDPOINT_TTLS[key] or CACHE_TTL
+        cache:set(key, output, ttl)
+        cache:set(key .. "::stale", output, STALE_TTL)
+    end
+
+    -- Release lock
+    cache:delete(lock_key)
+
+    return output
 end
 
 --- Escape string for safe JSON embedding.
@@ -268,16 +328,18 @@ local config_registry = {
     ["geo-split"] = {
         defaults = base .. "/geo-split/config/defaults.conf",
         config   = base .. "/geo-split/config/config.conf",
-        restart  = base .. "/geo-split/init.d/S99geo-split restart 2>&1",
-        keys     = { "ROUTE_OUT", "ROUTE_GW", "ROUTE_IN", "SUBNET_URL", "SUBNET_LOADER",
-                     "SUBNET_AGGREGATE", "DOMAINS_UPDATE_INTERVAL", "DNS_FULL_RESOLVER_PORT",
-                     "MAX_CACHE_AGE", "DOWNLOAD_INTERFACES" }
+        -- Invalidate merged subnet cache before restart: zone may have changed,
+        -- forces re-merge from current GEO_ZONE on next start (local files only, fast).
+        restart  = "rm -f " .. base .. "/geo-split-data/lists/merged-subnets.txt; " .. base .. "/geo-split/init.d/S99geo-split restart 2>&1",
+        keys     = { "GEO_ZONE", "ROUTE_OUT", "ROUTE_GW", "ROUTE_IN", "SUBNET_URL",
+                     "SUBNET_LOADER", "SUBNET_AGGREGATE", "DOMAINS_UPDATE_INTERVAL",
+                     "DNS_FULL_RESOLVER_PORT", "MAX_CACHE_AGE", "DOWNLOAD_INTERFACES" }
     },
     ["smartdns"] = {
-        defaults = base .. "/smartdns-conf-ru-split/config/defaults.conf",
-        config   = base .. "/smartdns-conf-ru-split/config/config.conf",
-        restart  = "/opt/etc/init.d/S38smartdns restart 2>&1",
-        keys     = { "SMARTDNS_PORT" }
+        defaults = base .. "/smartdns-geo-conf/config/defaults.conf",
+        config   = base .. "/smartdns-geo-conf/config/config.conf",
+        restart  = "/opt/etc/init.d/S37smartdns-conf restart 2>&1",
+        keys     = { "DNS_ZONE", "OTHER_DNS_INTERFACES", "ZONE_DNS_INTERFACE", "SMARTDNS_PORT" }
     },
     ["smartdns-redirect"] = {
         defaults = base .. "/smartdns-redirect/config/defaults.conf",
@@ -442,11 +504,123 @@ local function write_config(svc_id, body)
     end
 end
 
+--- Build /api/system/zones response: parse lib/geo.sh + zone label files.
+-- Returns available zone presets (countries) and unions (multi-country groups).
+-- Shared endpoint used by both smartdns and geo-split settings.
+-- @return string — JSON
+local function system_zones()
+    local zones_dir = base .. "/smartdns-geo-conf/config/zones"
+    local geo_lib = base .. "/lib/geo.sh"
+
+    -- Parse zone conf files (first comment: # Zone: XX (Name) — desc)
+    local zones_raw = {}
+    local ls_out = run_cmd("ls " .. zones_dir .. "/*.conf 2>/dev/null | sort")
+    for path in ls_out:gmatch("[^\n]+") do
+        local fname = path:match("([^/]+)%.conf$")
+        if fname and fname ~= "test-domains" then
+            local first_line = ""
+            local fh = io.open(path, "r")
+            if fh then
+                first_line = fh:read("*l") or ""
+                fh:close()
+            end
+            -- Parse: # Zone: XX (Label) — description
+            -- Two-step: first get code+label, then extract desc after separator
+            local code, label = first_line:match("^#%s*Zone:%s*([%w_]+)%s*%(([^)]+)%)")
+            local desc = ""
+            if code then
+                desc = first_line:match("%)%s+%S+%s+(.*)") or ""
+            end
+            if not code then code = fname end
+            if not label then label = fname:upper() end
+            if not desc then desc = "" end
+            zones_raw[#zones_raw + 1] = {
+                sort_key = label:gsub("^[^\x20-\x7E]+%s*", ""),  -- strip leading emoji for sort
+                json = '{"value":"' .. json_escape(code:lower()) ..
+                    '","label":"' .. json_escape(label) ..
+                    '","desc":"' .. json_escape(desc:gsub("%s+$", "")) .. '"}'
+            }
+        end
+    end
+    -- Sort zones alphabetically by country name (ignoring flag emoji prefix)
+    table.sort(zones_raw, function(a, b) return a.sort_key < b.sort_key end)
+    local zones = {}
+    for _, z in ipairs(zones_raw) do zones[#zones + 1] = z.json end
+
+    -- Parse lib/geo.sh: # comment before UNION_xxx="countries"
+    local unions = {}
+    local content = read_file(geo_lib)
+    if content then
+        local current_group = "Other"
+        local prev_comment = ""
+        local expect_title = false
+        for line in content:gmatch("[^\n]+") do
+            -- Pure separator: # ====...==== (no text between equals)
+            if line:match("^#%s*=+=+%s*$") then
+                -- First separator opens title expectation, second closes it
+                if not expect_title then
+                    expect_title = true
+                else
+                    expect_title = false
+                end
+                prev_comment = ""
+            elseif line:match("^#%s+") and not line:match("^#!/") and not line:match("^# shellcheck") then
+                local cmt = line:match("^#%s+(.*)")
+                if cmt then
+                    if expect_title then
+                        -- Comment between separators = section title
+                        current_group = cmt
+                    else
+                        prev_comment = cmt
+                    end
+                end
+            else
+                -- UNION_xxx="countries"
+                local name, countries = line:match('^UNION_([%w_]+)="([^"]*)"')
+                if name then
+                    -- Extract label from comment: "NAME / ОПИСАНИЕ (expanded)" or just "NAME"
+                    local label = prev_comment:match("^(.-)%s*%(") or prev_comment:match("^(.-)%s*$") or name
+                    label = label:gsub("%s+$", "")
+                    if label == "" then label = name end
+                    unions[#unions + 1] = {
+                        group = current_group,
+                        json = '{"value":"' .. json_escape(name) ..
+                            '","label":"' .. json_escape(label) ..
+                            '","desc":"' .. json_escape(countries) .. '"}'
+                    }
+                    prev_comment = ""
+                end
+            end
+        end
+    end
+
+    -- Group unions by section
+    local groups_order = {}
+    local groups_map = {}
+    for _, u in ipairs(unions) do
+        if not groups_map[u.group] then
+            groups_map[u.group] = {}
+            groups_order[#groups_order + 1] = u.group
+        end
+        local g = groups_map[u.group]
+        g[#g + 1] = u.json
+    end
+
+    local union_groups = {}
+    for _, gname in ipairs(groups_order) do
+        union_groups[#union_groups + 1] = '{"group":"' .. json_escape(gname) ..
+            '","items":[' .. table.concat(groups_map[gname], ",") .. ']}'
+    end
+
+    return '{"ok":true,"zones":[' .. table.concat(zones, ",") ..
+        '],"unions":[' .. table.concat(union_groups, ",") .. ']}'
+end
+
 -- Status script routes: URI → shell command
 -- JSON routes call status.sh --json → output is already valid JSON
 local json_routes = {
     ["/api/geo-split/status"]        = base .. "/geo-split/scripts/status.sh --json 2>&1",
-    ["/api/smartdns/status"]          = base .. "/smartdns-conf-ru-split/scripts/status.sh --json 2>&1",
+    ["/api/smartdns/status"]          = base .. "/smartdns-geo-conf/scripts/status.sh --json 2>&1",
     ["/api/smartdns-redirect/status"] = base .. "/smartdns-redirect/scripts/status.sh --json 2>&1",
     ["/api/webui/status"]             = base .. "/webui/scripts/status.sh --json 2>&1",
 }
@@ -461,8 +635,8 @@ local action_routes = {
     -- Start/Stop (enable/disable for persistent state)
     ["/api/geo-split/start"]           = base .. "/geo-split/init.d/S99geo-split enable 2>&1",
     ["/api/geo-split/stop"]            = base .. "/geo-split/init.d/S99geo-split disable 2>&1",
-    ["/api/smartdns/start"]            = base .. "/smartdns-conf-ru-split/scripts/toggle.sh enable 2>&1",
-    ["/api/smartdns/stop"]             = base .. "/smartdns-conf-ru-split/scripts/toggle.sh disable 2>&1",
+    ["/api/smartdns/start"]            = base .. "/smartdns-geo-conf/scripts/toggle.sh enable 2>&1",
+    ["/api/smartdns/stop"]             = base .. "/smartdns-geo-conf/scripts/toggle.sh disable 2>&1",
     ["/api/smartdns-redirect/start"]   = base .. "/smartdns-redirect/init.d/S39smartdns-redirect enable 2>&1",
     ["/api/smartdns-redirect/stop"]    = base .. "/smartdns-redirect/init.d/S39smartdns-redirect disable 2>&1",
     -- Update (geo-split only, runs in background)
@@ -474,12 +648,39 @@ local action_routes = {
 
 -- Dispatch
 if uri == "/api/system/info" then
-    ngx.say(system_info())
+    local cached = cache:get(uri)
+    if cached then
+        ngx.say(cached)
+    else
+        local result = system_info()
+        cache:set(uri, result, CACHE_TTL)
+        ngx.say(result)
+    end
     return
 end
 
 if uri == "/api/system/interfaces" then
-    ngx.say(system_interfaces())
+    local cached = cache:get(uri)
+    if cached then
+        ngx.say(cached)
+    else
+        local result = system_interfaces()
+        cache:set(uri, result, IFACE_TTL)
+        ngx.say(result)
+    end
+    return
+end
+
+if uri == "/api/system/zones" or uri == "/api/smartdns/zones" then
+    local zones_key = "/api/system/zones"
+    local cached = cache:get(zones_key)
+    if cached then
+        ngx.say(cached)
+    else
+        local result = system_zones()
+        cache:set(zones_key, result, STATIC_TTL)
+        ngx.say(result)
+    end
     return
 end
 
@@ -489,7 +690,12 @@ if config_match then
     if ngx.req.get_method() == "POST" then
         ngx.req.read_body()
         local body = ngx.req.get_body_data() or ""
-        ngx.say(write_config(config_match, body))
+        local result = write_config(config_match, body)
+        -- Invalidate status cache (config save triggers restart)
+        local status_key = "/api/" .. config_match .. "/status"
+        cache:delete(status_key)
+        cache:delete(status_key .. "::stale")
+        ngx.say(result)
     else
         ngx.say(read_config(config_match))
     end
@@ -507,16 +713,22 @@ if action_cmd then
     end
     local output, ok, _ = run_cmd(action_cmd)
     output = output:gsub("%s+$", "")
+    -- Invalidate status cache for this service so next poll sees new state
+    local svc = uri:match("^/api/([^/]+)/")
+    if svc then
+        local status_key = "/api/" .. svc .. "/status"
+        cache:delete(status_key)
+        cache:delete(status_key .. "::stale")
+        cache:delete(status_key .. "::lock")
+    end
     ngx.say('{"ok":' .. tostring(ok) .. ',"output":"' .. json_escape(output) .. '"}')
     return
 end
 
--- JSON passthrough: script outputs valid JSON directly
+-- JSON passthrough: script outputs valid JSON directly (with cache)
 local json_cmd = json_routes[uri]
 if json_cmd then
-    local output, _, _ = run_cmd(json_cmd)
-    -- Trim trailing whitespace and check if output looks like JSON
-    output = output:gsub("%s+$", "")
+    local output = cached_run(uri, json_cmd)
     if output:sub(1, 1) == "{" then
         ngx.say(output)
     else

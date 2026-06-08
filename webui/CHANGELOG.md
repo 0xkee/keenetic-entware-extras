@@ -5,7 +5,155 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
-## [Unreleased]
+## [0.21.2] - 2026-06-08
+
+### Fixed
+- Zone selector: union trigger text now shows country codes in parentheses on initial render (previously only after reset/re-select).
+- Custom card detail values: fields no longer overflow card boundary (`min-width: 0` + `text-overflow: ellipsis`).
+
+### Added
+- DNS Tests: domain names are now clickable links (open in new tab, underline on hover).
+
+## [0.21.1] - 2026-06-08
+
+### Fixed
+- Loading skeleton count: default changed from 6 to 9 (closer to real field counts).
+- Skeleton cache off-by-one: DNS Tests item now counted in saveSkeletonCount for smartdns.
+
+### Added
+- Stock dashboard card: loading skeletons in expandable details grid (previously empty until first fetch).
+- Skeleton CSS moved to common.css for shared use between custom and stock dashboard contexts.
+
+## [0.21.0] - 2026-06-08
+
+### Added
+- **Status API response cache** (`lua_shared_dict`): deduplicates concurrent poll
+  requests from multiple browser tabs. Only one nginx worker runs the status script
+  per TTL window; all other clients get cached result instantly. Reduces CPU
+  load by 73-84% with multiple open tabs.
+- **Per-endpoint cache TTL** (`ENDPOINT_TTLS`): heavy scripts cached longer —
+  geo-split 10s (detect_dns_port = 2×dig), smartdns 15s (DNS tests = N×dig +time=3),
+  fast endpoints (smartdns-redirect, webui) stay at 5s. Reduces total fork rate
+  from 48/min to 26/min (−46%).
+- Cache invalidation on POST actions (start/stop, config save) — next poll after
+  toggle always returns fresh state.
+- Static data caching: `system/zones` parsed once per hour (STATIC_TTL=3600s),
+  `system/interfaces` cached for 60s (IFACE_TTL).
+- Design document: `docs/status-cache-design.md` — full analysis and architecture.
+
+### Changed
+- `worker_processes auto` — matches CPU core count (was hardcoded 2). On 4-core
+  routers (KN-2310, KN-1011) now 4 workers → better io.popen parallelism.
+
+## [0.20.2] - 2026-06-08
+
+### Fixed
+- **Union parser: underscore in names** — Lua pattern `%w+` → `[%w_]+` in
+  api-router.lua. Unions with underscores (opec_plus, china_plus, swift_cut etc.)
+  were silently dropped from API response.
+- Zone code parser also updated (`%w+` → `[%w_]+`) for future-proofing.
+
+## [0.20.1] - 2026-06-07
+
+### Fixed
+- **Stock sidebar broken after visiting custom page** (critical): Root cause was
+  `setupRestore()` only called when `injectSidebar=1`. With default config
+  (`injectSidebar=0`), the click capture handler and MutationObserver were never
+  registered — after opening custom page via dashboard card click, there was NO
+  mechanism to remove the iframe when stock sidebar was clicked. Fix: `setupRestore()`
+  now called unconditionally in `tryInject()`.
+- **Content not restored on iframe removal**: `removeIframe()` now restores `display`
+  of Angular content children that were hidden by `showInContent()`. Previously the
+  iframe was removed but Angular's router-outlet stayed `display:none`.
+- **Browser Back from custom page**: `showInContent()` now pushes history state
+  (same URL, `{__ew}` marker). Exit-only `popstate` handler in `setupRestore()`
+  removes iframe on Back without re-showing on Forward (avoids Angular conflicts).
+  Route-change watcher also removes iframe as safety net.
+- **Custom page tabs: back/forward support**: `switchTab()` in app.js now uses
+  `history.pushState()` instead of `replaceState()` for tab switches, with `popstate`
+  listener to apply hash route on browser navigation.
+
+## [0.20.0] - 2026-06-07
+
+### Added
+- **Search/filter** in all dropdown panels: type to filter items in real-time.
+  Filter input appears at the top of every dropdown (zone selector, interface
+  multi-select, union selector). Auto-focuses on open, resets on close.
+- **Keyboard-driven workflow**: open dropdown → immediately type to narrow results.
+- Group headers auto-hide when all items in a group are filtered out.
+
+### Changed
+- Union selector migrated from native `<select>` to custom dropdown with radio
+  buttons, search filter, and unified styling matching zone/interface dropdowns.
+- Dropdown panel `max-height` increased from 200px to 60vh (fills more screen,
+  easier to browse large lists like 240 country zones).
+- Radio buttons close dropdown automatically after selection (single-select UX).
+- `select` field type (SUBNET_LOADER) migrated to custom dropdown (radio buttons).
+
+### Removed
+- Dead CSS: `.ew-modal__select-wrap`, `.ew-modal__select`, `.ew-modal__select option`,
+  `.ew-modal__zone-panel .ew-modal__select` rules (~33 lines — old native `<select>` styling).
+
+## [0.19.1] - 2026-06-07
+
+### Fixed
+- Gateway IP field: clicking disabled text input now auto-selects "IP" radio
+  (CSS `pointer-events: none` passes click to `<label>` → native radio activation)
+
+### Changed
+- DNS Redirect: `INTERFACES` field migrated from old inline pills (`interfaces`)
+  to new dropdown multi-select (`iface_select`)
+
+### Removed
+- Dead code: old `interfaces` / `interface` field renderers, save/reset logic (~71 lines JS)
+- Dead CSS: `.ew-modal__ifaces`, `.ew-modal__iface-item`, `.ew-modal__iface-name`,
+  `.ew-modal__ifaces--radio` rules (~71 lines CSS)
+
+## [0.19.0] - 2026-06-07
+
+### Added
+- Geo-split: `GEO_ZONE` zone_selector field (country/union dropdown)
+- Shared `/api/system/zones` endpoint (used by smartdns and geo-split)
+- Geo-split: `active_zones` in summary card detail keys
+
+### Changed
+- Geo-split settings: `ROUTE_IN` → dropdown multi-select (`iface_select`)
+- Geo-split settings: `SUBNET_URL` → optional override (was primary config)
+- Zones fetch: `/api/system/zones` replaces `/api/smartdns/zones` (backward compat kept)
+
+## [0.18.2] - 2026-06-07
+
+### Fixed
+- Zone selector: encoding-agnostic parsing of zone headers in api-router.lua
+  (fixes double em-dash display and potential nginx 500 on multi-byte separators)
+- Zone selector: sorted alphabetically by country name (was by ISO code)
+- Config modal: Escape key closes open dropdown first, not the entire modal
+
+## [0.18.1] - 2026-06-07
+
+### Changed
+- Renamed SmartDNS service label: "SmartDNS Config" → "SmartDNS Geo-Config" (app.js, shared.js, inject.js)
+- Updated api-router.lua paths: `smartdns-conf-ru-split/` → `smartdns-geo-conf/`
+
+## [0.18.0] - 2026-06-07
+
+### Added
+- **Zone selector** (`zone_selector` type): radio Zone/Union + multiselect dropdown for countries, grouped select for unions
+- **Interface multi-select dropdown** (`iface_select` type): custom dropdown with checkboxes, "Default route" option
+- **DNS Tests display**: stock dashboard card (concise ✓/✗ domain) + custom detail view (with IPs)
+- API endpoint `/api/smartdns/zones` — dynamic parsing of `unions.conf` + zone files
+
+### Changed
+- SmartDNS config editor: DNS_ZONE, ZONE_DNS_INTERFACE, OTHER_DNS_INTERFACES — new rich UI
+- Restart command: S37smartdns-conf (generates configs before S38 restart)
+
+## [0.17.1] - 2026-06-06
+
+### Changed
+- SmartDNS Config: service description updated to "Geo-zone DNS splitting"
+- SmartDNS Config: SUMMARY_KEYS adds `dns_zone`, `active_zones` to dashboard card
+- SmartDNS Config: CONFIG_SCHEMAS expanded with DNS_ZONE, OTHER_DNS_INTERFACES,
+  ZONE_DNS_INTERFACE fields (config editor)
 
 ## [0.17.0] - 2026-06-04
 

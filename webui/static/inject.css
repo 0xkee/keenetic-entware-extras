@@ -327,8 +327,9 @@
 .entware-dialog-row--off .dashboard-card { opacity: 0.5; }
 .entware-dialog-row--off .ndw-drag-handle { display: none; }
 
-/* Loading skeleton no longer needed — no Angular stub to show as placeholder.
-   inject.js creates content immediately; ew-loading class triggers shimmer. */
+/* ── Loading skeleton — relative widths inside details grid ────────── */
+.ew-details .ew-skeleton--short { width: 60%; }
+.ew-details .ew-skeleton--medium { width: 85%; }
 
 /* ── CDK drag preview for our card ───────────────────────────────── */
 .ndw-drag-panel__row__preview .ew-dash-card {

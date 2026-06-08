@@ -230,7 +230,7 @@ body {
     gap: 16px 24px;
     padding-top: 8px;
 }
-.ew-detail-item { overflow-wrap: anywhere; }
+.ew-detail-item { overflow-wrap: anywhere; min-width: 0; }
 .ew-detail-label {
     color: var(--text-gray, #949b9f);
     font-size: 13px;
@@ -242,6 +242,8 @@ body {
     line-height: 22px;
     min-height: 16px;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* ── Toggle switch (reused from inject.css) ────────────────────────── */
@@ -277,26 +279,10 @@ body {
     opacity: 0.5; cursor: not-allowed;
 }
 
-/* ── Loading skeleton ────────────────────────────────────────────── */
-.ew-skeleton {
-    height: 14px; border-radius: 4px;
-    max-width: 100%;
-    background: linear-gradient(90deg,
-        var(--disabled, #2f3745) 25%,
-        var(--stroke, #4d545f) 50%,
-        var(--disabled, #2f3745) 75%);
-    background-size: 200% 100%;
-    animation: ew-shimmer 1.5s infinite;
-}
-.ew-skeleton--short { width: 80px; }
-.ew-skeleton--medium { width: 140px; }
-/* Inside details grid cells, skeletons use relative widths */
+/* ── Loading skeleton (grid-specific overrides for custom UI) ─────── */
+/* Base .ew-skeleton styles are in common.css */
 .ew-details-grid .ew-skeleton--short { width: 60%; }
 .ew-details-grid .ew-skeleton--medium { width: 85%; }
-@keyframes ew-shimmer {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-}
 
 /* ── Summary mode: auto-fill grid + condensed cards ──────────────── */
 .ew-summary-mode {
@@ -433,35 +419,6 @@ body {
     color-scheme: dark;
     max-width: 160px;
 }
-/* Custom select wrapper */
-.ew-modal__select-wrap {
-    position: relative;
-    display: inline-block;
-    max-width: 280px;
-    width: 100%;
-}
-.ew-modal__select {
-    width: 100%;
-    appearance: none;
-    -webkit-appearance: none;
-    background: var(--input-background, #141c29);
-    border: 1px solid var(--stroke, #4d545f);
-    border-radius: 4px;
-    padding: 10px 36px 10px 12px;
-    font-size: 14px;
-    color: var(--primary-text, #c2c2c2);
-    outline: none;
-    cursor: pointer;
-    transition: border-color .2s;
-}
-.ew-modal__select:focus {
-    border-color: var(--primary-color, #0086cb);
-}
-.ew-modal__select option {
-    background: var(--card-background, #1c2433);
-    color: var(--primary-text, #c2c2c2);
-    padding: 8px;
-}
 .ew-modal__select-arrow {
     position: absolute;
     right: 12px;
@@ -520,6 +477,166 @@ body {
     opacity: 1;
     visibility: visible;
 }
+/* Zone selector compound field */
+.ew-modal__zone-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.ew-modal__zone-radio {
+    display: flex;
+    gap: 8px;
+}
+/* Interface multi-select dropdown */
+.ew-modal__iface-select {
+    position: relative;
+    width: 100%;
+}
+.ew-modal__iface-select-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    background: var(--input-background, #141c29);
+    border: 1px solid var(--stroke, #4d545f);
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-size: 14px;
+    color: var(--primary-text, #c2c2c2);
+    cursor: pointer;
+    transition: border-color .2s;
+    text-align: left;
+}
+.ew-modal__iface-select-trigger:hover,
+.ew-modal__iface-select-trigger:focus {
+    border-color: var(--primary-color, #0086cb);
+    outline: none;
+}
+.ew-modal__iface-select-text {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ew-modal__iface-select-panel {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0; right: 0;
+    background: var(--card-background, #1c2433);
+    border: 1px solid var(--stroke, #4d545f);
+    border-radius: 6px;
+    padding: 6px 0;
+    z-index: 100;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    max-height: 60vh;
+    overflow-y: auto;
+    padding-top: 0;
+}
+/* Filter/search input wrapper (sticky header) */
+.ew-modal__iface-filter-wrap {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--card-background, #1c2433);
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid var(--stroke, #4d545f);
+}
+.ew-modal__iface-filter {
+    flex: 1;
+    padding: 8px 12px;
+    border: none;
+    background: transparent;
+    color: var(--primary-text, #c2c2c2);
+    font-size: 13px;
+    outline: none;
+    box-sizing: border-box;
+}
+.ew-modal__iface-filter::placeholder {
+    color: var(--secondary-text, #808B96);
+}
+.ew-modal__iface-filter-wrap:focus-within {
+    border-bottom-color: var(--primary-color, #0086cb);
+}
+.ew-modal__iface-filter-count {
+    padding: 0 10px;
+    font-size: 11px;
+    color: var(--secondary-text, #808B96);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.ew-modal__iface-select-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--primary-text, #c2c2c2);
+    transition: background .1s;
+}
+.ew-modal__iface-select-option:hover {
+    background: rgba(0, 134, 203, 0.08);
+}
+.ew-modal__iface-select-option input[type="checkbox"] {
+    -webkit-appearance: none; appearance: none;
+    width: 16px; height: 16px; flex-shrink: 0; margin: 0;
+    border: 2px solid var(--stroke, #4d545f);
+    border-radius: 3px;
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+}
+.ew-modal__iface-select-option input[type="checkbox"]:checked {
+    background: var(--primary-color, #0086cb);
+    border-color: var(--primary-color, #0086cb);
+}
+.ew-modal__iface-select-option input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 3px; top: 0px;
+    width: 5px; height: 9px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+/* Radio buttons in dropdown (union single-select) */
+.ew-modal__iface-select-option input[type="radio"] {
+    -webkit-appearance: none; appearance: none;
+    width: 16px; height: 16px; flex-shrink: 0; margin: 0;
+    border: 2px solid var(--stroke, #4d545f);
+    border-radius: 50%;
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+}
+.ew-modal__iface-select-option input[type="radio"]:checked {
+    border-color: var(--primary-color, #0086cb);
+}
+.ew-modal__iface-select-option input[type="radio"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 3px; top: 3px;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--primary-color, #0086cb);
+}
+/* Group headers inside dropdown panels (union groups) */
+.ew-modal__iface-select-group {
+    padding: 6px 14px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--secondary-text, #808B96);
+    border-top: 1px solid var(--stroke, #4d545f);
+    margin-top: 4px;
+}
+.ew-modal__iface-select-group:first-child,
+.ew-modal__iface-select-group:nth-child(2) {
+    border-top: none;
+    margin-top: 0;
+}
 /* Radio + Text compound field */
 .ew-modal__radio-text {
     display: flex;
@@ -547,6 +664,7 @@ body {
 .ew-modal__radio-item input[type="radio"] {
     -webkit-appearance: none; appearance: none;
     width: 16px; height: 16px; flex-shrink: 0;
+    margin: 0;
     border: 2px solid var(--stroke, #4d545f);
     border-radius: 50%;
     background: transparent;
@@ -589,33 +707,7 @@ body {
 .ew-modal__radio-input:disabled {
     opacity: 0.4;
     cursor: not-allowed;
-}
-/* Interface radio pills (single-select) */
-.ew-modal__ifaces--radio .ew-modal__iface-item input[type="checkbox"] {
-    display: none;
-}
-.ew-modal__ifaces--radio .ew-modal__iface-item input[type="radio"] {
-    -webkit-appearance: none; appearance: none;
-    width: 16px; height: 16px; flex-shrink: 0;
-    border: 2px solid var(--stroke, #4d545f);
-    border-radius: 50%;
-    background: transparent;
-    cursor: pointer;
-    position: relative;
-}
-.ew-modal__ifaces--radio .ew-modal__iface-item input[type="radio"]:checked {
-    border-color: var(--primary-color, #0086cb);
-}
-.ew-modal__ifaces--radio .ew-modal__iface-item input[type="radio"]:checked::after {
-    content: '';
-    position: absolute;
-    left: 3px; top: 3px;
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--primary-color, #0086cb);
-}
-.ew-modal__ifaces--radio .ew-modal__iface-item:has(input:checked) {
-    background: rgba(0, 134, 203, 0.18);
+    pointer-events: none;
 }
 /* Toggle fields — switch left, label, help, reset right; hint below */
 .ew-modal__toggle-row {
@@ -638,51 +730,7 @@ body {
     font-size: 11px;
     color: var(--text-gray, #949b9f); opacity: 0.7;
 }
-/* Interface checkboxes */
-.ew-modal__ifaces {
-    display: flex; flex-wrap: wrap; gap: 8px;
-}
-.ew-modal__iface-item {
-    display: inline-flex; align-items: center; gap: 8px;
-    background: var(--disabled, #2f3745);
-    border: none;
-    border-radius: 20px;
-    padding: 6px 14px 6px 8px;
-    cursor: pointer;
-    font-size: 13px;
-}
-.ew-modal__iface-item:hover {
-    background: rgba(0, 134, 203, 0.12);
-}
-.ew-modal__iface-item:has(input:checked) {
-    background: rgba(0, 134, 203, 0.18);
-}
-.ew-modal__iface-item input[type="checkbox"] {
-    -webkit-appearance: none; appearance: none;
-    width: 18px; height: 18px; flex-shrink: 0;
-    border: 2px solid var(--stroke, #4d545f);
-    border-radius: 4px;
-    background: transparent;
-    cursor: pointer;
-    position: relative;
-}
-.ew-modal__iface-item input[type="checkbox"]:checked {
-    background: var(--primary-color, #0086cb);
-    border-color: var(--primary-color, #0086cb);
-}
-.ew-modal__iface-item input[type="checkbox"]:checked::after {
-    content: '';
-    position: absolute;
-    left: 4px; top: 1px;
-    width: 6px; height: 10px;
-    border: solid #fff;
-    border-width: 0 2px 2px 0;
-    transform: rotate(45deg);
-}
-.ew-modal__iface-name {
-    color: var(--primary-text, #c2c2c2);
-    font-weight: 500; white-space: nowrap;
-}
+/* Interface status dot (shared by iface_select dropdown) */
 .ew-modal__iface-dot {
     width: 6px; height: 6px; border-radius: 50%;
     flex-shrink: 0;
@@ -739,6 +787,36 @@ body {
     border-radius: 4px;
     display: inline-block;
     letter-spacing: 0.5px;
+}
+
+/* ── DNS tests consolidated item ─────────────────────────────────── */
+.ew-detail-item--full {
+    grid-column: 1 / -1;
+}
+.ew-dns-tests {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.ew-dns-test-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+}
+.ew-dns-test-domain {
+    color: var(--primary-text, #c2c2c2);
+    min-width: 100px;
+}
+.ew-dns-test-ip {
+    font-family: 'JetBrains Mono', 'Roboto Mono', monospace;
+    font-size: 12px;
+    color: var(--text-gray, #949b9f);
+}
+
+/* Active zones word wrap */
+.ew-detail-value {
+    word-break: break-word;
 }
 
 /* Hidden utility */

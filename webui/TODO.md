@@ -31,7 +31,12 @@
 - [x] **Cross-column drag flicker** — Root cause: singleton `_dialogRepatchObserver` покрывал только последний column-wrapper. Fix: `_dialogRepatchObservers` array — каждый wrapper получает свой observer. rAF убран → patch в microtask.
 - [x] **Reconciler ошибочно патчит stock card** — Root cause: index-based lookup без валидации содержимого. Fix: fingerprint guard в `ewPatchDashboardRow()` — проверяет наличие `ndw-*-card` компонентов, не патчит реальные stock cards.
 
-## 🟡 Важные
+## 🔴 Navigation fixes — ✅ ВЫПОЛНЕНО (v0.20.1)
+
+- [x] **Sidebar broken after custom page visit** — Root cause: `removeIframe()` не восстанавливала `display` скрытых Angular-элементов. Fix: восстановление `dataset.entwareHidden` при удалении iframe.
+- [x] **Browser back/forward не работает** — Root cause: `showInContent()` не делала `pushState`, `switchTab()` использовала `replaceState`. Fix: pushState в обоих + popstate listeners.
+
+## � Важные
 
 - [x] добавить Upstream в status + webui (Ok когда доступен) ✅ — `check_upstream()` в status.sh: парсит listen.conf для IP, curl probe. JSON: `details.upstream` (addr) + `checks.upstream` ("ok"|"warn"). Карточка рендерит автоматически через `parseDetails`.
 - [ ] **Service icons: SVG иконки в card headers + tabs** — визуальная дифференциация (route/globe для Geo-Split, DNS для SmartDNS, shield для DNS Redirect, monitor для WebUI). Inline SVG в `SERVICE_APIS`. (target-gui: #1, #3)

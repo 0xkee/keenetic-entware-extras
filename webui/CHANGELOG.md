@@ -5,6 +5,19 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.21.3] - 2026-06-08
+
+### Changed
+- Detail grids: replaced `text-overflow: ellipsis` with auto-column reduction.
+  Uses `repeat(auto-fit, minmax(7rem, auto))` — columns expand to fit content
+  and reduce count automatically when space is limited.
+- Summary mode cards: `auto-fit` grid with `minmax(18rem, 1fr)`.
+- DNS Tests: each line wrapped in `.ew-dns-line` with `white-space: nowrap`;
+  displayed as regular grid cell (not spanning full width).
+
+### Removed
+- `white-space: nowrap` + `overflow: hidden` + `text-overflow: ellipsis` from `.ew-detail-value`.
+
 ## [0.21.2] - 2026-06-08
 
 ### Fixed

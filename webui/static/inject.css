@@ -229,14 +229,14 @@
     stroke-width: 2;
 }
 
-/* ── Expandable details — CSS Grid for left-to-right order ───────── */
+/* ── Expandable details — CSS Grid auto-fit ──────────────────────── */
 .ew-details { display: none; padding: 16px 0; }
 .ew-details--open {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(7rem, auto));
     gap: 16px 24px;
 }
-.ew-detail-item { overflow-wrap: anywhere; }
+.ew-detail-item { overflow-wrap: break-word; }
 .ew-detail-label {
     color: var(--text-gray, #949b9f);
     font-size: 14px;
@@ -248,6 +248,7 @@
     line-height: 22px;
     min-height: 16px;
 }
+.ew-dns-line { white-space: nowrap; }
 
 /* Sub_filter #9 renders ngTemplateOutlet=null → no stub content to hide.
    inject.js creates card DOM from scratch in empty CDK row. */

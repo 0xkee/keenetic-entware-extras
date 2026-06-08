@@ -192,7 +192,9 @@ function setDetails(id, data) {
         }
         var dnsItem = '<div class="ew-detail-item" data-priority="low">' +
             '<div class="ew-detail-label">DNS Tests</div>' +
-            '<div class="ew-detail-value">' + dnsLines.join('<br>') + '</div></div>';
+            '<div class="ew-detail-value">' +
+            '<div class="ew-dns-line">' + dnsLines.join('</div><div class="ew-dns-line">') + '</div>' +
+            '</div></div>';
         // Insert before cache
         var cachePos = html.indexOf('ew-detail-label">Cache<');
         if (cachePos !== -1) {

@@ -17,8 +17,34 @@ GEOIP_DIR="$SCRIPT_DIR/../lists/geoip"
 require_cmd aggregate
 
 # Countries to fetch (ISO 3166-1 alpha-2, lowercase)
-# EAEU (Eurasian Economic Union): RU, BY, KZ, AM, KG
-COUNTRIES=(ru by kz am kg)
+# All countries available on ipdeny.com (~240 zones)
+COUNTRIES=(
+  ad ae af ag ai al am ao ar as at au aw ax az
+  ba bb bd be bf bg bh bi bj bm bn bo br bs bt bw by bz
+  ca cd cf cg ch ci ck cl cm cn co cr cu cv cw cy cz
+  de dj dk dm do dz
+  ec ee eg er es et
+  fi fj fk fm fo fr
+  ga gb gd ge gf gh gi gl gm gn gq gr gt gu gw gy
+  hk hn hr ht hu
+  id ie il im in io iq ir is it
+  je jm jo jp
+  ke kg kh ki km kn kp kr kw ky kz
+  la lb lc li lk lr ls lt lu lv ly
+  ma mc md me mg mh mk ml mm mn mo mp mq mr ms mt mu mv mw mx my mz
+  na nc ne nf ng ni nl no np nr nu nz
+  om
+  pa pe pf pg ph pk pl pm pn pr ps pt pw py
+  qa
+  re ro rs ru rw
+  sa sb sc sd se sg sh si sk sl sm sn so sr ss st sv sx sy sz
+  tc td tg th tj tk tl tm tn to tr tt tv tw tz
+  ua ug us uy uz
+  va vc ve vg vi vn vu
+  wf ws
+  ye yt
+  za zm zw
+)
 
 # ipdeny.com base URL
 IPDENY_BASE="https://www.ipdeny.com/ipblocks/data/countries"
@@ -52,8 +78,8 @@ for cc in "${COUNTRIES[@]}"; do
     fi
 
     raw_count=$(grep -cE '^[0-9]' "$tmp_file" || true)
-    if [ "$raw_count" -lt 100 ]; then
-        echo "ERROR: ${cc}.zone too small (${raw_count} lines), skipping" >&2
+    if [ "$raw_count" -eq 0 ]; then
+        echo "WARN: ${cc}.zone empty (0 CIDRs), skipping" >&2
         rm -f "$tmp_file"
         continue
     fi

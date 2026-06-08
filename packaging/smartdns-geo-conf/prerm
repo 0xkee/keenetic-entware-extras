@@ -1,0 +1,16 @@
+#!/opt/bin/sh
+# prerm — runs before package files are removed.
+set -eu
+
+S38="/opt/etc/init.d/S38smartdns"
+S37="/opt/etc/init.d/S37smartdns-conf"
+
+# Stop S37 (no-op but consistent)
+if [ -x "$S37" ]; then
+    "$S37" stop 2>/dev/null || true
+fi
+
+# Stop SmartDNS
+if [ -x "$S38" ]; then
+    "$S38" stop 2>/dev/null || true
+fi

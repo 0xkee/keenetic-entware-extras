@@ -9,6 +9,6 @@ Description: Universal DNS DNAT for Keenetic/Entware — redirect LAN :53 to loc
  resolver (SmartDNS :6053 by default; configurable for AGH, Unbound, dnsmasq).
  Keenetic ndnproxy remains intact for the router itself. Latency improvement:
  ~130ms to <80ms measured. NDM-aware: survives iptables flush via
- netfilter.d hook. Compatible with smartdns-conf-ru-split and geo-split.
+ netfilter.d hook. Compatible with smartdns-geo-conf and geo-split.
 Section: net
 Priority: optional

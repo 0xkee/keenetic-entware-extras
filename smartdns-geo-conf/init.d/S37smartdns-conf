@@ -1,0 +1,95 @@
+#!/opt/bin/sh
+# S37smartdns-conf — manage SmartDNS split-DNS configuration.
+# Runs BEFORE S38smartdns (S37 < S38) to ensure configs are ready.
+#
+# Actions:
+#   start   — generate configs, activate current mode (split/default)
+#   stop    — no-op (S38 manages daemon lifecycle)
+#   restart — regenerate configs, re-activate, restart S38
+#   enable  — switch to split-DNS mode, regenerate, restart
+#   disable — switch to default mode (no split), regenerate, restart
+#   status  — print current mode (enabled/disabled)
+#
+# shellcheck disable=SC1091
+# shellcheck disable=SC3043
+set -eu
+
+BASE="/opt/keenetic-entware-extras/smartdns-geo-conf"
+_CONFIG_DIR="$BASE/config"
+. "$_CONFIG_DIR/defaults.conf"
+[ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
+
+GENERATE="$BASE/scripts/generate-conf.sh"
+
+# Generate dynamic configs from config.conf
+do_generate() {
+  if [ -x "$GENERATE" ]; then
+    "$GENERATE"
+  else
+    echo "ERROR: generate-conf.sh not found or not executable" >&2
+    return 1
+  fi
+}
+
+# Activate the correct static config (split or default) as active smartdns.conf
+do_activate() {
+  if [ -f "$STATE_FILE" ]; then
+    # Split-DNS enabled
+    if [ -f "$CONF_SPLIT" ]; then
+      cp "$CONF_SPLIT" "$CONF"
+    fi
+  else
+    # Default mode
+    if [ -f "$CONF_DEFAULT" ]; then
+      cp "$CONF_DEFAULT" "$CONF"
+    fi
+  fi
+}
+
+# Restart SmartDNS via S38 (background, non-blocking)
+do_restart_s38() {
+  if [ -x "$S38" ]; then
+    ("$S38" restart >/dev/null 2>&1 &)
+  fi
+}
+
+case "${1:-}" in
+  start)
+    do_generate
+    do_activate
+    ;;
+  stop)
+    # No-op: S38smartdns manages daemon stop
+    ;;
+  restart)
+    do_generate
+    do_activate
+    do_restart_s38
+    ;;
+  enable)
+    mkdir -p "$(dirname "$STATE_FILE")"
+    echo "enabled" > "$STATE_FILE"
+    do_generate
+    do_activate
+    do_restart_s38
+    echo "SmartDNS: split-DNS enabled (zone: $DNS_ZONE)"
+    ;;
+  disable)
+    rm -f "$STATE_FILE"
+    do_generate
+    do_activate
+    do_restart_s38
+    echo "SmartDNS: switched to default (simple forwarder)"
+    ;;
+  status)
+    if [ -f "$STATE_FILE" ]; then
+      echo "enabled (zone: $DNS_ZONE)"
+    else
+      echo "disabled"
+    fi
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart|enable|disable|status}" >&2
+    exit 1
+    ;;
+esac

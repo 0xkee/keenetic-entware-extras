@@ -17,7 +17,7 @@
 
 ### Зачем нужен
 
-Этот пакет **обязателен** для работы всех остальных модулей проекта (geo-split, smartdns-conf-ru-split, smartdns-redirect, webui). Устанавливается первым.
+Этот пакет **обязателен** для работы всех остальных модулей проекта (geo-split, smartdns-geo-conf, smartdns-redirect, webui). Устанавливается первым.
 
 ---
 
@@ -59,7 +59,7 @@ kee-status
 ```
 keenetic-entware-extras status:
   geo-split            Alive
-  smartdns-conf-ru-split Alive
+  smartdns-geo-conf Alive
   smartdns-redirect    Alive
   webui                Alive
 ```
@@ -69,7 +69,7 @@ keenetic-entware-extras status:
 ```
 keenetic-entware-extras status:
   geo-split            Alive
-  smartdns-conf-ru-split FAIL
+  smartdns-geo-conf FAIL
     Service:
       Ports:       none listening ✗
   smartdns-redirect    Alive
@@ -133,7 +133,7 @@ opkg install geo-split-data_<ver>_all.ipk
 
 # 3. Модули (в любом порядке)
 opkg install geo-split_<ver>_all.ipk
-opkg install smartdns-conf-ru-split_<ver>_all.ipk
+opkg install smartdns-geo-conf_<ver>_all.ipk
 opkg install smartdns-redirect_<ver>_all.ipk
 opkg install webui_<ver>_all.ipk
 ```
@@ -144,7 +144,7 @@ opkg install webui_<ver>_all.ipk
 keenetic-entware-extras  ← обязательная база для всех
   ├── geo-split          ← требует geo-split-data
   │     └── geo-split-data
-  ├── smartdns-conf-ru-split
+  ├── smartdns-geo-conf
   ├── smartdns-redirect
   └── webui
 ```

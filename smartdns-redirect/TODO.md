@@ -57,7 +57,7 @@
 
 ### Backlog (minor)
 
-- [x] ~~**SmartDNS TCP on :6053**~~ — **Сделано (2026-05-15):** добавлен `bind-tcp` в `smartdns-conf-ru-split/config/smartdns.conf` + `smartdns-default.conf` + `postinst` (bind-addrs.conf). TCP iptables redirect теперь работает end-to-end.
+- [x] ~~**SmartDNS TCP on :6053**~~ — **Сделано (2026-05-15):** добавлен `bind-tcp` в `smartdns-geo-conf/config/smartdns.conf` + `smartdns-default.conf` + `postinst` (bind-addrs.conf). TCP iptables redirect теперь работает end-to-end.
 - [x] ~~Uptime через pidfile~~ — поведение через PIDFILE оставлено как есть (сброс при reload — acceptable).
 - [x] ~~**AGH / Unbound preset configs**~~ — **Сделано (2026-05-16):** закомментированные примеры в `config/defaults.conf`
 

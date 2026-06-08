@@ -88,7 +88,7 @@ done
 
 section "User configs (config.conf)"
 
-for pkg in geo-split smartdns-redirect smartdns-conf-ru-split webui; do
+for pkg in geo-split smartdns-redirect smartdns-geo-conf webui; do
     conf="$BASE/$pkg/config/config.conf"
     if [ -f "$conf" ]; then
         printf "  %-28s EXISTS (%d lines)\n" "$pkg/config.conf" "$(wc -l < "$conf")"

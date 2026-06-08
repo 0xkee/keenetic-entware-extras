@@ -1,0 +1,11 @@
+Package: smartdns-geo-conf
+Version: 0.7.1
+Architecture: all
+Maintainer: 0xkee
+Depends: keenetic-entware-extras, smartdns, ca-certificates
+Description: SmartDNS configuration for DNS splitting by geo-zones on Keenetic/Entware.
+ Configurable DNS zones (RU, EAEU, CIS, BRICS, EU, etc.) with per-country
+ DNS server presets. International DNS via VPN interfaces (MITM protection).
+ Toggle: enable/disable split-DNS. Init: S37smartdns-conf.
+Section: net
+Priority: optional

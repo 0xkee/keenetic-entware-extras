@@ -3,7 +3,7 @@
 > 📖 **[Руководство пользователя](docs/user-manual.ru.md)** — установка, kee-status, bug-report.
 
 Shell-скрипты и `.ipk` пакеты для Keenetic-роутеров с Entware.
-Включает подпроекты: **geo-split** (split routing по GeoIP/доменам), **smartdns-conf-ru-split** (DNS split), **smartdns-redirect** (DNAT LAN :53 → local DNS), **webui** (дашборд).
+Включает подпроекты: **geo-split** (split routing по GeoIP/доменам), **smartdns-geo-conf** (DNS split), **smartdns-redirect** (DNAT LAN :53 → local DNS), **webui** (дашборд).
 
 ## Пакеты
 
@@ -12,7 +12,7 @@ Shell-скрипты и `.ipk` пакеты для Keenetic-роутеров с 
 | `keenetic-entware-extras` | Базовый пакет — shared libraries (`lib/common.sh`, `lib/ip.sh`, `lib/lists.sh`, `lib/status.sh`) + CLI `kee-status` |
 | `geo-split` | Split routing по GeoIP + доменам. Зависит от `keenetic-entware-extras` |
 | `geo-split-data` | Данные: списки доменов, GeoIP-зоны, whitelist. Conffiles — сохраняются при upgrade |
-| `smartdns-conf-ru-split` | Split DNS: .ru/.рф → российские DNS, остальное → Google/Cloudflare DoH |
+| `smartdns-geo-conf` | Split DNS: .ru/.рф → российские DNS, остальное → Google/Cloudflare DoH |
 | `smartdns-redirect` | Universal DNS DNAT: перехват LAN `:53` → local DNS |
 | `webui` | Custom dashboard для Keenetic/Entware services на :8080 |
 
@@ -55,7 +55,7 @@ Exit code: `0` если все `Alive`, `1` если есть `FAIL`.
 
 Split routing для Keenetic: маршрутизация трафика по GeoIP-подсетям и спискам доменов через разные сетевые интерфейсы (ISP/VPN). Поддерживает режимы bypass, vpn, auto.
 
-### [smartdns-conf-ru-split](smartdns-conf-ru-split/README.md)
+### [smartdns-geo-conf](smartdns-geo-conf/README.md)
 
 Split DNS для российского интернета: `.ru`/`.рф`/`.su` → Yandex/AdGuard DoT, всё остальное → Google/Cloudflare DoH.
 
@@ -81,7 +81,7 @@ keenetic-entware-extras/
 ├── geo-split-data/       # данные (списки, GeoIP-зоны)
 │   ├── lists/            # domains.txt, ru-whitelist.txt
 │   └── scripts/          # fetch-zones.sh
-├── smartdns-conf-ru-split/          # DNS split
+├── smartdns-geo-conf/          # DNS split
 │   ├── config/           # smartdns.conf
 │   ├── scripts/          # status.sh, toggle.sh
 ├── smartdns-redirect/    # DNS DNAT для LAN
@@ -97,7 +97,7 @@ keenetic-entware-extras/
 │   ├── keenetic-entware-extras/
 │   ├── geo-split/
 │   ├── geo-split-data/
-│   ├── smartdns-conf-ru-split/
+│   ├── smartdns-geo-conf/
 │   └── smartdns-redirect/
 ├── scripts/              # build-ipk.sh, kee-status.sh (aggregated status CLI)
 ├── docs/                 # документация

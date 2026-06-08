@@ -16,7 +16,7 @@
 
 | Резолвер | Порт | Watchdog service |
 |----------|------|-----------------|
-| SmartDNS (smartdns-conf-ru-split) | 6053 | `S38smartdns` |
+| SmartDNS (smartdns-geo-conf) | 6053 | `S38smartdns` |
 | AdGuard Home | 5353 | `S99adguardhome` |
 | Unbound | 5335 | `S61unbound` |
 | dnsmasq | любой | — |

@@ -1,0 +1,27 @@
+#!/opt/bin/sh
+# postrm — runs after package files are removed.
+# Cleans up runtime files, state, deployed configs, init scripts, and empty dirs.
+set -eu
+
+# Remove S37 init script
+rm -f /opt/etc/init.d/S37smartdns-conf
+
+# Remove runtime files
+rm -f /opt/var/run/smartdns.pid
+rm -f /opt/var/cache/smartdns.cache
+
+# Remove state file and deployed config variants
+rm -f /opt/etc/smartdns/.split-enabled
+rm -f /opt/etc/smartdns/smartdns-split-dns.conf
+rm -f /opt/etc/smartdns/smartdns-default.conf
+
+# Remove generated config snippets
+rm -f /opt/etc/smartdns/dns-servers-other.conf
+rm -f /opt/etc/smartdns/dns-zones-active.conf
+rm -f /opt/etc/smartdns/bind-addrs.conf
+
+# Remove empty directories left by opkg
+for d in config/zones config scripts init.d docs; do
+    rmdir "/opt/keenetic-entware-extras/smartdns-geo-conf/$d" 2>/dev/null || true
+done
+rmdir "/opt/keenetic-entware-extras/smartdns-geo-conf" 2>/dev/null || true

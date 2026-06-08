@@ -6,7 +6,7 @@
 
 ### Возможности
 
-- 📊 **Дашборд** — единая панель мониторинга geo-split, smartdns-conf-ru-split, smartdns-redirect, системы
+- 📊 **Дашборд** — единая панель мониторинга geo-split, smartdns-geo-conf, smartdns-redirect, системы
 - 🎨 **Интеграция в stock WebUI** — карточка Entware Extras на стоковом дашборде Keenetic
 - 🔌 **REST API** — JSON-эндпоинты для автоматизации и внешнего мониторинга
 - ⚡ **Управление** — старт/стоп сервисов, обновление данных через браузер
@@ -137,7 +137,7 @@ opkg install webui_<версия>_all.ipk
 |----------|----------|
 | `/api/system/info` | Системная информация (hostname, uptime, RAM, диск) |
 | `/api/geo-split/status` | Статус geo-split (JSON) |
-| `/api/smartdns/status` | Статус smartdns-conf-ru-split (JSON) |
+| `/api/smartdns/status` | Статус smartdns-geo-conf (JSON) |
 | `/api/smartdns-redirect/status` | Статус smartdns-redirect (JSON) |
 | `/api/webui/status` | Самодиагностика webui |
 

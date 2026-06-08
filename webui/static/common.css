@@ -27,6 +27,33 @@
 .ew-update-btn--spinning svg { animation: ew-spin 1s linear infinite; }
 @keyframes ew-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
+/* ── Loading skeleton (shared: custom + stock dashboard) ─────────── */
+.ew-skeleton {
+    height: 14px; border-radius: 4px;
+    max-width: 100%;
+    background: linear-gradient(90deg,
+        var(--disabled, #2f3745) 25%,
+        var(--stroke, #4d545f) 50%,
+        var(--disabled, #2f3745) 75%);
+    background-size: 200% 100%;
+    animation: ew-shimmer 1.5s infinite;
+}
+.ew-skeleton--short { width: 80px; }
+.ew-skeleton--medium { width: 140px; }
+@keyframes ew-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* ── DNS test links ──────────────────────────────────────────────── */
+.ew-dns-link {
+    color: inherit;
+    text-decoration: none;
+}
+.ew-dns-link:hover {
+    text-decoration: underline;
+}
+
 /* ── Tooltip (stock Keenetic variables) ──────────────────────────── */
 .ew-update-btn[data-tooltip]:hover::after {
     content: attr(data-tooltip);

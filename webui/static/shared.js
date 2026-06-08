@@ -7,7 +7,7 @@ window.EW = (function() {
     /** Service registry — single source of truth for IDs, labels, URLs, API endpoints. */
     var SERVICE_APIS = [
         { id: 'geo-split',         label: 'Geo-Split',       desc: 'Policy-based geographic split routing',      url: '/custom/#geo-split',        api: '/api/geo-split/status' },
-        { id: 'smartdns',          label: 'SmartDNS Config',  desc: 'RU zone DNS splitting (.ru/.рф/.su)',        url: '/custom/#smartdns',          api: '/api/smartdns/status' },
+        { id: 'smartdns',          label: 'SmartDNS Geo-Config',  desc: 'Geo-zone DNS splitting (configurable zones)', url: '/custom/#smartdns',          api: '/api/smartdns/status' },
         { id: 'smartdns-redirect', label: 'DNS Redirect',     desc: 'Transparent DNS redirect for local networks', url: '/custom/#smartdns-redirect', api: '/api/smartdns-redirect/status' },
         { id: 'webui',             label: 'WebUI',            desc: 'Entware Extras web dashboard',               url: '/custom/#webui',             api: '/api/webui/status' },
     ];

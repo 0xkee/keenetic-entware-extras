@@ -5,7 +5,7 @@
 Веб-панель мониторинга для Keenetic/Entware — дашборд статуса сервисов + патчинг штатного WebUI с инъекцией кастомного меню и карточек.
 
 Типичные сценарии:
-- 📊 **Мониторинг:** единый дашборд статуса geo-split, smartdns-conf-ru-split, smartdns-redirect, системы (uptime, RAM, диск)
+- 📊 **Мониторинг:** единый дашборд статуса geo-split, smartdns-geo-conf, smartdns-redirect, системы (uptime, RAM, диск)
 - 🎨 **Интеграция:** карточка Entware Extras на стоковом дашборде Keenetic + Cards Position dialog через inject.js
 - 🔌 **API:** JSON-эндпоинты для автоматизации и мониторинга через Lua
 
@@ -127,7 +127,7 @@ Browser → nginx :8080
 |-------|----------|----------|
 | GET | `/api/system/info` | Системная информация (hostname, uptime, RAM, диск) |
 | GET | `/api/geo-split/status` | Статус geo-split |
-| GET | `/api/smartdns/status` | Статус smartdns-conf-ru-split |
+| GET | `/api/smartdns/status` | Статус smartdns-geo-conf |
 | GET | `/api/smartdns-redirect/status` | Статус smartdns-redirect |
 | GET | `/api/webui/status` | Самодиагностика webui |
 

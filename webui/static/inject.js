@@ -16,13 +16,14 @@
     var CUSTOM_ITEMS = [
         { id: 'dashboard',          label: 'Dashboard',    url: '/custom/' },
         { id: 'geo-split',          label: 'Geo Split',    url: '/custom/#geo-split' },
-        { id: 'smartdns',           label: 'SmartDNS Config', url: '/custom/#smartdns' },
+        { id: 'smartdns',           label: 'SmartDNS Geo-Config', url: '/custom/#smartdns' },
         { id: 'smartdns-redirect',  label: 'DNS Redirect', url: '/custom/#smartdns-redirect' },
         { id: 'webui',              label: 'WebUI',        url: '/custom/#webui' },
     ];
 
     var DASH_POLL_INTERVAL = (__cfg.pollInterval > 0) ? __cfg.pollInterval : 30000;
     var DETAILS_SKIP_KEYS = { uptime: 1, version: 1, pid: 1, background: 1 };
+    var DASH_SKELETON_COUNTS = { 'geo-split': 16, 'smartdns': 9, 'smartdns-redirect': 8, 'webui': 8 };
 
     var injected = false;
     var dashboardInjected = false;
@@ -400,6 +401,9 @@
 
     /**
      * Load a custom page inside the Keenetic layout content area via iframe.
+     * Uses pushState (same URL) for browser Back support. The popstate handler
+     * only removes the iframe on Back (exit-only) — does NOT re-show on Forward.
+     * This avoids conflicts with Angular's router which ignores same-URL popstate.
      * @param {{id: string, url: string}} item
      */
     function showInContent(item) {
@@ -427,6 +431,9 @@
         var el = document.getElementById('entware-item-' + item.id);
         if (el) el.classList.add('page-link__link--active');
         activeItem = item.id;
+
+        // Push history entry for browser Back button (same URL — Angular ignores same-URL popstate)
+        history.pushState({ __ew: item.id }, '');
 
         insertingIframe = true;
         var iframe = document.getElementById('entware-iframe');
@@ -473,20 +480,41 @@
 
     // ── Remove iframe ────────────────────────────────────────────────────────
 
-    /** Remove the custom iframe and reset menu active state. */
+    /**
+     * Remove the custom iframe, restore hidden Angular content, reset menu state.
+     * Restores display of children hidden by showInContent().
+     */
     function removeIframe() {
         activeItem = null;
         document.querySelectorAll('.entware-menu-section .page-link__link').forEach(function(el) {
             el.classList.remove('page-link__link--active');
         });
         var iframe = document.getElementById('entware-iframe');
-        if (iframe) iframe.remove();
+        if (iframe) {
+            var content = iframe.parentElement;
+            iframe.remove();
+            // Restore Angular children that were hidden by showInContent()
+            if (content) {
+                for (var i = 0; i < content.children.length; i++) {
+                    var child = content.children[i];
+                    if ('entwareHidden' in child.dataset) {
+                        child.style.display = child.dataset.entwareHidden || '';
+                        delete child.dataset.entwareHidden;
+                    }
+                }
+            }
+        }
     }
 
     // ── Restore on stock menu click + Angular navigation ─────────────────────
 
-    /** Set up listeners to remove iframe when user navigates via stock menu. */
+    /**
+     * Set up listeners to remove iframe when user navigates via stock menu.
+     * No popstate handler here — Angular owns the browser history.
+     * Back/forward within the custom page is iframe-internal (app.js).
+     */
     function setupRestore() {
+        // Capture-phase click: detect stock sidebar navigation
         document.addEventListener('click', function(e) {
             var item = e.target.closest('.menu__item, .page-link__link');
             if (item && !item.closest('.entware-menu-section') && activeItem) {
@@ -494,6 +522,17 @@
             }
         }, true);
 
+        // Browser Back button: exit-only popstate handler.
+        // When user presses Back while custom page is shown, we remove iframe.
+        // We do NOT re-show iframe on Forward — that avoids Angular router conflicts.
+        // Angular also receives this popstate but ignores it (same-URL = no navigation).
+        window.addEventListener('popstate', function(e) {
+            if (activeItem && !(e.state && e.state.__ew)) {
+                removeIframe();
+            }
+        });
+
+        // MutationObserver: catch Angular's own navigation (route change replaces content)
         setTimeout(function() {
             var content = document.querySelector('[class*="layout__content"]');
             if (!content) {
@@ -609,6 +648,14 @@
         var details = document.createElement('div');
         details.className = 'ew-details';
         details.id = 'ew-details-' + svc.id;
+
+        // Pre-fill skeleton placeholders (replaced on first fetch)
+        var skelCount = DASH_SKELETON_COUNTS[svc.id] || 9;
+        var skelHtml = '';
+        for (var si = 0; si < skelCount; si++) {
+            skelHtml += '<div class="ew-detail-item"><div class="ew-skeleton ew-skeleton--short"></div><div class="ew-skeleton ew-skeleton--medium" style="margin-top:4px"></div></div>';
+        }
+        details.innerHTML = skelHtml;
 
         // Restore expand state from localStorage
         var storageKey = 'ew-expand-' + svc.id;
@@ -859,7 +906,34 @@
 
         // Update expandable details grid
         if (detailsEl) {
-            detailsEl.innerHTML = renderDetailsGrid(data.details, data.running, data.checks);
+            var detailsHtml = renderDetailsGrid(data.details, data.running, data.checks);
+            // Insert DNS test results before cache (concise: ✓/✗ domain)
+            if (data.dns_tests && data.dns_tests.length) {
+                var dnsLines = [];
+                for (var di = 0; di < data.dns_tests.length; di++) {
+                    var dt = data.dns_tests[di];
+                    var dtOk = dt.result && dt.result !== 'FAILED';
+                    var dtIcon = dtOk ? '\u2713' : '\u2717';
+                    var dtClass = dtOk ? 'ew-bool-icon--ok' : 'ew-bool-icon--fail';
+                    dnsLines.push('<span class="ew-bool-icon ' + dtClass + '">' + dtIcon + '</span> ' +
+                        '<a class="ew-dns-link" href="https://' + dt.domain + '" target="_blank" rel="noopener">' + dt.domain + '</a>');
+                }
+                var dnsBlock = '<div class="ew-detail-item">' +
+                    '<div class="ew-detail-label">DNS Tests</div>' +
+                    '<div class="ew-detail-value">' + dnsLines.join('<br>') + '</div></div>';
+                var cacheIdx = detailsHtml.indexOf('ew-detail-label">Cache<');
+                if (cacheIdx !== -1) {
+                    var insIdx = detailsHtml.lastIndexOf('<div class="ew-detail-item"', cacheIdx);
+                    if (insIdx !== -1) {
+                        detailsHtml = detailsHtml.substring(0, insIdx) + dnsBlock + detailsHtml.substring(insIdx);
+                    } else {
+                        detailsHtml += dnsBlock;
+                    }
+                } else {
+                    detailsHtml += dnsBlock;
+                }
+            }
+            detailsEl.innerHTML = detailsHtml;
         }
 
         // Update uptime baseline
@@ -933,6 +1007,7 @@
         if (!__cfg.injectSidebar) {
             injected = true;
             injectDashStyles();
+            setupRestore(); // Always needed: showInContent() is reachable via dashboard card click
             ewScheduleReconcile('no-sidebar');
             return true;
         }
@@ -1013,6 +1088,8 @@
         // Reset dashboard state on route change
         if (currentPath !== lastPath) {
             lastPath = currentPath;
+            // Safety net: remove iframe if Angular navigated while it was showing
+            if (activeItem) removeIframe();
             dashboardInjected = false;
             if (dashboardTimer) {
                 clearInterval(dashboardTimer);

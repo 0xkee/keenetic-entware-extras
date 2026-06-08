@@ -383,7 +383,7 @@ geo-split status: ✗ Fail
 |---------|---------|---------|
 | Status: `✗ Fail`, 0 routes | Не скачались подсети / нет интернета | `S99geo-split update` |
 | `Active out: — detached` | VPN не поднят или rules не подключены | Поднять VPN; geo-split подхватит через NDM hook |
-| Домены не резолвятся | Нет DNS-резолвера | Установить `smartdns-conf-ru-split` или указать `DNS_FULL_RESOLVER_PORT` |
+| Домены не резолвятся | Нет DNS-резолвера | Установить `smartdns-geo-conf` или указать `DNS_FULL_RESOLVER_PORT` |
 | Status: ✗ для Cron | Нет cron-задачи | `S99geo-split restart` |
 | `ip: command not found` | Нет ip-full | `opkg install ip-full` |
 | Сервис не стартует при загрузке | `disable` был вызван ранее | Запустить `enable` из полного пути |

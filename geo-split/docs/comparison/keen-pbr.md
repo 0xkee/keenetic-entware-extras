@@ -33,7 +33,7 @@
 | `keenetic-entware-extras` | 0.12.1 | Базовый: shared libs (`common.sh`, `ip.sh`, `lists.sh`, `status.sh`) + `kee-status` CLI |
 | `geo-split` | 0.12.5 | GEO route-based маршрутизация (dual tables: domains + subnets) |
 | `geo-split-data` | 0.4.0 | Курированные данные: 140+ RU доменов, GeoIP зоны (EAEU: RU/BY/KZ/AM/KG) |
-| `smartdns-conf-ru-split` | 0.4.4 | Split-DNS: .ru/.рф/.su → Yandex/AdGuard DoT; * → Google/CF DoH |
+| `smartdns-geo-conf` | 0.4.4 | Split-DNS: .ru/.рф/.su → Yandex/AdGuard DoT; * → Google/CF DoH |
 | `smartdns-redirect` | 0.3.1 | DNS DNAT: LAN :53 → SmartDNS :6053 (iptables nat REDIRECT, не mangle!) |
 | `webui` | 0.17.0 | Nginx+Lua дашборд на :8080, REST API, config editor, stock Keenetic sidebar |
 

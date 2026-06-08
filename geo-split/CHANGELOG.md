@@ -7,6 +7,22 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-06-07
+
+### Added
+- Multi-zone GeoIP support: `GEO_ZONE` config (country code or union name)
+- All 240 country zones supported via pre-packaged geo-split-data files
+- 40+ geopolitical unions (eas, cis, brics, eu, nato, asean, gcc, etc.)
+- Shared zone library `lib/geo.sh` with `resolve_geo_zone()` function
+- `active_zones` field in status JSON output (resolved country list)
+- Backward-compatible `SUBNET_URL` override for custom URL configs
+
+### Changed
+- `update-subnets.sh`: multi-zone merge (cat all .zone files → aggregate → table)
+- `defaults.conf`: `GEO_ZONE="eas"` replaces hardcoded `SUBNET_URL` for RU
+- `status.sh`: shows resolved zone list ("eas → [ru by kz am kg]")
+- Summary key `active_zones` shown on dashboard
+
 ## [0.12.5] - 2026-06-02
 
 ### Fixed

@@ -17,7 +17,7 @@ Inherits all rules from root [`.project/target-code.md`](../../.project/target-c
 - `dig` (bind-dig) — DNS resolution for domain lists: `dig +short <domain> @localhost`
 
 ### DNS Specifics
-- See [`smartdns-conf-ru-split/`](../../smartdns-conf-ru-split/) for DNS server configuration
+- See [`smartdns-geo-conf/`](../../smartdns-geo-conf/) for DNS server configuration
 - `dig @localhost` resolves through SmartDNS on port 6053
 
 ### Routing Specifics

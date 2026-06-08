@@ -268,7 +268,7 @@ geo-split status:
 
 - ❌ «Модули ядра подсистемы Netfilter» (iptables MARK / mangle) — архитектурное решение, подробнее см. [`docs/knowledge/keenetic-fwmark-analysis.md`](../docs/knowledge/keenetic-fwmark-analysis.md).
 - ❌ `ipset`, `nftables` — не используются.
-- ❌ «DNS-Override» / модули подмены DNS — этим занимается отдельный подпроект [`smartdns-conf-ru-split/`](../smartdns-conf-ru-split/README.md), если нужен.
+- ❌ «DNS-Override» / модули подмены DNS — этим занимается отдельный подпроект [`smartdns-geo-conf/`](../smartdns-geo-conf/README.md), если нужен.
 
 ### Как включить компоненты
 

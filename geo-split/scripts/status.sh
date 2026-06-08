@@ -8,10 +8,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/common.sh"
 . "$SCRIPT_DIR/../../lib/status.sh"
 . "$SCRIPT_DIR/../../lib/lists.sh"
+. "$SCRIPT_DIR/../../lib/ip.sh"
+. "$SCRIPT_DIR/../../lib/geo.sh"
 _CONFIG_DIR="$(cd "$SCRIPT_DIR/../config" && pwd)"
 . "$_CONFIG_DIR/defaults.conf"
 [ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
-. "$SCRIPT_DIR/../../lib/ip.sh"
 
 STATUS_OK=0
 _st_uptime_seconds=0
@@ -20,13 +21,11 @@ _st_version=""
 # --- Check functions ---
 # Pure data collection. May set STATUS_OK=1 on failures.
 
-# Sets: _ck_geo_zone, _ck_active_out, _ck_gateway
+# Sets: _ck_geo_zone, _ck_active_zones, _ck_active_out, _ck_gateway
 check_mode() {
-  _ck_geo_zone=""
+  _ck_geo_zone="${GEO_ZONE:-ru}"
+  _ck_active_zones="$(resolve_geo_zone "$_ck_geo_zone")"
   _ck_gateway=""
-  if [ -n "${SUBNET_URL:-}" ]; then
-    _ck_geo_zone=$(basename "$SUBNET_URL" .zone | tr '[:lower:]' '[:upper:]')
-  fi
   # head -5: all routes in a table share the same dev (filled by fill_routes_batch),
   # so a few lines suffice to extract unique interface names (~11K → 10 lines).
   _ck_active_out=$( {
@@ -186,7 +185,7 @@ check_background() {
 show_mode() {
   check_mode
   echo "  Mode:"
-  echo "    Geo zone:    ${_ck_geo_zone:-unknown}"
+  echo "    Geo zone:    $_ck_geo_zone → [$_ck_active_zones]"
   echo "    Route in:    $ROUTE_IN"
   if [ "${ROUTE_OUT:-auto}" = "auto" ] || [ -z "${ROUTE_OUT:-}" ]; then
     echo "    Route out:   auto (detect ISP)"
@@ -400,12 +399,14 @@ json_output() {
   printf ','
   json_kv_bool "ok" "$STATUS_OK"
   printf ',"details":{'
-  json_kv "geo_zone" "${_ck_geo_zone:-unknown}"
+  # Zone
+  json_kv "geo_zone" "$_ck_geo_zone"
+  printf ','
+  json_kv "active_zones" "$_ck_active_zones"
   printf ','
   json_kv "zone_loader" "${SUBNET_LOADER}${_ck_dl_iface:+ via $_ck_dl_iface}"
   printf ','
-  json_kv_bool "cron" "$_ck_cron_ok"
-  printf ','
+  # Routing
   json_kv "route_in" "$ROUTE_IN"
   printf ','
   if [ "${ROUTE_OUT:-auto}" = "auto" ] && [ -n "$_ck_active_out" ] && [ "$_ck_active_out" != "detached" ]; then
@@ -416,6 +417,7 @@ json_output() {
   printf ','
   json_kv "gateway" "${_ck_gateway:-none}"
   printf ','
+  # Data
   json_kv_num "subnets" "$_ck_subnet_routes"
   printf ','
   json_kv_num "domains" "$_ck_domain_routes"
@@ -426,13 +428,17 @@ json_output() {
   printf ','
   json_kv_num "domain_freshness" "$_ck_domain_freshness_seconds"
   printf ','
-  json_kv_bool "ndm_hook" "$_ck_ndm_hook_ok"
-  printf ','
   json_kv_num "domain_sources" "$_ck_domain_sources"
   printf ','
   json_kv_num "domain_cache" "$_ck_domain_cache"
   printf ','
+  # Infrastructure
   json_kv "dns_resolver" "$_ck_dns_resolver"
+  printf ','
+  # System
+  json_kv_bool "ndm_hook" "$_ck_ndm_hook_ok"
+  printf ','
+  json_kv_bool "cron" "$_ck_cron_ok"
   printf ','
   json_kv "background" "$_ck_bg_status"
   printf ','

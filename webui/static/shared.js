@@ -223,6 +223,18 @@ window.EW = (function() {
         return entries;
     }
 
+    /**
+     * Shorten a hostname to its registrable (2nd-level) domain.
+     * E.g. "common.dot.dns.yandex.net" → "yandex.net",
+     *      "dns10.quad9.net" → "quad9.net", "dns.google" → "dns.google".
+     * @param {string} host
+     * @returns {string}
+     */
+    function shortDomain(host) {
+        var parts = host.split('.');
+        return parts.length <= 2 ? host : parts.slice(-2).join('.');
+    }
+
     return {
         SERVICE_APIS: SERVICE_APIS,
         TIMER_KEYS: TIMER_KEYS,
@@ -232,6 +244,7 @@ window.EW = (function() {
         formatBool: formatBool,
         createPoller: createPoller,
         createTicker: createTicker,
-        parseDetails: parseDetails
+        parseDetails: parseDetails,
+        shortDomain: shortDomain
     };
 })();

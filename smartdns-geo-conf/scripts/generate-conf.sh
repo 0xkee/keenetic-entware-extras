@@ -1,12 +1,11 @@
 #!/opt/bin/sh
-# Generate SmartDNS config snippets from config.conf settings.
+# Generate SmartDNS config snippets from dns-providers.conf + zone-routing-rules.conf.
 # Produces:
-#   dns-servers-other.conf — international DNS (default group, with -interface if set)
-#   dns-zones-active.conf  — meta-include referencing active zone presets
+#   dns-servers-other.conf  — international DNS (default group, with -interface if set)
+#   dns-zones-active.conf   — zone upstream servers + nameserver routing rules (all-in-one)
 #
-# Zone presets are static files in config/zones/<cc>.conf.
-# This script only generates the "other" servers (needs -interface handling)
-# and the active-zones meta-include.
+# Dynamic generation: no static zone files needed. Reads provider catalog
+# and routing rules to build everything at runtime.
 #
 # Called by: postinst, toggle.sh enable
 # shellcheck disable=SC3043  # 'local' supported by ash/busybox sh
@@ -17,11 +16,29 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 _CONFIG_DIR="${SCRIPT_DIR%/*}/config"
 . "$_CONFIG_DIR/defaults.conf"
 [ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
+. "$_CONFIG_DIR/dns-providers.conf"
 . "$SCRIPT_DIR/../../lib/geo.sh"
 
-# Base path where zone preset files live
-ZONES_DIR="$_CONFIG_DIR/zones"
+# Zone routing rules file
+ROUTING_RULES="$_CONFIG_DIR/zone-routing-rules.conf"
 
+# ===================================================================
+# Helpers: dynamic provider variable lookup (POSIX sh)
+# ===================================================================
+
+# Get OTHER provider variable value.
+# Usage: get_other_prov <provider> <field>
+# Example: get_other_prov google IP1 → "8.8.8.8"
+get_other_prov() {
+  eval "printf '%s' \"\$OTHER_${1}_${2}\""
+}
+
+# Get ZONE provider variable value.
+# Usage: get_zone_prov <provider> <field>
+# Example: get_zone_prov yandex TLS_HOST → "common.dot.dns.yandex.net"
+get_zone_prov() {
+  eval "printf '%s' \"\$ZONE_${1}_${2}\""
+}
 
 # ===================================================================
 # Generate: international (other) DNS servers — default group
@@ -36,132 +53,261 @@ generate_other_servers() {
 
 HEADER
 
-  if [ -n "$OTHER_DNS_INTERFACES" ]; then
-    # VPN-bound servers (one Google + one Cloudflare per interface)
-    local idx=0
-    for iface in $OTHER_DNS_INTERFACES; do
-      # Skip "default" pseudo-value (means default route — servers without -interface)
-      [ "$iface" = "default" ] && continue
-      local iface_flag="-interface $iface"
-      if [ $((idx % 2)) -eq 0 ]; then
-        cat >> "$out" <<EOF
-# Google DoH via $iface
-server-https https://dns.google/dns-query \\
-    -host-name dns.google \\
-    -http-host dns.google \\
-    -host-ip 8.8.8.8 \\
-    -tls-host-verify dns.google \\
-    $iface_flag
+  for provider in $OTHER_DNS_PROVIDER; do
+    local proto
+    proto="$(get_other_prov "$provider" PROTO)"
+    local ip1 ip2 tls_host doh_url
+    ip1="$(get_other_prov "$provider" IP1)"
+    ip2="$(get_other_prov "$provider" IP2)"
+    tls_host="$(get_other_prov "$provider" TLS_HOST)"
+    doh_url="$(get_other_prov "$provider" DOH_URL)" 2>/dev/null || doh_url=""
 
-# Cloudflare DoH via $iface
-server-https https://cloudflare-dns.com/dns-query \\
-    -host-name cloudflare-dns.com \\
-    -http-host cloudflare-dns.com \\
-    -host-ip 1.1.1.1 \\
-    -tls-host-verify cloudflare-dns.com \\
-    $iface_flag
+    # Determine interface flags
+    local iface_list=""
+    if [ -n "$OTHER_DNS_INTERFACES" ]; then
+      iface_list="$OTHER_DNS_INTERFACES"
+    fi
+
+    case "$proto" in
+      doh)
+        # With VPN interfaces
+        if [ -n "$iface_list" ]; then
+          for iface in $iface_list; do
+            [ "$iface" = "default" ] && continue
+            _emit_doh_server "$out" "$provider" "$doh_url" "$ip1" "$tls_host" "-interface $iface"
+            if [ -n "$ip2" ]; then
+              _emit_doh_server "$out" "$provider" "$doh_url" "$ip2" "$tls_host" "-interface $iface"
+            fi
+          done
+        fi
+        # Fallback / direct (always present)
+        _emit_doh_server "$out" "$provider" "$doh_url" "$ip1" "$tls_host" ""
+        if [ -n "$ip2" ]; then
+          _emit_doh_server "$out" "$provider" "$doh_url" "$ip2" "$tls_host" ""
+        fi
+        ;;
+      dot)
+        # With VPN interfaces
+        if [ -n "$iface_list" ]; then
+          for iface in $iface_list; do
+            [ "$iface" = "default" ] && continue
+            _emit_dot_server "$out" "$provider" "$ip1" "$tls_host" "" "-interface $iface"
+            if [ -n "$ip2" ]; then
+              _emit_dot_server "$out" "$provider" "$ip2" "$tls_host" "" "-interface $iface"
+            fi
+          done
+        fi
+        # Fallback / direct
+        _emit_dot_server "$out" "$provider" "$ip1" "$tls_host" "" ""
+        if [ -n "$ip2" ]; then
+          _emit_dot_server "$out" "$provider" "$ip2" "$tls_host" "" ""
+        fi
+        ;;
+    esac
+  done
+}
+
+# Emit a single DoH server entry.
+# Args: $1=file $2=label $3=doh_url $4=ip $5=tls_host $6=extra_flags
+_emit_doh_server() {
+  local _file="$1" _label="$2" _url="$3" _ip="$4" _host="$5" _flags="$6"
+  local _suffix=""
+  [ -n "$_flags" ] && _suffix=" \\
+    $_flags"
+  cat >> "$_file" <<EOF
+# ${_label} DoH${_flags:+ (${_flags#-interface })}
+server-https ${_url} \\
+    -host-name ${_host} \\
+    -http-host ${_host} \\
+    -host-ip ${_ip} \\
+    -tls-host-verify ${_host}${_suffix}
 
 EOF
-      else
-        cat >> "$out" <<EOF
-# Google DoH via $iface
-server-https https://dns.google/dns-query \\
-    -host-name dns.google \\
-    -http-host dns.google \\
-    -host-ip 8.8.4.4 \\
-    -tls-host-verify dns.google \\
-    $iface_flag
+}
 
-# Cloudflare DoH via $iface
-server-https https://cloudflare-dns.com/dns-query \\
-    -host-name cloudflare-dns.com \\
-    -http-host cloudflare-dns.com \\
-    -host-ip 1.0.0.1 \\
-    -tls-host-verify cloudflare-dns.com \\
-    $iface_flag
+# Emit a single DoT server entry.
+# Args: $1=file $2=label $3=ip $4=tls_host $5=group_flags $6=extra_flags
+_emit_dot_server() {
+  local _file="$1" _label="$2" _ip="$3" _host="$4" _group="$5" _flags="$6"
+  local _suffix=""
+  [ -n "$_group" ] && _suffix=" ${_group}"
+  [ -n "$_flags" ] && _suffix="${_suffix} \\
+    ${_flags}"
+  cat >> "$_file" <<EOF
+server-tls ${_ip}:853${_suffix} \\
+    -host-name ${_host} \\
+    -tls-host-verify ${_host}
 
 EOF
-      fi
-      idx=$((idx + 1))
-    done
-
-    # Fallback without VPN (direct)
-    cat >> "$out" <<'EOF'
-# Fallback — direct (no VPN), used if all VPN interfaces are down
-server-https https://dns.google/dns-query \
-    -host-name dns.google \
-    -http-host dns.google \
-    -host-ip 8.8.8.8 \
-    -tls-host-verify dns.google
-
-server-https https://cloudflare-dns.com/dns-query \
-    -host-name cloudflare-dns.com \
-    -http-host cloudflare-dns.com \
-    -host-ip 1.1.1.1 \
-    -tls-host-verify cloudflare-dns.com
-EOF
-  else
-    # No VPN — direct only
-    cat >> "$out" <<'EOF'
-# Google DoH (direct)
-server-https https://dns.google/dns-query \
-    -host-name dns.google \
-    -http-host dns.google \
-    -host-ip 8.8.8.8 \
-    -tls-host-verify dns.google
-
-server-https https://dns.google/dns-query \
-    -host-name dns.google \
-    -http-host dns.google \
-    -host-ip 8.8.4.4 \
-    -tls-host-verify dns.google
-
-# Cloudflare DoH (direct)
-server-https https://cloudflare-dns.com/dns-query \
-    -host-name cloudflare-dns.com \
-    -http-host cloudflare-dns.com \
-    -host-ip 1.1.1.1 \
-    -tls-host-verify cloudflare-dns.com
-
-server-https https://cloudflare-dns.com/dns-query \
-    -host-name cloudflare-dns.com \
-    -http-host cloudflare-dns.com \
-    -host-ip 1.0.0.1 \
-    -tls-host-verify cloudflare-dns.com
-EOF
-  fi
 }
 
 # ===================================================================
-# Generate: dns-zones-active.conf (meta-include for active zone presets)
+# Generate: dns-zones-active.conf (zone servers + nameserver routing)
 # ===================================================================
 generate_zones_active() {
   local out="${SMARTDNS_CONF_DIR}/dns-zones-active.conf"
   local zones
   zones="$(resolve_geo_zone "$DNS_ZONE")"
-  local active_count=0
-  local skipped=""
 
   cat > "$out" <<EOF
 # Auto-generated by smartdns-geo-conf/scripts/generate-conf.sh
 # DNS_ZONE=$DNS_ZONE → zones: $zones
+# ZONE_DNS_PROVIDER=$ZONE_DNS_PROVIDER
+
 EOF
 
   for cc in $zones; do
-    local zone_preset="${ZONES_DIR}/${cc}.conf"
-    if [ -f "$zone_preset" ]; then
-      printf 'conf-file %s\n' "$zone_preset" >> "$out"
-      active_count=$((active_count + 1))
-    else
-      skipped="${skipped} ${cc}"
-    fi
+    printf '# === Zone: %s ===\n\n' "$cc" >> "$out"
+    # Generate upstream servers for this zone group
+    _generate_zone_servers "$out" "$cc"
+    # Generate nameserver routing rules for this zone
+    _generate_zone_routing "$out" "$cc"
+    printf '\n' >> "$out"
   done
 
-  if [ -n "$skipped" ]; then
-    echo "generate-conf: WARNING: no zone preset for:${skipped} (create config/zones/<cc>.conf)" >&2
+  # Count zones
+  local count=0
+  for _ in $zones; do
+    count=$((count + 1))
+  done
+  echo "generate-conf: DNS_ZONE=$DNS_ZONE, activated $count zone(s): $zones"
+}
+
+# Generate upstream DNS servers for a single zone group.
+# Args: $1=output_file $2=cc_code
+_generate_zone_servers() {
+  local _out="$1" _cc="$2"
+  local _group_flags="-group ${_cc} -exclude-default-group"
+  local _iface_flag=""
+
+  if [ -n "$ZONE_DNS_INTERFACE" ] && [ "$ZONE_DNS_INTERFACE" != "default" ]; then
+    _iface_flag="-interface $ZONE_DNS_INTERFACE"
   fi
 
-  echo "generate-conf: DNS_ZONE=$DNS_ZONE, activated $active_count zone(s): $zones"
+  for provider in $ZONE_DNS_PROVIDER; do
+    local proto ip1 ip2 tls_host udp_fb
+    proto="$(get_zone_prov "$provider" PROTO)"
+    ip1="$(get_zone_prov "$provider" IP1)"
+    ip2="$(get_zone_prov "$provider" IP2)"
+    tls_host="$(get_zone_prov "$provider" TLS_HOST)"
+    udp_fb="$(get_zone_prov "$provider" UDP_FALLBACK)" 2>/dev/null || udp_fb="no"
+
+    local _extra=""
+    [ -n "$_iface_flag" ] && _extra="$_iface_flag"
+
+    case "$proto" in
+      dot)
+        printf '# %s DoT (group %s)\n' "$provider" "$_cc" >> "$_out"
+        _emit_zone_dot "$_out" "$ip1" "$tls_host" "$_group_flags" "$_extra"
+        if [ -n "$ip2" ]; then
+          _emit_zone_dot "$_out" "$ip2" "$tls_host" "$_group_flags" "$_extra"
+        fi
+        ;;
+      doh)
+        local doh_url
+        doh_url="$(get_zone_prov "$provider" DOH_URL)" 2>/dev/null || doh_url=""
+        printf '# %s DoH (group %s)\n' "$provider" "$_cc" >> "$_out"
+        _emit_zone_doh "$_out" "$doh_url" "$ip1" "$tls_host" "$_group_flags" "$_extra"
+        if [ -n "$ip2" ]; then
+          _emit_zone_doh "$_out" "$doh_url" "$ip2" "$tls_host" "$_group_flags" "$_extra"
+        fi
+        ;;
+    esac
+
+    # UDP fallback for this provider
+    if [ "$udp_fb" = "yes" ]; then
+      printf '# %s UDP fallback (group %s)\n' "$provider" "$_cc" >> "$_out"
+      printf 'server %s %s\n' "$ip1" "$_group_flags" >> "$_out"
+      if [ -n "$ip2" ]; then
+        printf 'server %s %s\n' "$ip2" "$_group_flags" >> "$_out"
+      fi
+      printf '\n' >> "$_out"
+    fi
+  done
+}
+
+# Emit a DoT server with group flags.
+# Args: $1=file $2=ip $3=tls_host $4=group_flags $5=extra_flags
+_emit_zone_dot() {
+  local _file="$1" _ip="$2" _host="$3" _grp="$4" _extra="$5"
+  if [ -n "$_extra" ]; then
+    cat >> "$_file" <<EOF
+server-tls ${_ip}:853 ${_grp} \\
+    -host-name ${_host} \\
+    -tls-host-verify ${_host} \\
+    ${_extra}
+EOF
+  else
+    cat >> "$_file" <<EOF
+server-tls ${_ip}:853 ${_grp} \\
+    -host-name ${_host} \\
+    -tls-host-verify ${_host}
+EOF
+  fi
+}
+
+# Emit a DoH server with group flags.
+# Args: $1=file $2=doh_url $3=ip $4=tls_host $5=group_flags $6=extra_flags
+_emit_zone_doh() {
+  local _file="$1" _url="$2" _ip="$3" _host="$4" _grp="$5" _extra="$6"
+  if [ -n "$_extra" ]; then
+    cat >> "$_file" <<EOF
+server-https ${_url} ${_grp} \\
+    -host-name ${_host} \\
+    -http-host ${_host} \\
+    -host-ip ${_ip} \\
+    -tls-host-verify ${_host} \\
+    ${_extra}
+EOF
+  else
+    cat >> "$_file" <<EOF
+server-https ${_url} ${_grp} \\
+    -host-name ${_host} \\
+    -http-host ${_host} \\
+    -host-ip ${_ip} \\
+    -tls-host-verify ${_host}
+EOF
+  fi
+}
+
+# Generate nameserver routing rules for a single zone.
+# Args: $1=output_file $2=cc_code
+_generate_zone_routing() {
+  local _out="$1" _cc="$2"
+
+  printf '# Nameserver routing (%s)\n' "$_cc" >> "$_out"
+
+  # Check if this cc has explicit TLD entries in zone-routing-rules.conf
+  local _has_explicit="no"
+  if [ -f "$ROUTING_RULES" ]; then
+    # Match line starting with "<cc> " (TLD rules, not "+" lines)
+    if grep -q "^${_cc}[[:space:]]" "$ROUTING_RULES"; then
+      _has_explicit="yes"
+    fi
+  fi
+
+  if [ "$_has_explicit" = "yes" ]; then
+    # Use explicit TLD list from rules file
+    local _tlds
+    _tlds="$(grep "^${_cc}[[:space:]]" "$ROUTING_RULES" | sed "s/^${_cc}[[:space:]]*//")"
+    for tld in $_tlds; do
+      printf 'nameserver /%s/%s\n' "$tld" "$_cc" >> "$_out"
+    done
+  else
+    # Implicit rule: only .<cc>
+    printf 'nameserver /.%s/%s\n' "$_cc" "$_cc" >> "$_out"
+  fi
+
+  # Extra domains (CDN geo-optimization): lines starting with "<cc>+"
+  if [ -f "$ROUTING_RULES" ]; then
+    local _extras
+    _extras="$(grep "^${_cc}+" "$ROUTING_RULES" | sed "s/^${_cc}+[[:space:]]*//" || true)"
+    if [ -n "$_extras" ]; then
+      for domain in $_extras; do
+        printf 'nameserver /%s/%s\n' "$domain" "$_cc" >> "$_out"
+      done
+    fi
+  fi
 }
 
 # ===================================================================
@@ -172,14 +318,15 @@ main() {
 
   # Generate international DNS servers config
   generate_other_servers
+  echo "generate-conf: wrote $CONF_SERVERS_OTHER"
+  echo "generate-conf: OTHER_DNS_PROVIDER=$OTHER_DNS_PROVIDER"
   echo "generate-conf: OTHER_DNS_INTERFACES=${OTHER_DNS_INTERFACES:-(direct)}"
 
-  # Generate meta-include for active zones
+  # Generate all-in-one zone config (servers + routing)
   generate_zones_active
 
   if [ -n "$ZONE_DNS_INTERFACE" ] && [ "$ZONE_DNS_INTERFACE" != "default" ]; then
     echo "generate-conf: ZONE_DNS_INTERFACE=$ZONE_DNS_INTERFACE"
-    echo "generate-conf: NOTE: -interface for zone DNS requires manual edit of zone presets"
   fi
 }
 

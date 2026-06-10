@@ -75,6 +75,12 @@ ndmc -c 'system configuration save'
 # Зона — одна страна или гео-союз
 DNS_ZONE="eas"
 
+# International DNS провайдеры (space-separated)
+OTHER_DNS_PROVIDER="google cloudflare"
+
+# Zone DNS провайдеры (space-separated)
+ZONE_DNS_PROVIDER="yandex adguard"
+
 # VPN-интерфейсы для зарубежного DNS (обход MITM)
 OTHER_DNS_INTERFACES=""
 
@@ -95,7 +101,36 @@ ZONE_DNS_INTERFACE=""
 | `cis` | СНГ | ru+by+kz+am+kg+uz+tj+md+az |
 | `brics` | BRICS+ | ru+br+in+cn+za+eg+et+ae+sa+ir |
 | `sco` | ШОС | ru+cn+in+kz+kg+pk+tj+uz+ir+by |
-| ... | [Полный список →](config/unions.conf) | 35+ союзов |
+| ... | [Полный список →](../lib/geo.sh) | 40+ союзов |
+
+### DNS-провайдеры
+
+Провайдеры настраиваются через `OTHER_DNS_PROVIDER` (international) и `ZONE_DNS_PROVIDER` (zone/regional).
+
+**International** (`OTHER_DNS_PROVIDER`):
+
+| Значение | Провайдер | Протокол |
+|----------|-----------|----------|
+| `google` | Google Public DNS | DoH |
+| `cloudflare` | Cloudflare | DoH |
+| `quad9` | Quad9 (malware filter) | DoT |
+| `quad9uf` | Quad9 Unfiltered | DoT |
+| `mullvad` | Mullvad (no-log) | DoH |
+| `mullvad_adblock` | Mullvad + adblock | DoH |
+| `controld` | ControlD Free | DoH |
+| `adguard` | AdGuard (ads filter) | DoH |
+
+**Zone/Regional** (`ZONE_DNS_PROVIDER`):
+
+| Значение | Провайдер | Протокол | Регион |
+|----------|-----------|----------|--------|
+| `yandex` | Yandex DNS | DoT+UDP | RU/CIS |
+| `yandex_safe` | Yandex Safe | DoT+UDP | RU/CIS |
+| `yandex_family` | Yandex Family | DoT+UDP | RU/CIS |
+| `adguard` | AdGuard Unfiltered | DoT | RU/CIS |
+| `adguard_ads` | AdGuard Default | DoT | RU/CIS |
+| `alidns` | AliDNS | DoT+UDP | China |
+| `tencent` | Tencent DNSPod | DoT+UDP | China |
 
 ### Применение изменений
 
@@ -108,11 +143,21 @@ ZONE_DNS_INTERFACE=""
 **ЕАЭС (по умолчанию):**
 ```sh
 DNS_ZONE="eas"
+OTHER_DNS_PROVIDER="google cloudflare"
+ZONE_DNS_PROVIDER="yandex adguard"
 ```
 
-**Только Россия:**
+**Только Россия + Quad9:**
 ```sh
 DNS_ZONE="ru"
+OTHER_DNS_PROVIDER="quad9"
+ZONE_DNS_PROVIDER="yandex"
+```
+
+**Китай (AliDNS + Tencent):**
+```sh
+DNS_ZONE="cn"
+ZONE_DNS_PROVIDER="alidns tencent"
 ```
 
 **International DNS через VPN (обход MITM):**
@@ -153,13 +198,9 @@ smartdns-geo-conf/
 ├── config/
 │   ├── config.conf            # 🔧 пользовательская настройка
 │   ├── defaults.conf          # значения по умолчанию
-│   ├── unions.conf            # справочник гео-союзов (35+)
-│   ├── zones/                 # пресеты DNS по странам
-│   │   ├── ru.conf
-│   │   ├── by.conf
-│   │   ├── kz.conf
-│   │   ├── am.conf
-│   │   └── kg.conf
+│   ├── dns-providers.conf     # каталог DNS-провайдеров (15 шт)
+│   ├── zone-routing-rules.conf # IDN TLDs + extra CDN-домены (80+ стран)
+│   ├── test-domains.conf      # тестовые домены для status.sh
 │   ├── smartdns.conf          # шаблон split-DNS режима
 │   └── smartdns-default.conf  # шаблон default режима
 ├── init.d/
@@ -172,8 +213,15 @@ smartdns-geo-conf/
     └── user-manual.ru.md
 ```
 
-## Добавление нового пресета зоны
+## Добавление домена в зону
 
-1. Создать `config/zones/<cc>.conf` (серверы + nameserver rules)
-2. При необходимости добавить union в `config/unions.conf`
-3. `/opt/etc/init.d/S37smartdns-conf restart`
+To add extra domains to a zone's DNS routing (e.g. for CDN optimization):
+
+1. Edit `config/zone-routing-rules.conf` — add domain to the appropriate country section
+2. `/opt/etc/init.d/S37smartdns-conf restart`
+
+Example (add `example.com` to RU zone):
+```conf
+# In zone-routing-rules.conf, under [extra:ru] section:
+example.com
+```

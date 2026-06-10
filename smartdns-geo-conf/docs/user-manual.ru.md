@@ -8,14 +8,15 @@
 
 | Зона | DNS-серверы | Протокол |
 |------|-------------|----------|
-| Настраиваемые зоны (RU, ЕАЭС, СНГ, BRICS…) | Региональные (Yandex, AdGuard) | DoT + UDP fallback |
-| Всё остальное (international) | Google, Cloudflare | DoH (HTTPS/443) |
+| Настраиваемые зоны (RU, ЕАЭС, СНГ, BRICS…) | Региональные (настраиваемые) | DoT + UDP fallback |
+| Всё остальное (international) | International (настраиваемые) | DoH (HTTPS/443) |
 
 ### Зачем это нужно
 
 - **Скорость для локальных доменов** — ответы от ближайших CDN-узлов через региональные DNS
 - **Защита от DNS-манипуляций** для зарубежных доменов — шифрованные запросы через HTTPS/443
-- **Гибкость** — любая комбинация стран или гео-союзов (35+ предустановлено)
+- **Гибкость** — любая комбинация стран или гео-союзов (40+ предустановлено)
+- **Выбор провайдеров** — 15 DNS-провайдеров в каталоге (Google, Cloudflare, Quad9, Mullvad, Yandex, AliDNS…)
 
 ---
 
@@ -112,7 +113,7 @@ dig ya.ru +short
 
 ## Настройка
 
-### Конфигурация зон и интерфейсов
+### Конфигурация зон и провайдеров
 
 Файл: `/opt/keenetic-entware-extras/smartdns-geo-conf/config/config.conf`
 
@@ -121,6 +122,12 @@ dig ya.ru +short
 ```sh
 # Зона — одна страна или гео-союз
 DNS_ZONE="eas"
+
+# International DNS провайдеры (через пробел)
+OTHER_DNS_PROVIDER="google cloudflare"
+
+# Региональные DNS провайдеры (через пробел)
+ZONE_DNS_PROVIDER="yandex adguard"
 
 # VPN-интерфейсы для зарубежного DNS (обход MITM)
 OTHER_DNS_INTERFACES=""
@@ -142,9 +149,69 @@ ZONE_DNS_INTERFACE=""
 | `cis` | СНГ | ru+by+kz+am+kg+uz+tj+md+az |
 | `brics` | BRICS+ | ru+br+in+cn+za+eg+et+ae+sa+ir |
 | `sco` | ШОС | ru+cn+in+kz+kg+pk+tj+uz+ir+by |
-| ... | [Полный список](../config/unions.conf) | 35+ союзов |
+| ... | [Полный список](../../lib/geo.sh) | 40+ союзов |
 
-> 📝 Активируются только зоны с пресетом `config/zones/<cc>.conf`. Отсутствующие — пропускаются с предупреждением.
+> 📝 Зона определяет набор стран. Для каждой страны автоматически генерируются nameserver-правила на основе IDN TLD (из `zone-routing-rules.conf`).
+
+### Выбор DNS-провайдера
+
+DNS-провайдеры настраиваются через две переменные:
+
+- **`OTHER_DNS_PROVIDER`** — провайдеры для international (зарубежных) запросов
+- **`ZONE_DNS_PROVIDER`** — провайдеры для региональных запросов (зона)
+
+Можно указать несколько провайдеров через пробел — SmartDNS опросит все параллельно.
+
+#### International провайдеры (`OTHER_DNS_PROVIDER`)
+
+| Значение | Провайдер | Протокол | Особенности |
+|----------|-----------|----------|-------------|
+| `google` | Google Public DNS | DoH | Быстрый, глобальный anycast |
+| `cloudflare` | Cloudflare 1.1.1.1 | DoH | Быстрый, privacy-focused |
+| `quad9` | Quad9 | DoT | Фильтрация malware |
+| `quad9uf` | Quad9 Unfiltered | DoT | Без фильтрации |
+| `mullvad` | Mullvad DNS | DoH | No-log, privacy |
+| `mullvad_adblock` | Mullvad + Adblock | DoH | No-log + блокировка рекламы |
+| `controld` | ControlD Free | DoH | Быстрый, без фильтрации |
+| `adguard` | AdGuard DNS | DoH | Блокировка рекламы/трекеров |
+
+#### Региональные провайдеры (`ZONE_DNS_PROVIDER`)
+
+| Значение | Провайдер | Протокол | Регион |
+|----------|-----------|----------|--------|
+| `yandex` | Yandex DNS (базовый) | DoT + UDP | RU/СНГ |
+| `yandex_safe` | Yandex Safe | DoT + UDP | RU/СНГ, фильтрация malware |
+| `yandex_family` | Yandex Family | DoT + UDP | RU/СНГ, семейный фильтр |
+| `adguard` | AdGuard Unfiltered | DoT | RU/СНГ |
+| `adguard_ads` | AdGuard Default | DoT | RU/СНГ, блокировка рекламы |
+| `alidns` | AliDNS | DoT + UDP | Китай |
+| `tencent` | Tencent DNSPod | DoT + UDP | Китай |
+
+#### Примеры выбора провайдера
+
+**По умолчанию (RU/ЕАЭС):**
+```sh
+OTHER_DNS_PROVIDER="google cloudflare"
+ZONE_DNS_PROVIDER="yandex adguard"
+```
+
+**Privacy-focused (Mullvad + Quad9):**
+```sh
+OTHER_DNS_PROVIDER="mullvad quad9"
+ZONE_DNS_PROVIDER="yandex"
+```
+
+**Китайская зона:**
+```sh
+DNS_ZONE="cn"
+ZONE_DNS_PROVIDER="alidns tencent"
+```
+
+**С блокировкой рекламы:**
+```sh
+OTHER_DNS_PROVIDER="mullvad_adblock"
+ZONE_DNS_PROVIDER="adguard_ads"
+```
 
 ### Применение изменений
 
@@ -163,21 +230,24 @@ ZONE_DNS_INTERFACE=""
 
 | Группа | Серверы | Протокол | Для чего |
 |--------|---------|----------|----------|
-| `ru` | Yandex, AdGuard | DoT + UDP | .ru/.рф/.su + российские .com |
-| `by`, `kz`, `am`, `kg` | Yandex (+ AdGuard для BY/KZ) | DoT + UDP | Домены соотв. страны |
-| `default` | Google, Cloudflare | DoH | Всё остальное (international) |
+| `zone` | Настраиваемые (`ZONE_DNS_PROVIDER`) | DoT + UDP | Домены из выбранной зоны |
+| `default` | Настраиваемые (`OTHER_DNS_PROVIDER`) | DoH | Всё остальное (international) |
 
 ### Добавить домен в зону
 
-Если нужно направить DNS-запросы домена через зону (для получения ближайшего CDN-IP):
+Если нужно направить DNS-запросы домена через региональный DNS (для получения ближайшего CDN-IP):
 
 ```sh
-vi /opt/keenetic-entware-extras/smartdns-geo-conf/config/zones/ru.conf
+vi /opt/keenetic-entware-extras/smartdns-geo-conf/config/zone-routing-rules.conf
 ```
 
-Добавить:
+Найти секцию `[extra:<cc>]` для нужной страны и добавить домен:
 ```conf
-nameserver /example.com/ru
+[extra:ru]
+vk.com
+yandex.com
+mail.ru
+example.com    # ← добавить сюда
 ```
 
 Применить:
@@ -185,12 +255,7 @@ nameserver /example.com/ru
 /opt/etc/init.d/S37smartdns-conf restart
 ```
 
-### Добавить новый пресет страны
-
-1. Создать `config/zones/<cc>.conf` по образцу (`ru.conf`)
-2. Добавить union в `config/unions.conf` (опционально)
-3. Изменить `DNS_ZONE` в `config.conf`
-4. `/opt/etc/init.d/S37smartdns-conf restart`
+> 📝 Домены из секции `[extra:<cc>]` маршрутизируются через региональный DNS той страны, к которой привязана секция.
 
 ### Параметры кэша
 
@@ -216,7 +281,7 @@ nameserver /example.com/ru
 # Включить split-DNS
 /opt/etc/init.d/S37smartdns-conf enable
 
-# Отключить (простой форвардер, всё → Google/CF)
+# Отключить (простой форвардер, всё → international DNS)
 /opt/etc/init.d/S37smartdns-conf disable
 
 # Проверить текущий режим
@@ -231,7 +296,7 @@ nameserver /example.com/ru
 | Режим | Описание |
 |-------|----------|
 | **split-DNS** (по умолч.) | Зоны → региональные DNS, остальное → международные DoH |
-| **default** | Всё → Google/CF DoH (без разделения) |
+| **default** | Всё → international DNS (без разделения) |
 
 > 📝 При переключении SmartDNS перезапускается фоново. Порты (:6053, :6153) остаются теми же — smartdns-redirect и geo-split продолжают работать.
 
@@ -259,7 +324,7 @@ smartdns-geo-conf status: ✓ Alive
 
   System:
     Uptime:      2h 15m 30s ✓
-    Version:     0.5.0
+    Version:     0.8.0
 
   DNS Tests:
     ya.ru:         5.255.255.242 (ru-group) ✓
@@ -276,10 +341,10 @@ smartdns-geo-conf status: ✓ Alive
 ### DNS-тесты вручную
 
 ```sh
-# RU домен (должен идти через ru-группу)
+# RU домен (должен идти через zone-группу)
 dig ya.ru @127.0.0.1 -p 6053 +short
 
-# Российский .com (должен идти через ru-группу)
+# Российский .com (должен идти через zone-группу)
 dig vk.com @127.0.0.1 -p 6053 +short
 
 # Зарубежный домен (через default-группу, DoH)
@@ -339,7 +404,7 @@ dmesg | grep smartdns
 
 ### Как это работает
 
-SmartDNS отправляет DNS-запросы к международным серверам (Google, Cloudflare) через указанные VPN-интерфейсы параллельно. Первый ответ побеждает. Если все VPN недоступны — автоматический fallback на прямое соединение.
+SmartDNS отправляет DNS-запросы к международным серверам через указанные VPN-интерфейсы параллельно. Первый ответ побеждает. Если все VPN недоступны — автоматический fallback на прямое соединение.
 
 ### Пример: два VPN для redundancy
 
@@ -347,9 +412,9 @@ SmartDNS отправляет DNS-запросы к международным �
 OTHER_DNS_INTERFACES="nwg3 nwg4"
 ```
 
-- `nwg3`: Google DoH 8.8.8.8 через VPN1
-- `nwg4`: Cloudflare DoH 1.0.0.1 через VPN2
-- Fallback: Google + Cloudflare напрямую (без VPN)
+- `nwg3`: DNS через VPN1
+- `nwg4`: DNS через VPN2
+- Fallback: напрямую (без VPN)
 
 ---
 
@@ -360,7 +425,7 @@ opkg upgrade smartdns-geo-conf
 ```
 
 Пользовательская конфигурация (`config/config.conf`) сохраняется при обновлении (conffile).
-Пресеты зон и unions.conf обновляются до новой версии.
+Data-файлы (`dns-providers.conf`, `zone-routing-rules.conf`) обновляются до новой версии.
 
 ---
 

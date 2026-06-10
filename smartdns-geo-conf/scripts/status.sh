@@ -58,6 +58,8 @@ check_enabled() {
   _ck_zone="${DNS_ZONE:-ru}"
   _ck_active_zones=""
   _ck_other_ifaces="${OTHER_DNS_INTERFACES:-}"
+  _ck_other_provider="${OTHER_DNS_PROVIDER:-google cloudflare}"
+  _ck_zone_provider="${ZONE_DNS_PROVIDER:-yandex adguard}"
   if [ -f "$STATE_FILE" ]; then
     _ck_enabled="true"
   fi
@@ -124,7 +126,7 @@ show_dns_tests() {
     return
   fi
   # Source test domains
-  local test_domains_file="$_CONFIG_DIR/zones/test-domains.conf"
+  local test_domains_file="$_CONFIG_DIR/test-domains.conf"
   if [ -f "$test_domains_file" ]; then
     # shellcheck source=/dev/null
     . "$test_domains_file"
@@ -158,7 +160,7 @@ collect_dns_tests_json() {
     return
   fi
   # Source test domains
-  local test_domains_file="$_CONFIG_DIR/zones/test-domains.conf"
+  local test_domains_file="$_CONFIG_DIR/test-domains.conf"
   if [ -f "$test_domains_file" ]; then
     # shellcheck source=/dev/null
     . "$test_domains_file"
@@ -188,6 +190,59 @@ collect_dns_tests_json() {
   _json_dns_tests="${_json_dns_tests}]"
 }
 
+# Check direct reachability of configured upstream DNS providers.
+# Sets: _json_dns_server_checks (JSON array string)
+collect_dns_server_checks_json() {
+  _json_dns_server_checks="["
+  local first=1
+  if ! command -v dig >/dev/null 2>&1; then
+    _json_dns_server_checks="[]"
+    return
+  fi
+  # Source provider catalog for IP/host lookups
+  local providers_file="$_CONFIG_DIR/dns-providers.conf"
+  if [ ! -f "$providers_file" ]; then
+    _json_dns_server_checks="[]"
+    return
+  fi
+  # shellcheck source=/dev/null
+  . "$providers_file"
+
+  # Check zone providers
+  for p in $_ck_zone_provider; do
+    local ip_var="ZONE_${p}_IP1"
+    local host_var="ZONE_${p}_TLS_HOST"
+    eval "local ip=\"\${${ip_var}:-}\""
+    eval "local host=\"\${${host_var}:-}\""
+    [ -z "$ip" ] && continue
+    local ok="false"
+    if dig +short +time=3 +tries=1 "test.local" @"$ip" >/dev/null 2>&1; then
+      ok="true"
+    fi
+    [ "$first" -eq 0 ] && _json_dns_server_checks="${_json_dns_server_checks},"
+    _json_dns_server_checks="${_json_dns_server_checks}{\"provider\":\"$p\",\"group\":\"zone\",\"host\":\"${host:-$ip}\",\"ok\":$ok}"
+    first=0
+  done
+
+  # Check other (international) providers
+  for p in $_ck_other_provider; do
+    local ip_var="OTHER_${p}_IP1"
+    local host_var="OTHER_${p}_TLS_HOST"
+    eval "local ip=\"\${${ip_var}:-}\""
+    eval "local host=\"\${${host_var}:-}\""
+    [ -z "$ip" ] && continue
+    local ok="false"
+    if dig +short +time=3 +tries=1 "test.local" @"$ip" >/dev/null 2>&1; then
+      ok="true"
+    fi
+    [ "$first" -eq 0 ] && _json_dns_server_checks="${_json_dns_server_checks},"
+    _json_dns_server_checks="${_json_dns_server_checks}{\"provider\":\"$p\",\"group\":\"other\",\"host\":\"${host:-$ip}\",\"ok\":$ok}"
+    first=0
+  done
+
+  _json_dns_server_checks="${_json_dns_server_checks}]"
+}
+
 json_output() {
   printf '{'
   json_kv_bool "running" "$([ "$_st_running" = "true" ] && echo 0 || echo 1)"
@@ -199,6 +254,10 @@ json_output() {
   json_kv "dns_zone" "$_ck_zone"
   printf ','
   json_kv "active_zones" "$_ck_active_zones"
+  printf ','
+  json_kv "zone_dns_provider" "$_ck_zone_provider"
+  printf ','
+  json_kv "other_dns_provider" "$_ck_other_provider"
   printf ','
   json_kv "other_interfaces" "$_ck_other_ifaces"
   printf ','
@@ -221,6 +280,9 @@ json_output() {
 
   # DNS tests array
   printf '"dns_tests":%s,' "$_json_dns_tests"
+
+  # DNS server reachability checks
+  printf '"dns_server_checks":%s,' "$_json_dns_server_checks"
 
   # Checks section: "ok"|"warn"|"fail" per field
   printf '"checks":{'
@@ -250,8 +312,9 @@ check_enabled
 [ "$_ck_config_ok" = "false" ] && STATUS_OK=1
 
 if [ "${1:-}" = "--json" ]; then
-  # Collect DNS test results for JSON
+  # Collect DNS test results and server reachability for JSON
   collect_dns_tests_json
+  collect_dns_server_checks_json
   json_output
   exit "$STATUS_OK"
 fi
@@ -270,8 +333,10 @@ echo "  Service:"
 if [ "$_ck_enabled" = "true" ]; then
   echo "    Mode:        split-DNS (enabled) ✓"
   echo "    Zone:        $_ck_zone → [$_ck_active_zones]"
+  echo "    Zone DNS:    $_ck_zone_provider"
+  echo "    Other DNS:   $_ck_other_provider"
   if [ -n "$_ck_other_ifaces" ]; then
-    echo "    Other: $_ck_other_ifaces"
+    echo "    Other VPN:   $_ck_other_ifaces"
   fi
 else
   echo "    Mode:        default (simple forwarder)"

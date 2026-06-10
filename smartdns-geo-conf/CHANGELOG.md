@@ -5,6 +5,29 @@ All notable changes to `smartdns-geo-conf` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.8.0] — 2026-06-09
+
+### Changed
+- **Dynamic DNS zone generation** — replaced 235 static zone files (`config/zones/*.conf`)
+  with runtime generation from `dns-providers.conf` + `zone-routing-rules.conf`
+- **Configurable DNS providers** — new `OTHER_DNS_PROVIDER` and `ZONE_DNS_PROVIDER`
+  settings in config. Supports: google, cloudflare, quad9, mullvad, controld, adguard (international);
+  yandex, adguard, alidns, tencent (regional/zone)
+- `generate-conf.sh` fully rewritten — dynamic provider lookup, zone routing from rules file
+- `status.sh` — shows Zone DNS / Other DNS providers in text and JSON output
+
+### Added
+- `config/dns-providers.conf` — catalog of 15 DNS providers with IPs, hostnames, protocols
+- `config/zone-routing-rules.conf` — IDN TLDs (30 countries) + extra CDN domains (80+ countries)
+- `OTHER_DNS_PROVIDER` / `ZONE_DNS_PROVIDER` config options (space-separated provider names)
+- **DNS Server Checks** — `status.sh --json` now includes `dns_server_checks` array:
+  direct reachability test for each configured upstream provider (dig @IP, TTL=15s cache)
+
+### Removed
+- `config/zones/` directory (235 static zone files — replaced by dynamic generation)
+- `scripts/generate-zone-presets.sh` (dev-time zone generator, no longer needed)
+- `scripts/patch-zone-labels.py` (emoji label patcher, no longer needed)
+
 ## [0.7.1] - 2026-06-07
 
 ### Changed

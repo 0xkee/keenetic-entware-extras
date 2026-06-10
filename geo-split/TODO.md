@@ -14,6 +14,7 @@
   - Backward compat: нет `config.d/` → single-instance как сейчас (defaults.conf + config.conf)
   - Core scripts (attach/detach/update-*) — без изменений, уже параметризированы через конфиг
 - [ ] **Мониторинг** — периодическая проверка доступности OZON/критичных доменов через cron; алерт при маршрутных аномалиях
+- [ ] **Exclude-список для IP-маршрутизации** — возможность исключить домен из geo-split обработки (трафик пойдёт по дефолтному маршруту, напр. VPN). Реализация: файл `lists/exclude.txt` (один домен на строку), `update-domains.sh` фильтрует exclude перед резолвом. Use case: домен из `ru-whitelist.txt` который нужно пускать через VPN. Фидбэк: cryoPanda, форум Keenetic (2026-06-09).
 - [x] кешировать последний удачный iface для subnet loader и начинать с него
 - [x] сгенерировать белый список для ru (из белого списка ркн)
 - [x] **Деплой .ipk на router-2** — установить keenetic-entware-extras + geo-split через opkg

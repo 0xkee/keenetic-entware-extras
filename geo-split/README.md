@@ -5,9 +5,9 @@
 Split routing для Keenetic/Entware — маршрутизация трафика по GeoIP-подсетям и спискам доменов через разные сетевые интерфейсы.
 
 Типичные сценарии:
-- 🇷🇺 **RU → ISP:** российские подсети идут напрямую через провайдера, остальной трафик — через VPN
+- 🇷🇺 **ЕАЭС → ISP:** подсети ЕАЭС (RU+BY+KZ+AM+KG) идут через провайдера, остальное — через VPN
 - 🔒 **Selected → VPN:** определённые подсети/домены маршрутизируются в VPN-туннель
-- 🌍 **GeoIP split:** автоматическое разделение трафика по гео-принадлежности IP
+- 🌍 **Multi-zone:** любая комбинация стран или союзов (СНГ, BRICS, EU и др.) — 232 зоны, 40+ объединений
 
 ## Установка
 
@@ -132,13 +132,16 @@ Hook слушает интерфейс в зависимости от `ROUTE_OUT
 
 | Параметр | По умолчанию | Описание |
 |----------|-------------|----------|
+| `GEO_ZONE` | `"eas"` | Гео-зона: ISO 3166-1 код (ru, cn) или союз (eas, cis, brics). См. `lib/geo.sh` |
 | `ROUTE_OUT` | `"auto"` | Целевой исходящий интерфейс. `auto` = ISP из default route |
+| `ROUTE_GW` | `"auto"` | Шлюз: `auto` = detect, `none` = dev-only, или явный IP |
 | `ROUTE_IN` | `"br0"` | Входные LAN-интерфейсы (через пробел) |
 | `DOMAIN_ROUTE_TABLE` | `"1000"` | Routing table для доменов (/32 host routes) |
 | `DOMAIN_RULE_PRIORITY` | `"50"` | Priority ip rule для domain table |
 | `SUBNET_ROUTE_TABLE` | `"1001"` | Routing table для GeoIP подсетей (CIDR) |
 | `SUBNET_RULE_PRIORITY` | `"51"` | Priority ip rule для subnet table |
-| `SUBNET_URL` | `ipdeny.com/...ru.zone` | URL для скачивания подсетей |
+| `SUBNET_URL_PATTERN` | `ipdeny.com/…/{cc}.zone` | URL-шаблон для скачивания подсетей (`{cc}` = код страны) |
+| `SUBNET_URL` | `""` | Переопределение URL (legacy): игнорирует GEO_ZONE |
 | `SUBNET_LOADER` | `"cidr-plain"` | Загрузчик из каталога `loaders/` |
 | `SUBNET_AGGREGATE` | `1` | Агрегация CIDR (1 = включена, требует `aggregate`) |
 | `MAX_CACHE_AGE` | `604800` | Макс. возраст кэша подсетей, секунды (7 дней) |
@@ -151,19 +154,26 @@ Hook слушает интерфейс в зависимости от `ROUTE_OUT
 
 ### Примеры конфигурации
 
-**RU → ISP — GEO-трафик через конкретный ISP-интерфейс:**
+**ЕАЭС → ISP (по умолчанию, конфиг не нужен):**
 ```sh
-ROUTE_OUT="lte_br0"
+GEO_ZONE="eas"
+ROUTE_OUT="auto"
 ```
 
-**VPN — GEO-трафик через WireGuard:**
+**Только Россия:**
 ```sh
+GEO_ZONE="ru"
+```
+
+**СНГ через VPN (доступ к RU-сервисам из-за рубежа):**
+```sh
+GEO_ZONE="cis"
 ROUTE_OUT="nwg0"
 ```
 
-**Auto — автоопределение ISP (рекомендуется):**
+**GEO-трафик через конкретный ISP-интерфейс:**
 ```sh
-ROUTE_OUT="auto"
+ROUTE_OUT="lte_br0"
 ```
 
 **Несколько LAN-интерфейсов (домашняя + гостевая сеть):**

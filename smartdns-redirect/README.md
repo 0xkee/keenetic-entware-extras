@@ -42,7 +42,9 @@ opkg install /tmp/smartdns-redirect_<ver>_all.ipk
 
 ## Конфигурация
 
-Файл: `/opt/keenetic-entware-extras/smartdns-redirect/config/smartdns-redirect.conf` (помечен `conffile` — пользовательские правки сохраняются при обновлении пакета).
+Файл: `/opt/keenetic-entware-extras/smartdns-redirect/config/config.conf`
+
+> 📝 В `config.conf` указывайте только параметры, отличающиеся от дефолтных (`defaults.conf`). Файл не создаётся автоматически — создайте вручную при необходимости. При обновлении пакета `defaults.conf` обновляется, а `config.conf` не затрагивается.
 
 ```sh
 UPSTREAM_PORT=6053         # SmartDNS=6053, AGH=5353, Unbound=5335

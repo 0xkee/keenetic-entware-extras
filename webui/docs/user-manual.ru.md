@@ -183,18 +183,19 @@ curl -X POST http://192.168.1.1:8080/api/geo-split/update-subnets
 ```
 nginx-webui status: ✓ Alive
   Service:
-    Process:     running (pid 1234 via pidfile, RSS 2048kB) ✓
+    Process:     running (pid 2133 via pidfile, RSS 1252kB) ✓
     Config:      /opt/keenetic-entware-extras/webui/config/nginx.conf ✓
     Listen conf: /opt/keenetic-entware-extras/webui/config/listen.conf ✓
     Lua module:  /opt/lib/nginx/modules/ngx_http_lua_module.so ✓
-    Port:        :8080 listening ✓
+    Ports:       192.168.1.1:8080 ✓
+                 127.0.0.1:8080 ✓
 
   HTTP:
     Static:      GET / → 200 ✓
     API:         GET /api/system/info → 200 ✓
 
   Upstream:
-    Stock httpd: http://192.168.1.1:80 → 200 ✓
+    Stock httpd: 192.168.1.1:80 → listening ✓
 
   Logrotate:
     Binary:      /opt/sbin/logrotate ✓
@@ -202,8 +203,8 @@ nginx-webui status: ✓ Alive
     Cron daily:  /opt/etc/cron.daily/logrotate ✓
 
   System:
-    Uptime:      5d 3h 12m ✓
-    Version:     0.11.1
+    Uptime:      2d 5h ✓
+    Version:     0.24.1
 ```
 
 **JSON-вывод:**

@@ -207,10 +207,10 @@ smartdns-redirect status: ✓ Alive
     v4   tcp    br0 → :6053 ✓
 
   Upstream probe:
-    UDP :6053: listening (0.0.0.0:6053) ✓
+    UDP :6053: listening (192.168.1.1:6053 127.0.0.1:6053) ✓
 
   System:
-    Uptime:      5d 3h ✓
+    Uptime:      2d 5h ✓
     Init:        /opt/etc/init.d/S39smartdns-redirect ✓
     NDM hook:    /opt/etc/ndm/netfilter.d/smartdns-redirect-hook ✓
     Version:     0.3.1

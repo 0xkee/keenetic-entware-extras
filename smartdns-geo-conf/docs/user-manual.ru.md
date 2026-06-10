@@ -316,21 +316,28 @@ example.com    # ← добавить сюда
 smartdns-geo-conf status: ✓ Alive
   Service:
     Mode:        split-DNS (enabled) ✓
-    Process:     running (pid 4921 via pidfile, RSS 5764kB) ✓
-    Ports:       0.0.0.0:6053 ✓
-                 0.0.0.0:6153 ✓
-    Config:      /opt/etc/smartdns/smartdns.conf (14 servers, 10 rules) ✓
-    Cache:       1.2M (/opt/var/cache/smartdns.cache) ✓
+    Zone:        eas → [ru by kz am kg]
+    Zone DNS:    yandex adguard
+    Other DNS:   google cloudflare
+    Other VPN:   —
+    Process:     running (pid 2035 via pidfile, RSS 10132kB) ✓
+    Ports:       192.168.1.1:6053 ✓
+                 127.0.0.1:6053 ✓
+                 127.0.0.1:6153 ✓
+    Config:      /opt/etc/smartdns/smartdns.conf (81 servers, 47 rules) ✓
+    Cache:       48.0K (/opt/var/cache/smartdns.cache) ✓
 
   System:
-    Uptime:      2h 15m 30s ✓
+    Uptime:      2d 5h ✓
     Version:     0.8.0
 
   DNS Tests:
     ya.ru:         5.255.255.242 (ru-group) ✓
-    vk.com:        87.240.132.78 (ru-group (.com→ru)) ✓
-    google.com:    142.250.150.100 (default-group) ✓
-    github.com:    140.82.121.4 (default-group) ✓
+    onliner.by:    178.124.129.12 (by-group) ✓
+    kaspi.kz:      194.187.245.10 (kz-group) ✓
+    news.am:       8.47.69.0 (am-group) ✓
+    akipress.kg:   212.42.122.2 (kg-group) ✓
+    google.com:    142.251.143.142 (default-group) ✓
 ```
 
 **JSON-вывод** (для автоматизации):

@@ -10,7 +10,7 @@ GeoIP subnet data and domain lists for [geo-split](../geo-split/).
 |------|-------------|
 | `lists/domains.txt` | Curated domain list (conffile — opkg won't overwrite) |
 | `lists/ru-whitelist.txt` | RU whitelist: 100+ domains (госуслуги, банки, стриминг и др.) |
-| `lists/geoip/*.zone` | Pre-built country IP subnets from [ipdeny.com](https://www.ipdeny.com) |
+| `lists/geoip/*.zone` | Pre-built country IP subnets (232 zones from [ipdeny.com](https://www.ipdeny.com)) |
 | `scripts/fetch-zones.sh` | Download & aggregate zone files (build-time script) |
 
 ## Установка
@@ -31,11 +31,13 @@ opkg install /tmp/geo-split-data_<ver>_all.ipk
     domains.txt
     ru-whitelist.txt
     geoip/
-      ru.zone          ← Russia
+      ru.zone          ← Russia (~13K CIDRs)
       by.zone          ← Belarus
       kz.zone          ← Kazakhstan
-      am.zone          ← Armenia
-      kg.zone          ← Kyrgyzstan
+      cn.zone          ← China
+      us.zone          ← United States
+      de.zone          ← Germany
+      ...              ← 232 зоны всего
 ```
 
 ## Zone files
@@ -43,10 +45,10 @@ opkg install /tmp/geo-split-data_<ver>_all.ipk
 Zone files are fetched from ipdeny.com during package build (`scripts/fetch-zones.sh`).
 CIDRs are aggregated (merged overlapping/adjacent) to reduce route count.
 
-Included zones (EAEU countries): `ru`, `by`, `kz`, `am`, `kg`.
+**232 zone files included** — all countries with registered IP address blocks.
 
-By default, geo-split uses `ru.zone`. To use a different zone, change `SUBNET_URL`
-or `SUBNET_LIST_FILE` in `geo-split/config/config.conf`.
+By default, geo-split uses `GEO_ZONE="eas"` (ЕАЭС: ru+by+kz+am+kg).
+To use a different zone, change `GEO_ZONE` in `geo-split/config/config.conf`.
 
 ### Manual fetch
 

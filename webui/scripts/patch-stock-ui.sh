@@ -126,11 +126,22 @@ fi
 # takes 2-3x longer on MIPS. One-time cost at service start, not per-request.
 # -k: keep original (nginx falls back to uncompressed for clients without gzip).
 # -f: overwrite existing .gz (safe for restart/reboot).
-for f in "$CACHE"/*.js "$CACHE"/*.css; do
+
+# Stock UI: only large bundle files (main-*, polyfills-*, styles-*)
+GZ_COUNT=0
+for f in "$CACHE"/main-*.js "$CACHE"/polyfills-*.js "$CACHE"/styles-*.css; do
     [ -f "$f" ] || continue
     gzip -6 -k -f "$f"
+    GZ_COUNT=$((GZ_COUNT + 1))
 done
-GZ_COUNT=$(find "$CACHE" -name '*.gz' | wc -l)
+
+# Custom dashboard: all JS/CSS in webui/static/
+STATIC_DIR="$PROJECT_DIR/webui/static"
+for f in "$STATIC_DIR"/*.js "$STATIC_DIR"/*.css; do
+    [ -f "$f" ] || continue
+    gzip -6 -k -f "$f"
+    GZ_COUNT=$((GZ_COUNT + 1))
+done
 log "gzip_static: pre-compressed $GZ_COUNT files"
 
 # Success: disable cleanup trap (keep cache)

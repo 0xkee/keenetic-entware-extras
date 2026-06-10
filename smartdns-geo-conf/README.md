@@ -42,20 +42,28 @@ opkg install /tmp/smartdns-geo-conf_<ver>_all.ipk
 # Результат: dist/smartdns-geo-conf_<ver>_all.ipk
 ```
 
-## Настройка Keenetic
+## Направить DNS-трафик на SmartDNS
 
-После установки пакета нужно перенаправить DNS Keenetic на SmartDNS.
+После установки нужно направить DNS-запросы клиентов на SmartDNS. Два варианта:
 
-> **Важно:** Если в Keenetic настроены DoT/DoH серверы (dns-proxy tls/https) — ndnproxy будет использовать их и **игнорировать** plain DNS, включая SmartDNS. Сначала удалите все DoT/DoH.
+### Вариант A: smartdns-redirect (рекомендуется)
 
-**Через CLI (SSH/Telnet):**
+Установить пакет [`smartdns-redirect`](../smartdns-redirect/) — он автоматически перехватывает DNS-запросы с LAN через iptables DNAT. Изменение настроек Keenetic (DNS, DoT/DoH) **не требуется**.
 
 ```sh
-# 1. Удалить все DoT/DoH серверы (обязательно!)
+opkg install /tmp/smartdns-redirect_<ver>_all.ipk
+```
+
+### Вариант B: ручная настройка Keenetic DNS
+
+Если не хотите DNAT-перехват:
+
+> ⚠️ **Важно:** Если в Keenetic настроены DoT/DoH серверы (dns-proxy tls/https) — ndnproxy будет использовать их и **игнорировать** plain DNS, включая SmartDNS. Сначала удалите все DoT/DoH.
+
+```sh
+# 1. Удалить все DoT/DoH серверы (обязательно при варианте B!)
 ndmc -c 'no dns-proxy tls upstream 1.1.1.1'
-ndmc -c 'no dns-proxy tls upstream 1.0.0.1'
 ndmc -c 'no dns-proxy https upstream https://1.1.1.1/dns-query'
-ndmc -c 'no dns-proxy https upstream https://8.8.8.8/dns-query'
 # ... (удалить все свои DoT/DoH записи)
 
 # 2. Добавить SmartDNS как DNS-сервер
@@ -65,7 +73,7 @@ ndmc -c 'ip name-server <IP роутера>:6053'
 ndmc -c 'system configuration save'
 ```
 
-**Или через веб-интерфейс:** Интернет-фильтры → DNS → убрать все DoT/DoH серверы, добавить `<IP роутера>:6053`.
+**Или через веб-интерфейс:** *Интернет-фильтры → DNS* → убрать все DoT/DoH серверы, добавить `<IP роутера>:6053`.
 
 ## Конфигурация зон
 

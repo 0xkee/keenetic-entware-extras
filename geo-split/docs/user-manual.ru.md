@@ -8,9 +8,9 @@
 
 | Сценарий | Описание |
 |----------|----------|
-| 🇷🇺 RU → ISP | Российские подсети идут напрямую через провайдера, остальное — через VPN |
+| 🇷🇺 ЕАЭС → ISP | Подсети ЕАЭС (RU+BY+KZ+AM+KG) идут через провайдера, остальное — через VPN |
 | 🔒 Selected → VPN | Определённые подсети/домены отправляются в VPN-туннель |
-| 🌍 GeoIP split | Автоматическое разделение трафика по гео-принадлежности IP-адресов |
+| 🌍 Multi-zone | Любая комбинация стран или союзов (СНГ, BRICS, EU, 232 зоны, 40+ объединений) |
 
 ---
 
@@ -143,14 +143,51 @@ vi /opt/keenetic-entware-extras/geo-split/config/config.conf
 | `"br0"` (по умолч.) | Только домашняя сеть |
 | `"br0 br1"` | Домашняя + гостевая сеть |
 
+### GEO-зона (multi-zone)
+
+Главный параметр, определяющий **какие страны** маршрутизировать:
+
+| Параметр | По умолч. | Описание |
+|----------|-----------|----------|
+| `GEO_ZONE` | `"eas"` | Зона: код страны ISO 3166-1 (ru, cn, us…) или союз (eas, cis, brics…) |
+
+`GEO_ZONE` определяет набор стран, чьи IP-подсети загружаются и маршрутизируются. Все 240+ зон предзагружены в `geo-split-data/lists/geoip/<cc>.zone`.
+
+**Отдельные страны** — любой ISO 3166-1 alpha-2 код:
+
+| Значение | Страна |
+|----------|--------|
+| `"ru"` | 🇷🇺 Россия |
+| `"cn"` | 🇨🇳 Китай |
+| `"us"` | 🇺🇸 США |
+| `"de"` | 🇩🇪 Германия |
+
+**Объединения** (подсети всех стран объединяются в один маршрутный набор):
+
+| Значение | Описание | Страны |
+|----------|----------|--------|
+| `"eas"` | ЕАЭС | ru, by, kz, am, kg |
+| `"cis"` | СНГ | ru, by, kz, am, kg, uz, tj, md, az |
+| `"postsov"` | Постсоветские (все 15) | ru, by, kz, am, kg, uz, tj, tm, md, az, ua, ge, ee, lv, lt |
+| `"brics"` | BRICS+ | ru, br, in, cn, za, eg, et, ae, sa, ir |
+| `"sco"` | ШОС | ru, cn, in, kz, kg, pk, tj, uz, ir, by |
+| `"eu"` | Евросоюз (EU-27) | de, fr, it, es, pl, nl… |
+| `"europe"` | Вся Европа | 45 стран |
+| `"asia"` | Азия | 48 стран |
+
+> 📝 Полный список 40+ объединений: `lib/geo.sh`.
+
 ### Настройка подсетей
 
 | Параметр | По умолч. | Описание |
 |----------|-----------|----------|
-| `SUBNET_URL` | ipdeny.com/ru.zone | URL для скачивания GeoIP-подсетей |
+| `SUBNET_URL_PATTERN` | `ipdeny.com/…/{cc}.zone` | URL-шаблон для скачивания подсетей (`{cc}` → код страны) |
+| `SUBNET_URL` | `""` (не задан) | Переопределение: если задан — игнорирует GEO_ZONE, скачивает один URL |
 | `SUBNET_LOADER` | `"cidr-plain"` | Загрузчик: `cidr-plain` или `ripe-json` |
 | `SUBNET_AGGREGATE` | `1` | Агрегация CIDR (1=вкл, 0=выкл) |
 | `MAX_CACHE_AGE` | `604800` (7 дней) | Макс. возраст кэша подсетей (сек) |
+
+> 📝 При использовании `GEO_ZONE` подсети берутся из локальных файлов `geo-split-data/lists/geoip/<cc>.zone` (предзагружены). Если локальный файл отсутствует или устарел — скачивается по `SUBNET_URL_PATTERN`.
 
 ### Настройка доменов
 
@@ -179,41 +216,59 @@ vi /opt/keenetic-entware-extras/geo-split/config/config.conf
 
 ### Примеры конфигурации
 
-**Сценарий 1: RU → ISP (по умолчанию, конфиг не нужен)**
+**Сценарий 1: ЕАЭС → ISP (по умолчанию, конфиг не нужен)**
 
-Российские подсети идут через ISP, остальной трафик — через VPN. Автоопределение ISP:
+Подсети стран ЕАЭС (RU+BY+KZ+AM+KG) идут через ISP, остальной — через VPN:
 ```sh
 # config.conf — пустой или:
+GEO_ZONE="eas"
 ROUTE_OUT="auto"
 ```
 
-**Сценарий 2: RU-зона через VPN-туннель**
+**Сценарий 2: Только Россия → ISP**
 
-Направить российские подсети через VPN (например, для доступа к RU-сервисам из-за рубежа):
+Маршрутизировать только российские подсети:
 ```sh
+GEO_ZONE="ru"
+```
+
+**Сценарий 3: СНГ-зона через VPN-туннель**
+
+Направить подсети СНГ через VPN (доступ к RU-сервисам из-за рубежа):
+```sh
+GEO_ZONE="cis"
 ROUTE_OUT="nwg0"
 ```
 
-**Сценарий 3: GEO-трафик через конкретный LTE-интерфейс**
+**Сценарий 4: BRICS+ → ISP (широкая зона)**
+
+Маршрутизировать трафик в страны BRICS+ через провайдера:
+```sh
+GEO_ZONE="brics"
+```
+
+**Сценарий 5: GEO-трафик через конкретный LTE-интерфейс**
 ```sh
 ROUTE_OUT="lte_br0"
 ```
 
-**Сценарий 4: Домашняя + гостевая сеть**
+**Сценарий 6: Домашняя + гостевая сеть**
 ```sh
 ROUTE_IN="br0 br1"
 ```
 
-**Сценарий 5: Отключить резолвинг доменов (только подсети)**
+**Сценарий 7: Отключить резолвинг доменов (только подсети)**
 ```sh
 DOMAINS_UPDATE_INTERVAL=0
 ```
 
-**Сценарий 6: Использовать RIPE API вместо ipdeny**
+**Сценарий 8: Использовать RIPE API вместо ipdeny (legacy)**
 ```sh
 SUBNET_LOADER="ripe-json"
 SUBNET_URL="https://stat.ripe.net/data/country-resource-list/data.json?resource=RU"
 ```
+
+> 📝 Если задан `SUBNET_URL` — он переопределяет GEO_ZONE (legacy-совместимость).
 
 ---
 
@@ -306,25 +361,25 @@ my-ru-service.com
 ```
 geo-split status: ✓ Alive
   Mode:
-    Geo zone:    RU
+    Geo zone:    eas → [ru by kz am kg]
     Route in:    br0
     Route out:   auto (detect ISP)
-    Active out:  ppp0 (tables 1000,1001)
-    Gateway:     10.64.0.1
+    Active out:  apcli0 (tables 1000,1001)
+    Gateway:     192.168.1.1
 
   IP rules:
     iif br0 → table 1000 (domains) ✓
     iif br0 → table 1001 (subnets) ✓
 
   Routes:
-    Domains:     175 routes in table 1000, filled 8m ago ✓
-    Subnets:     8768 routes in table 1001, filled 8m ago ✓
+    Domains:     183 routes in table 1000, filled 32m 56s ago ✓
+    Subnets:     9274 routes in table 1001, filled 33m 31s ago ✓
 
   Caches:
-    Subnets:     cache 2d 3h old (max 7d 0h) ✓
-    Domains:     180 in cache, 8m old (max 1h 0m) ✓
+    Subnets:     cache 2d 6h 51m old (max 7d 0h 0m) ✓
+    Domains:     183 in cache, 33m 11s old (max 1h 0m 0s) ✓
 
-  Domain sources: 142 domain(s) configured
+  Domain sources: 103 domain(s) configured
 
   System:
     Uptime:      2d 5h ✓
@@ -334,7 +389,7 @@ geo-split status: ✓ Alive
     DNS:         localhost:6153 (SmartDNS no-speed-check)
     Background:  idle
     Loader:      cidr-plain
-    Version:     0.12.3
+    Version:     0.13.0
 ```
 
 Пример вывода (сервис отключён):

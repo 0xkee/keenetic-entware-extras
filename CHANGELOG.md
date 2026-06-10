@@ -1,9 +1,15 @@
 # Changelog
 
-All notable changes to `keenetic-entware-extras` (base package) are documented here.
+All notable changes to `keenetic-entware-extras` (base package) are documented here.<!--  -->
 
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
+
+## [0.15.0] - 2026-06-10
+
+### Added
+- `lib/zones.sh`: full ISO 3166-1 alpha-2 zone labels (249 countries/territories).
+  Replaces deleted per-zone config files. Used by webui zone selector dropdown.
 
 ## [0.14.0] - 2026-06-08
 

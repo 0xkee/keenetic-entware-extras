@@ -119,5 +119,19 @@ else
     log "WARN: add JS hash '${JS_HASH}' to $PATCHES_DIR/hash-map.conf to enable full integration"
 fi
 
+# -- Pre-compress large assets for gzip_static -------------------------
+# nginx gzip_static serves .gz companion if present, avoiding on-the-fly
+# compression of 6MB+ JS bundle on MIPS (saves 20s+ cold start).
+# Level 6 (default): best size/speed ratio. -9 saves only ~3% more but
+# takes 2-3x longer on MIPS. One-time cost at service start, not per-request.
+# -k: keep original (nginx falls back to uncompressed for clients without gzip).
+# -f: overwrite existing .gz (safe for restart/reboot).
+for f in "$CACHE"/*.js "$CACHE"/*.css; do
+    [ -f "$f" ] || continue
+    gzip -6 -k -f "$f"
+done
+GZ_COUNT=$(find "$CACHE" -name '*.gz' | wc -l)
+log "gzip_static: pre-compressed $GZ_COUNT files"
+
 # Success: disable cleanup trap (keep cache)
 trap - EXIT

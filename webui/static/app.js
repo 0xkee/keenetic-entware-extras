@@ -500,7 +500,7 @@ function fetchSystemInfo() {
 
             var diskPct = 0;
             if (data.disk_opt && data.disk_opt.total_kb > 0) {
-                diskPct = Math.round((data.disk_opt.used_kb / data.disk_opt.total_kb) * 100);
+                diskPct = Math.ceil((data.disk_opt.used_kb / data.disk_opt.total_kb) * 100);
             }
 
             // CPU: normalize load1 to percentage (load1/cores * 100, capped at 100)

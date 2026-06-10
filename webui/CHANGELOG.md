@@ -5,6 +5,14 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.24.1] - 2026-06-11
+
+### Changed
+- **gzip_static for stock JS/CSS**: pre-compress all .js/.css assets at startup
+  (patch-stock-ui.sh: `gzip -6 -k -f`). nginx serves .gz companions directly
+  via `gzip_static on` — zero per-request CPU. main-*.js: 6.0MB → 1.4MB (76%).
+  Eliminates 20s+ white page on MIPS routers caused by on-the-fly compression.
+
 ## [0.24.0] - 2026-06-10
 
 ### Added

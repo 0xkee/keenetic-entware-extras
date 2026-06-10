@@ -704,7 +704,7 @@
      * @param {Object} [checks] - checks map from backend (ok/warn/fail per key)
      * @returns {string}
      */
-    function renderDetailsGrid(details, isRunning, checks) {
+    function renderDetailsGrid(details, isRunning, checks, dnsServerChecks) {
         if (!details) return '';
         var entries = EW.parseDetails(details, { skipKeys: DETAILS_SKIP_KEYS, isRunning: isRunning, checks: checks });
         var html = '';
@@ -718,7 +718,22 @@
                 val = e.lines.map(function(l) {
                     return l.isError ? '<span style="color:var(--error,#f44336)">' + l.text + '</span>' : l.text;
                 }).join('<br>');
-            } else if (val.indexOf(' ') !== -1 && val.indexOf(':') !== -1 && !e.isTimer) {
+            } else if (/_provider$/.test(e.key) && dnsServerChecks && dnsServerChecks.length) {
+                var provArr = val.split(' ').map(function(prov) {
+                    var chk = null;
+                    for (var ci = 0; ci < dnsServerChecks.length; ci++) {
+                        if (dnsServerChecks[ci].provider === prov) { chk = dnsServerChecks[ci]; break; }
+                    }
+                    if (chk) {
+                        var cIcon = chk.ok ? '\u2713' : '\u2717';
+                        var cCls = chk.ok ? 'ew-bool-icon--ok' : 'ew-bool-icon--fail';
+                        return '<span class="ew-bool-icon ' + cCls + '">' + cIcon + '</span> ' +
+                            '<a class="ew-dns-link" href="https://' + chk.host + '" target="_blank" rel="noopener" data-tooltip="' + chk.host + '">' + chk.provider + '</a>';
+                    }
+                    return prov;
+                });
+                val = '<div class="ew-dns-line">' + provArr.join('</div><div class="ew-dns-line">') + '</div>';
+            } else if (val.indexOf(' ') !== -1 && !e.isTimer && (val.indexOf(':') !== -1 || /_provider$/.test(e.key))) {
                 val = val.split(' ').join('<br>');
             }
             var updateBtn = '';
@@ -906,7 +921,7 @@
 
         // Update expandable details grid
         if (detailsEl) {
-            var detailsHtml = renderDetailsGrid(data.details, data.running, data.checks);
+            var detailsHtml = renderDetailsGrid(data.details, data.running, data.checks, data.dns_server_checks);
             // Insert DNS test results before cache (concise: ✓/✗ domain)
             if (data.dns_tests && data.dns_tests.length) {
                 var dnsLines = [];

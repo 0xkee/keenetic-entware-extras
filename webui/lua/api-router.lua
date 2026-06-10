@@ -339,7 +339,8 @@ local config_registry = {
         defaults = base .. "/smartdns-geo-conf/config/defaults.conf",
         config   = base .. "/smartdns-geo-conf/config/config.conf",
         restart  = "/opt/etc/init.d/S37smartdns-conf restart 2>&1",
-        keys     = { "DNS_ZONE", "OTHER_DNS_INTERFACES", "ZONE_DNS_INTERFACE", "SMARTDNS_PORT" }
+        keys     = { "DNS_ZONE", "ZONE_DNS_PROVIDER", "OTHER_DNS_PROVIDER",
+                     "ZONE_DNS_INTERFACE", "OTHER_DNS_INTERFACES", "SMARTDNS_PORT" }
     },
     ["smartdns-redirect"] = {
         defaults = base .. "/smartdns-redirect/config/defaults.conf",
@@ -504,45 +505,34 @@ local function write_config(svc_id, body)
     end
 end
 
---- Build /api/system/zones response: parse lib/geo.sh + zone label files.
+--- Build /api/system/zones response: parse lib/zone-labels.sh + lib/geo.sh.
 -- Returns available zone presets (countries) and unions (multi-country groups).
 -- Shared endpoint used by both smartdns and geo-split settings.
 -- @return string — JSON
 local function system_zones()
-    local zones_dir = base .. "/smartdns-geo-conf/config/zones"
+    local labels_file = base .. "/lib/zones.sh"
     local geo_lib = base .. "/lib/geo.sh"
 
-    -- Parse zone conf files (first comment: # Zone: XX (Name) — desc)
+    -- Parse zone labels file (format: "CC Country Name" per line, # = comment)
     local zones_raw = {}
-    local ls_out = run_cmd("ls " .. zones_dir .. "/*.conf 2>/dev/null | sort")
-    for path in ls_out:gmatch("[^\n]+") do
-        local fname = path:match("([^/]+)%.conf$")
-        if fname and fname ~= "test-domains" then
-            local first_line = ""
-            local fh = io.open(path, "r")
-            if fh then
-                first_line = fh:read("*l") or ""
-                fh:close()
+    local content = read_file(labels_file)
+    if content then
+        for line in content:gmatch("[^\n]+") do
+            if not line:match("^%s*#") and not line:match("^%s*$") then
+                local code, label = line:match("^(%a%a)%s+(.+)$")
+                if code and label then
+                    -- Strip leading flag emoji (non-ASCII + space) for sort key
+                    local sort_name = label:match("^%S+%s+(.+)$") or label
+                    zones_raw[#zones_raw + 1] = {
+                        sort_key = sort_name,
+                        json = '{"value":"' .. json_escape(code) ..
+                            '","label":"' .. json_escape(label) .. '","desc":""}'
+                    }
+                end
             end
-            -- Parse: # Zone: XX (Label) — description
-            -- Two-step: first get code+label, then extract desc after separator
-            local code, label = first_line:match("^#%s*Zone:%s*([%w_]+)%s*%(([^)]+)%)")
-            local desc = ""
-            if code then
-                desc = first_line:match("%)%s+%S+%s+(.*)") or ""
-            end
-            if not code then code = fname end
-            if not label then label = fname:upper() end
-            if not desc then desc = "" end
-            zones_raw[#zones_raw + 1] = {
-                sort_key = label:gsub("^[^\x20-\x7E]+%s*", ""),  -- strip leading emoji for sort
-                json = '{"value":"' .. json_escape(code:lower()) ..
-                    '","label":"' .. json_escape(label) ..
-                    '","desc":"' .. json_escape(desc:gsub("%s+$", "")) .. '"}'
-            }
         end
     end
-    -- Sort zones alphabetically by country name (ignoring flag emoji prefix)
+    -- Sort zones alphabetically by country name
     table.sort(zones_raw, function(a, b) return a.sort_key < b.sort_key end)
     local zones = {}
     for _, z in ipairs(zones_raw) do zones[#zones + 1] = z.json end

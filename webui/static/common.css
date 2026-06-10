@@ -54,8 +54,13 @@
     text-decoration: underline;
 }
 
-/* ── Tooltip (stock Keenetic variables) ──────────────────────────── */
-.ew-update-btn[data-tooltip]:hover::after {
+/* ── Tooltip — universal data-tooltip (stock Keenetic style) ─────── */
+/* Apply data-tooltip="..." to any element for a styled hover tooltip.
+   Element must have position:relative (added by this rule). */
+[data-tooltip] {
+    position: relative;
+}
+[data-tooltip]::after {
     content: attr(data-tooltip);
     position: absolute;
     bottom: calc(100% + 6px);
@@ -63,10 +68,26 @@
     transform: translateX(-50%);
     background: var(--tooltip-background, #2a3444);
     color: var(--tooltip-text, #fff);
+    font-family: 'Roboto', sans-serif;
     font-size: 12px;
+    font-weight: 400;
     padding: 4px 8px;
     border-radius: 4px;
-    white-space: nowrap;
+    white-space: pre-line;
+    width: max-content;
+    max-width: 320px;
     pointer-events: none;
     z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .12s, visibility .12s;
+}
+[data-tooltip]:hover::after {
+    opacity: 1;
+    visibility: visible;
+}
+/* Tooltip below — for elements near the top edge (e.g. sysinfo bar) */
+[data-tooltip-pos="below"]::after {
+    bottom: auto;
+    top: calc(100% + 6px);
 }

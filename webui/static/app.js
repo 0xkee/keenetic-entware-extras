@@ -11,7 +11,7 @@ var FETCH_TIMEOUT = 15000;    // 15 seconds (allows for queued io.popen in nginx
 /** Key detail labels shown in Summary mode per service. Others are hidden via CSS. */
 var SUMMARY_KEYS = {
     'geo-split':         ['geo_zone', 'active_zones', 'subnets', 'domains', 'route_out', 'gateway'],
-    'smartdns':          ['dns_zone', 'active_zones', 'ports', 'rules'],
+    'smartdns':          ['dns_zone', 'active_zones', 'zone_dns_provider', 'other_dns_provider', 'ports', 'rules'],
     'smartdns-redirect': ['interfaces', 'upstream'],
     'webui':             ['ports', 'http']
 };
@@ -154,8 +154,25 @@ function setDetails(id, data) {
             valHtml = e.lines.map(function(l) {
                 return l.isError ? '<span style="color:var(--error,#f44336)">' + escapeHtml(l.text) + '</span>' : escapeHtml(l.text);
             }).join('<br>');
-        } else if (e.value.indexOf(' ') !== -1 && e.value.indexOf(':') !== -1 && !e.isTimer) {
-            // Break long values with spaces+colons (ports, addresses) into lines
+        } else if (/_provider$/.test(e.key) && data.dns_server_checks && data.dns_server_checks.length) {
+            // Enrich DNS provider names with ✓/✗ reachability + clickable host link
+            var provLines = e.value.split(' ').map(function(prov) {
+                var chk = null;
+                for (var ci = 0; ci < data.dns_server_checks.length; ci++) {
+                    if (data.dns_server_checks[ci].provider === prov) { chk = data.dns_server_checks[ci]; break; }
+                }
+                if (chk) {
+                    var cIcon = chk.ok ? '\u2713' : '\u2717';
+                    var cCls = chk.ok ? 'ew-bool-icon--ok' : 'ew-bool-icon--fail';
+                    return '<span class="ew-bool-icon ' + cCls + '">' + cIcon + '</span> ' +
+                        '<a class="ew-dns-link" href="https://' + escapeHtml(chk.host) + '" target="_blank" rel="noopener" data-tooltip="' + escapeHtml(chk.host) + '">' +
+                        escapeHtml(chk.provider) + '</a>';
+                }
+                return escapeHtml(prov);
+            });
+            valHtml = '<div class="ew-dns-line">' + provLines.join('</div><div class="ew-dns-line">') + '</div>';
+        } else if (e.value.indexOf(' ') !== -1 && !e.isTimer && (e.value.indexOf(':') !== -1 || /_provider$/.test(e.key))) {
+            // Break long values with spaces+colons (ports, addresses) or DNS providers into lines
             valHtml = e.value.split(' ').map(function(s) { return escapeHtml(s); }).join('<br>');
         } else {
             valHtml = escapeHtml(e.value);
@@ -208,7 +225,6 @@ function setDetails(id, data) {
             html += dnsItem;
         }
     }
-
     // Cache real field count for next page load skeleton rendering
     var dnsExtra = (data.dns_tests && data.dns_tests.length) ? 1 : 0;
     var realCount = entries.filter(function(e) { return !e.isSpacer; }).length + dnsExtra;
@@ -512,10 +528,10 @@ function fetchSystemInfo() {
                     '<span class="ew-sysinfo__value">' + cpuPct + '%</span>' +
                     '<span class="ew-sysinfo__bar"><span class="ew-sysinfo__bar-fill' + cpuClass + '" style="width:' + cpuPct + '%"></span></span>' +
                 '</span>' +
-                '<span class="ew-sysinfo__item" title="' +
+                '<span class="ew-sysinfo__item" data-tooltip="' +
                     'Available: ' + Math.round(data.memory.available_kb / 1024) + ' MB / ' + Math.round(data.memory.total_kb / 1024) + ' MB\n' +
                     'Conservative estimate — accounts for memory locked by kernel (conntrack, routing tables, slab cache) that cannot be freed.\n' +
-                    'May show ~15% higher usage than stock UI — this is normal and not a cause for concern.' + '">' +
+                    'May show ~15% higher usage than stock UI — this is normal and not a cause for concern.' + '" data-tooltip-pos="below">' +
                     '<span class="ew-sysinfo__icon">' + SYSINFO_ICONS.ram + '</span>' +
                     '<span class="ew-sysinfo__label">RAM</span>' +
                     '<span class="ew-sysinfo__value">' + memPct + '%</span>' +
@@ -791,10 +807,35 @@ var CONFIG_SCHEMAS = {
     'smartdns': [
         { key: 'DNS_ZONE', label: 'DNS Zone', type: 'zone_selector',
           desc: 'DNS zone preset: select countries or a geopolitical union (expands to multiple countries).' },
-        { key: 'ZONE_DNS_INTERFACE', label: 'Zone Interfaces', type: 'iface_select', hint: 'Default = ISP direct',
+        { key: 'ZONE_DNS_PROVIDER', label: 'Zone DNS Provider', type: 'multi_select',
+          options: [
+            { value: 'yandex', label: 'Yandex' },
+            { value: 'yandex_safe', label: 'Yandex Safe' },
+            { value: 'yandex_family', label: 'Yandex Family' },
+            { value: 'adguard', label: 'AdGuard (unfiltered)' },
+            { value: 'adguard_ads', label: 'AdGuard (ads filter)' },
+            { value: 'alidns', label: 'AliDNS (China)' },
+            { value: 'tencent', label: 'Tencent (China)' }
+          ],
+          hint: 'DNS for zone domains (.ru, .by, etc.)',
+          desc: 'DNS provider(s) for zone/regional group. Select one or more. These servers resolve ccTLD domains for best CDN geo-optimization.' },
+        { key: 'OTHER_DNS_PROVIDER', label: 'International DNS', type: 'multi_select',
+          options: [
+            { value: 'google', label: 'Google' },
+            { value: 'cloudflare', label: 'Cloudflare' },
+            { value: 'quad9', label: 'Quad9 (malware filter)' },
+            { value: 'quad9uf', label: 'Quad9 Unfiltered' },
+            { value: 'mullvad', label: 'Mullvad (privacy, no-log)' },
+            { value: 'mullvad_adblock', label: 'Mullvad Adblock' },
+            { value: 'controld', label: 'ControlD Free' },
+            { value: 'adguard', label: 'AdGuard (ads filter)' }
+          ],
+          hint: 'DNS for all other domains',
+          desc: 'DNS provider(s) for international/default group. Select one or more. Resolves all non-zone domains (.com, .net, etc.).' },
+        { key: 'ZONE_DNS_INTERFACE', label: 'Zone VPN Interface', type: 'iface_select', hint: 'Default = ISP direct',
           desc: 'Outgoing interface for zone DNS (Yandex/AdGuard). Default = ISP direct. Usually unchanged — MITM does not block.' },
-        { key: 'OTHER_DNS_INTERFACES', label: 'Other Interfaces ()', type: 'iface_select', hint: 'Default = ISP direct',
-          desc: 'Outgoing interfaces for international DNS (Google/CF). Default = ISP direct route.' },
+        { key: 'OTHER_DNS_INTERFACES', label: 'International VPN Interfaces', type: 'iface_select', hint: 'Default = ISP direct',
+          desc: 'Outgoing interfaces for international DNS. When set, DNS goes through VPN tunnel, bypassing TSPU/DPI.' },
         { key: 'SMARTDNS_PORT', label: 'SmartDNS Port', type: 'number', min: 1, max: 65535, hint: 'Listen port (default 6053)',
           desc: 'SmartDNS listen port (main, used for DNS tests).' }
     ],
@@ -1053,6 +1094,23 @@ function renderModalForm(body, svcId, schema, config, defaults, interfaces, zone
                     '<span>' + escapeHtml(opt.label) + '</span></label>';
             }
             html += '</div></div>';
+        } else if (field.type === 'multi_select') {
+            // Custom dropdown multi-select with checkboxes (static options from schema)
+            var msSelected = String(val).split(/\s+/).filter(function(s) { return s; });
+            var msDisplayText = msSelected.length ? msSelected.join(', ') : 'None';
+            html += '<div class="ew-modal__iface-select" data-config-key="' + field.key + '" data-selection-order="' + escapeHtml(msSelected.join(' ')) + '">';
+            html += '<button type="button" class="ew-modal__iface-select-trigger">' +
+                '<span class="ew-modal__iface-select-text">' + escapeHtml(msDisplayText) + '</span>' +
+                '<svg class="ew-modal__select-arrow" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></button>';
+            html += '<div class="ew-modal__iface-select-panel ew-hidden">';
+            for (var ms = 0; ms < field.options.length; ms++) {
+                var msOpt = field.options[ms];
+                var msChk = msSelected.indexOf(msOpt.value) !== -1;
+                html += '<label class="ew-modal__iface-select-option">' +
+                    '<input type="checkbox" value="' + escapeHtml(msOpt.value) + '"' + (msChk ? ' checked' : '') + '>' +
+                    '<span>' + escapeHtml(msOpt.label) + '</span></label>';
+            }
+            html += '</div></div>';
         } else if (field.type === 'zone_selector' && zonesData) {
             // Determine if current value is zone(s) or a union
             var zones = zonesData.zones || [];
@@ -1127,7 +1185,7 @@ function renderModalForm(body, svcId, schema, config, defaults, interfaces, zone
             });
             var selectedIfs = String(val).split(/\s+/).filter(function(s) { return s; });
             var displayText = selectedIfs.length ? selectedIfs.join(', ') : (field.preItems ? field.preItems[0].label : 'Default');
-            html += '<div class="ew-modal__iface-select" data-config-key="' + field.key + '">';
+            html += '<div class="ew-modal__iface-select" data-config-key="' + field.key + '" data-selection-order="' + escapeHtml(selectedIfs.join(' ')) + '">';
             html += '<button type="button" class="ew-modal__iface-select-trigger">' +
                 '<span class="ew-modal__iface-select-text">' + escapeHtml(displayText) + '</span>' +
                 '<svg class="ew-modal__select-arrow" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>' +
@@ -1216,15 +1274,16 @@ function saveConfig(svcId) {
             }
         } else if (field.type === 'iface_select') {
             var isContainer = modal.querySelector('[data-config-key="' + field.key + '"]');
-            var isChecked = isContainer ? isContainer.querySelectorAll('.ew-modal__iface-select-panel input:checked') : [];
-            var isVals = [];
-            for (var isi = 0; isi < isChecked.length; isi++) { isVals.push(isChecked[isi].value); }
-            val = isVals.join(' ');
+            val = isContainer ? (isContainer.dataset.selectionOrder || '') : '';
         } else if (field.type === 'select') {
             // Custom dropdown with radio buttons (single-select)
             var selContainer = modal.querySelector('[data-config-key="' + field.key + '"]');
             var selRadio = selContainer ? selContainer.querySelector('input[type="radio"]:checked') : null;
             val = selRadio ? selRadio.value : '';
+        } else if (field.type === 'multi_select') {
+            // Custom dropdown with checkboxes (multi-select) — preserves selection order
+            var msContainer = modal.querySelector('[data-config-key="' + field.key + '"]');
+            val = msContainer ? (msContainer.dataset.selectionOrder || '') : '';
         } else {
             var input = modal.querySelector('[data-config-key="' + field.key + '"]');
             val = input ? input.value : '';
@@ -1425,6 +1484,7 @@ function handleResetField(btn) {
             for (var i = 0; i < isBoxes.length; i++) {
                 isBoxes[i].checked = defIfs.indexOf(isBoxes[i].value) !== -1;
             }
+            el.dataset.selectionOrder = defIfs.join(' ');
             var trigger2 = el.querySelector('.ew-modal__iface-select-text');
             if (trigger2) trigger2.textContent = defIfs.length ? defIfs.join(', ') : 'Default';
         }
@@ -1545,12 +1605,18 @@ document.addEventListener("DOMContentLoaded", function() {
             var panel = wrap.querySelector('.ew-modal__iface-select-panel');
             if (panel) setTimeout(function() { panel.classList.add('ew-hidden'); }, 150);
         } else if (e.target.type === 'checkbox') {
-            // Multi-select: update text with all checked values
-            var checked = wrap.querySelectorAll('.ew-modal__iface-select-panel input:checked');
-            var names = [];
-            for (var i = 0; i < checked.length; i++) names.push(checked[i].value);
+            // Multi-select: preserve selection order (add to end / remove in place)
+            var currentOrder = (wrap.dataset.selectionOrder || '').split(' ').filter(Boolean);
+            var changedVal = e.target.value;
+            if (e.target.checked) {
+                if (currentOrder.indexOf(changedVal) === -1) currentOrder.push(changedVal);
+            } else {
+                var idx = currentOrder.indexOf(changedVal);
+                if (idx !== -1) currentOrder.splice(idx, 1);
+            }
+            wrap.dataset.selectionOrder = currentOrder.join(' ');
             var textEl2 = wrap.querySelector('.ew-modal__iface-select-text');
-            if (textEl2) textEl2.textContent = names.length ? names.join(', ') : 'Default';
+            if (textEl2) textEl2.textContent = currentOrder.length ? currentOrder.join(', ') : 'Default';
         }
     });
 

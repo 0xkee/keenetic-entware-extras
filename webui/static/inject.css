@@ -236,7 +236,7 @@
     grid-template-columns: repeat(auto-fit, minmax(7rem, auto));
     gap: 16px 24px;
 }
-.ew-detail-item { overflow-wrap: break-word; }
+.ew-detail-item { overflow-wrap: break-word; min-width: 0; }
 .ew-detail-label {
     color: var(--text-gray, #949b9f);
     font-size: 14px;

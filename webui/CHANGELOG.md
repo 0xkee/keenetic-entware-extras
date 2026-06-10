@@ -5,6 +5,54 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.24.0] - 2026-06-10
+
+### Added
+- **Universal styled tooltips** (`data-tooltip` attribute on any element): dark background,
+  centered, with fade animation. Supports `data-tooltip-pos="below"` for top-edge elements.
+- **RAM sysinfo tooltip**: hover shows available/total MB + conservative estimate explanation
+  (previously native `title`, now styled CSS tooltip below the bar).
+
+### Changed
+- **Details grid layout fix**: custom page uses `minmax(12rem, auto)` for detail view
+  (6 columns on wide screens — no overflow); summary cards override to `minmax(7rem, auto)`
+  for compact 2-column layout. Matches dashboard card proportions.
+- **DNS Provider display**: shows provider nickname (`yandex`, `adguard`, `google`) instead
+  of full hostname. Full domain shown in styled tooltip on hover. Clickable link preserved.
+- **Multi-select selection order**: dropdown preserves the order items were selected
+  (add to end, remove in place). Display text and saved config reflect user's selection
+  sequence, not DOM order.
+
+## [0.23.0] - 2026-06-10
+
+### Added
+- **DNS Servers check** display: upstream provider reachability (✓/✗ + clickable hostname link,
+  no IP) in both stock dashboard card (inject.js) and custom detail view (app.js).
+  Data from `dns_server_checks` array in status API, cached TTL=15s.
+- **Zone selector flag emojis**: country dropdown now shows 🇷🇺 🇺🇸 🇩🇪 etc. flags
+  from `lib/zones.sh`. Sort key strips flag prefix — alphabetical order preserved.
+
+### Changed
+- SmartDNS config editor: `ZONE_DNS_PROVIDER` migrated from single-select presets
+  to multi-select checkboxes (individual providers: Yandex, AdGuard, AliDNS, Tencent, etc.)
+- SmartDNS config editor: `OTHER_DNS_PROVIDER` migrated from single-select presets
+  to multi-select checkboxes (individual providers: Google, Cloudflare, Quad9, Mullvad, etc.)
+- Summary cards: DNS provider values now display each provider on a new line
+  (both stock inject.js and custom app.js)
+- New field type `multi_select` in config editor — checkbox dropdown for
+  space-separated multi-value fields (reuses `iface_select` UI patterns)
+
+## [0.22.0] - 2026-06-09
+
+### Added
+- SmartDNS config editor: `ZONE_DNS_PROVIDER` select (7 presets: Yandex, AdGuard, AliDNS+Tencent, etc.)
+- SmartDNS config editor: `OTHER_DNS_PROVIDER` select (10 presets: Google, Cloudflare, Quad9, Mullvad, etc.)
+- SmartDNS summary: shows `zone_dns_provider` and `other_dns_provider` fields
+
+### Changed
+- SmartDNS config: interface labels renamed — "Zone VPN Interface", "International VPN Interfaces"
+- `api-router.lua`: smartdns keys whitelist updated with new provider config keys
+
 ## [0.21.3] - 2026-06-08
 
 ### Changed

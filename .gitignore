@@ -38,3 +38,4 @@ keenetic-entware-extras.code-workspace
 
 # === Temporary / one-time ===
 .git-backup/
+smartdns-geo-conf/docs/default-dns-provider-research.md

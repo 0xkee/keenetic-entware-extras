@@ -75,6 +75,7 @@
 ### Улучшения (backlog)
 
 - [x] ~~**Конфигурируемые international DNS-серверы**~~ — **Сделано (v0.8.0, 2026-06-09):** `OTHER_DNS_PROVIDER` / `ZONE_DNS_PROVIDER` в `config.conf`. Каталог 15 провайдеров в `dns-providers.conf`. Динамическая генерация зон из `zone-routing-rules.conf` (заменено 235 статических zone-файлов).
+- [ ] **`default` (ISP DNS) провайдер** — добавить `default` в `ZONE_DNS_PROVIDER` и `OTHER_DNS_PROVIDER`: plain UDP к ISP DNS (из `/tmp/resolv.conf`). Нужно: новый proto `udp` в generate-conf.sh, entries в dns-providers.conf, options в WebUI app.js. Исследование: [docs/default-dns-provider-research.md](docs/default-dns-provider-research.md)
 - [ ] **Exclude-список для зонового DNS-роутинга** — возможность исключить домен из обработки зоны (`nameserver /specific-host.ru/default`). Реализация: файл `config/dns-zone-exclude.conf` с правилами, include в конец zone-конфига. Документировать в user-manual.
 - [ ] **FAQ: ECS (EDNS Client Subnet) не передаётся** — добавить в user-manual пояснение что SmartDNS не отправляет подсеть клиента upstream-серверам. Google/Cloudflare видят только IP роутера (WAN или VPN-выхода). Фидбэк: cryoPanda.
 - [x] ~~DNS DNAT redirect: `iptables PREROUTING` br0:53 → SmartDNS:6053 (обход ndnproxy)~~ — реализовано в отдельном пакете [`smartdns-redirect`](../smartdns-redirect/) v0.1.1 (deployed на router-1, latency ~130ms → <80ms)

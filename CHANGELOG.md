@@ -5,6 +5,31 @@ All notable changes to `keenetic-entware-extras` (base package) are documented h
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.16.0] - 2026-06-13
+
+### Fixed
+- `lib/ip.sh`: `detect_out_iface()` now excludes `awg*` (AmneziaWG) from ISP auto-detection.
+  Previously, if awg0 was the default route, it would be incorrectly returned as ISP interface.
+- `scripts/bug-report.sh`: DNS `+nocookie` fix — Keenetic ndnproxy doesn't support
+  EDNS COOKIE, caused empty "System resolver" output on all routers.
+
+### Added
+- `scripts/bug-report.sh`: routing effectiveness diagnostic — detects when geo-split
+  is ineffective (routes to same interface as default + no Keenetic VPN policy).
+- `scripts/bug-report.sh`: edge-case diagnostics — IPv6 leak, full ip rule show,
+  interface MTU, rp_filter, POSTROUTING NAT, ROUTE_OUT health check, crond status.
+- `scripts/bug-report.sh`: Keenetic policy rules display (fwmark prio 100+).
+- `scripts/bug-report.sh`: **client-path verification** section — simulates traffic
+  from LAN client (`ip route get ... from <LAN> iif br0`) to prove policy routing works;
+  split-routing verdict (GEO vs non-GEO interface comparison), ping through ROUTE_OUT,
+  NAT/MASQUERADE detection for client traffic.
+
+### Changed
+- `scripts/bug-report.sh`: removed all hardcoded RU zone references (ya.ru, 77.88.8.8).
+  Test targets now picked dynamically from user's `domains-resolved.txt` cache and live
+  route tables. Non-GEO target (`1.1.1.1`) verified against tables before use.
+  DNS/HTTP/routing checks now reflect the user's actual configured geo-zone.
+
 ## [0.15.0] - 2026-06-10
 
 ### Added

@@ -43,13 +43,13 @@ detect_out_iface() {
 
   # Primary: main table default route (actual system default)
   iface=$(ip route | grep "^default" | \
-    grep -v "dev nwg\|dev ovpn\|dev l2tp\|dev pptp\|dev sstp\|dev ipsec\|dev tun\|dev tap" | \
+    grep -v "dev nwg\|dev awg\|dev ovpn\|dev l2tp\|dev pptp\|dev sstp\|dev ipsec\|dev tun\|dev tap" | \
     sed -n 's/.*dev \([^ ]*\).*/\1/p' | grep -v '^br' | head -1)
 
   # Fallback: all tables (VPN is default policy, ISP only in policy tables)
   if [ -z "$iface" ]; then
     iface=$(ip route show table all | grep "^default" | \
-      grep -v "dev nwg\|dev ovpn\|dev l2tp\|dev pptp\|dev sstp\|dev ipsec\|dev tun\|dev tap" | \
+      grep -v "dev nwg\|dev awg\|dev ovpn\|dev l2tp\|dev pptp\|dev sstp\|dev ipsec\|dev tun\|dev tap" | \
       sed -n 's/.*dev \([^ ]*\).*/\1/p' | grep -v '^br' | head -1)
   fi
 

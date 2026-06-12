@@ -12,6 +12,58 @@ section() {
     printf "\n%s\n  %s\n%s\n" "$SEP" "$1" "$SEP"
 }
 
+# ─── Helper: pick dynamic test targets from user's geo-split data ─────────────
+# Sets: _GEO_IP, _GEO_DOMAIN, _NON_GEO_IP, _NON_GEO_DOMAIN
+# Uses actual lists/caches — no hardcoded zones.
+
+_GEO_IP="" _GEO_DOMAIN="" _NON_GEO_IP="1.1.1.1" _NON_GEO_DOMAIN="one.one.one.one"
+
+_pick_geo_targets() {
+    _domain_cache="$BASE/geo-split-data/lists/domains-resolved.txt"
+
+    # GEO target: first IP+domain from domain cache (format: "IP # domain.com")
+    if [ -f "$_domain_cache" ]; then
+        _first_line=$(grep -v '^#' "$_domain_cache" | grep -v '^$' | head -1)
+        if [ -n "$_first_line" ]; then
+            _GEO_IP=$(echo "$_first_line" | awk '{print $1}')
+            _GEO_DOMAIN=$(echo "$_first_line" | awk '{print $3}')
+        fi
+    fi
+
+    # Fallback: first route in table 1000 (live kernel)
+    if [ -z "$_GEO_IP" ] && command -v ip >/dev/null 2>&1; then
+        _GEO_IP=$(ip route show table 1000 2>/dev/null | head -1 | awk '{print $1}' | sed 's|/32||')
+    fi
+
+    # Last fallback: first route in table 1001 (subnet CIDR — use network address)
+    if [ -z "$_GEO_IP" ] && command -v ip >/dev/null 2>&1; then
+        _cidr=$(ip route show table 1001 2>/dev/null | head -1 | awk '{print $1}')
+        if [ -n "$_cidr" ]; then
+            _GEO_IP=$(echo "$_cidr" | sed 's|/.*||')
+        fi
+    fi
+
+    # GEO domain fallback: first domain from domains.txt (if cache was empty)
+    if [ -z "$_GEO_DOMAIN" ]; then
+        _domains_list="$BASE/geo-split-data/lists/domains.txt"
+        if [ -f "$_domains_list" ]; then
+            _GEO_DOMAIN=$(grep -v '^#' "$_domains_list" | grep -v '^@' | grep -v '^$' | head -1)
+        fi
+    fi
+
+    # NON-GEO target: verify 1.1.1.1 is not in geo tables (edge case: user routes ALL)
+    if command -v ip >/dev/null 2>&1; then
+        for _candidate in 1.1.1.1 8.8.4.4 208.67.222.222; do
+            if ! ip route show table 1001 match "$_candidate" 2>/dev/null | grep -q .; then
+                _NON_GEO_IP="$_candidate"
+                break
+            fi
+        done
+    fi
+}
+
+_pick_geo_targets
+
 
 # ─── 1. System info ──────────────────────────────────────────────────────────
 
@@ -108,6 +160,7 @@ if [ -d "$_gs_conf" ]; then
         _CONFIG_DIR="$_gs_conf"
         # shellcheck disable=SC1091
         . "$_gs_conf/defaults.conf"
+        # shellcheck disable=SC1091
         [ -f "$_gs_conf/config.conf" ] && . "$_gs_conf/config.conf"
         printf "  ROUTE_OUT:             %s\n" "${ROUTE_OUT:-auto}"
         printf "  ROUTE_GW:              %s\n" "${ROUTE_GW:-auto}"
@@ -143,18 +196,27 @@ fi
 
 section "DNS check"
 
+printf "Test targets (from your config/lists):\n"
+printf "  GEO domain:    %s\n" "${_GEO_DOMAIN:-(none — no domains configured)}"
+printf "  GEO IP:        %s\n" "${_GEO_IP:-(none — tables empty)}"
+printf "  Non-GEO:       %s (%s)\n" "$_NON_GEO_DOMAIN" "$_NON_GEO_IP"
+
 # SmartDNS direct (port 6053)
-printf "SmartDNS direct (:6053):\n"
+printf "\nSmartDNS direct (:6053):\n"
 if command -v dig >/dev/null 2>&1; then
-    printf "  ya.ru:      "
-    dig ya.ru @127.0.0.1 -p 6053 +short +time=3 2>&1 | head -1 || echo "FAILED"
-    printf "  google.com: "
-    dig google.com @127.0.0.1 -p 6053 +short +time=3 2>&1 | head -1 || echo "FAILED"
+    if [ -n "$_GEO_DOMAIN" ]; then
+        printf "  %s: " "$_GEO_DOMAIN"
+        dig "$_GEO_DOMAIN" @127.0.0.1 -p 6053 +short +nocookie +time=3 2>&1 | head -1 || echo "FAILED"
+    fi
+    printf "  %s: " "$_NON_GEO_DOMAIN"
+    dig "$_NON_GEO_DOMAIN" @127.0.0.1 -p 6053 +short +nocookie +time=3 2>&1 | head -1 || echo "FAILED"
 elif command -v nslookup >/dev/null 2>&1; then
-    printf "  ya.ru:      "
-    nslookup ya.ru 127.0.0.1#6053 2>/dev/null | grep "Address" | tail -1 | awk '{print $2}' || echo "FAILED"
-    printf "  google.com: "
-    nslookup google.com 127.0.0.1#6053 2>/dev/null | grep "Address" | tail -1 | awk '{print $2}' || echo "FAILED"
+    if [ -n "$_GEO_DOMAIN" ]; then
+        printf "  %s: " "$_GEO_DOMAIN"
+        nslookup "$_GEO_DOMAIN" 127.0.0.1#6053 2>/dev/null | grep "Address" | tail -1 | awk '{print $2}' || echo "FAILED"
+    fi
+    printf "  %s: " "$_NON_GEO_DOMAIN"
+    nslookup "$_NON_GEO_DOMAIN" 127.0.0.1#6053 2>/dev/null | grep "Address" | tail -1 | awk '{print $2}' || echo "FAILED"
 else
     echo "  dig/nslookup: not installed"
 fi
@@ -162,26 +224,49 @@ fi
 # System resolver (end-to-end)
 printf "\nSystem resolver (end-to-end):\n"
 if command -v dig >/dev/null 2>&1; then
-    printf "  ya.ru:      "
-    dig ya.ru +short +time=3 2>&1 | head -1 || echo "FAILED"
-    printf "  google.com: "
-    dig google.com +short +time=3 2>&1 | head -1 || echo "FAILED"
+    if [ -n "$_GEO_DOMAIN" ]; then
+        printf "  %s: " "$_GEO_DOMAIN"
+        dig "$_GEO_DOMAIN" +short +nocookie +time=3 2>&1 | head -1 || echo "FAILED"
+    fi
+    printf "  %s: " "$_NON_GEO_DOMAIN"
+    dig "$_NON_GEO_DOMAIN" +short +nocookie +time=3 2>&1 | head -1 || echo "FAILED"
 elif command -v nslookup >/dev/null 2>&1; then
-    printf "  ya.ru:      "
-    nslookup ya.ru 2>/dev/null | grep "Address" | tail -1 | awk '{print $2}' || echo "FAILED"
-    printf "  google.com: "
-    nslookup google.com 2>/dev/null | grep "Address" | tail -1 | awk '{print $2}' || echo "FAILED"
+    if [ -n "$_GEO_DOMAIN" ]; then
+        printf "  %s: " "$_GEO_DOMAIN"
+        nslookup "$_GEO_DOMAIN" 2>/dev/null | grep "Address" | tail -1 | awk '{print $2}' || echo "FAILED"
+    fi
+    printf "  %s: " "$_NON_GEO_DOMAIN"
+    nslookup "$_NON_GEO_DOMAIN" 2>/dev/null | grep "Address" | tail -1 | awk '{print $2}' || echo "FAILED"
 else
     echo "  (no DNS tools available)"
 fi
 
-printf "\n/tmp/resolv.conf:\n"
+printf "\nSystem resolver:\n"
 if [ -f /tmp/resolv.conf ]; then
     sed 's/^/  /' /tmp/resolv.conf | head -10
+    # Annotate if pointing to localhost (expected with SmartDNS)
+    if grep -q "nameserver 127.0.0.1" /tmp/resolv.conf 2>/dev/null; then
+        printf "  (expected: router uses local resolver → SmartDNS/ndnproxy)\n"
+    fi
 elif [ -f /etc/resolv.conf ]; then
     sed 's/^/  /' /etc/resolv.conf | head -10
 else
     echo "  (not found)"
+fi
+
+# SmartDNS upstream servers (from live config)
+_smartdns_conf="/opt/etc/smartdns/smartdns.conf"
+if [ -f "$_smartdns_conf" ]; then
+    printf "\nSmartDNS upstreams:\n"
+    # Extract unique server URLs/IPs with protocol type, strip multi-line markers
+    grep -h "^server" "$_smartdns_conf" /opt/etc/smartdns/dns-servers-*.conf 2>/dev/null \
+        | sed 's/ *\\$//' \
+        | awk '{print $1, $2}' \
+        | sort -u \
+        | sed 's/^/  /' | head -15
+    _srv_count=$(grep -hc "^server" "$_smartdns_conf" /opt/etc/smartdns/dns-servers-*.conf 2>/dev/null \
+        | awk '{s+=$1}END{print s}')
+    [ -n "$_srv_count" ] && printf "  (%s server entries total)\n" "$_srv_count"
 fi
 
 # ─── 9. Connectivity ─────────────────────────────────────────────────────────
@@ -203,17 +288,19 @@ check_url() {
     fi
 }
 
+printf "HTTP reachability:\n"
 if command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1; then
-    check_url "http://ya.ru" "ya.ru (RU)"
-    check_url "http://google.com" "google.com (INT)"
-    check_url "http://rutracker.org" "rutracker.org (blocked)"
+    if [ -n "$_GEO_DOMAIN" ]; then
+        check_url "http://$_GEO_DOMAIN" "$_GEO_DOMAIN (GEO)"
+    fi
+    check_url "http://$_NON_GEO_DOMAIN" "$_NON_GEO_DOMAIN (non-GEO)"
 else
     echo "  curl/wget: not installed"
 fi
 
 # WebUI upstream (stock httpd) probe
+printf "\nWebUI upstream (stock Keenetic httpd):\n"
 if [ -f "$BASE/webui/config/listen.conf" ]; then
-    printf "\nWebUI upstream (stock httpd):\n"
     _upstream=$(sed -n 's|.*stock_httpd *http://\([^;]*\);|\1|p' "$BASE/webui/config/listen.conf")
     if [ -n "$_upstream" ] && command -v curl >/dev/null 2>&1; then
         _code=$(curl -so /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 3 "http://$_upstream/" 2>/dev/null) || _code="000"
@@ -221,6 +308,8 @@ if [ -f "$BASE/webui/config/listen.conf" ]; then
     else
         printf "  upstream: %s (not probed)\n" "${_upstream:-(unknown)}"
     fi
+else
+    printf "  (webui not configured)\n"
 fi
 
 # ─── 10. Routes & rules (geo-split) ──────────────────────────────────────────
@@ -246,6 +335,52 @@ if command -v ip >/dev/null 2>&1; then
         printf "  Gateway:   %s\n" "${_gw:-(none — point-to-point/LTE)}"
     else
         printf "  (no ISP interface detected)\n"
+    fi
+
+    # Default route (what non-geo traffic hits)
+    printf "\nDefault route (non-geo traffic):\n"
+    _main_def=$(ip route show default 2>/dev/null | head -3)
+    if [ -n "$_main_def" ]; then
+        echo "$_main_def" | sed 's/^/  /'
+    else
+        printf "  (no default route in main table)\n"
+    fi
+
+    # Keenetic policy rules (non-geo-split, prio > 100)
+    printf "\nKeenetic policy rules (VPN/other, prio>100):\n"
+    _policy_rules=$(ip rule show 2>/dev/null | grep -vE "^(0:|50:|51:|32[67])" | head -15)
+    if [ -n "$_policy_rules" ]; then
+        echo "$_policy_rules" | sed 's/^/  /'
+    else
+        printf "  (none — only default rules)\n"
+    fi
+
+    # Effectiveness check: geo-split ROUTE_OUT vs default route
+    _def_iface=$(ip route | grep "^default" | sed -n 's/.*dev \([^ ]*\).*/\1/p' | head -1)
+    _geo_iface=""
+    _geo_iface=$(ip route show table 1001 2>/dev/null | head -1 | sed -n 's/.*dev \([^ ]*\).*/\1/p')
+    _vpn_up=$(ip -brief link show 2>/dev/null | grep -E "^(nwg|awg|ovpn|tun|tap|wg)" | grep -v "DOWN" | awk '{print $1}' | tr '\n' ' ')
+
+    printf "\nRouting effectiveness:\n"
+    if [ -n "$_geo_iface" ] && [ -n "$_def_iface" ]; then
+        if [ "$_geo_iface" = "$_def_iface" ]; then
+            if [ -n "$_vpn_up" ] && [ -z "$_policy_rules" ]; then
+                printf "  ⚠ geo-split routes through %s = same as default route!\n" "$_geo_iface"
+                printf "    VPN interfaces UP: %s\n" "$_vpn_up"
+                printf "    No Keenetic policy rules found → non-geo traffic stays on ISP.\n"
+                printf "    Fix: configure VPN routing in Keenetic (per-device or global policy).\n"
+            elif [ -n "$_vpn_up" ] && [ -n "$_policy_rules" ]; then
+                printf "  ✓ geo-split: %s (= default), Keenetic policy rules active\n" "$_geo_iface"
+                printf "    VPN interfaces UP: %s\n" "$_vpn_up"
+                printf "    Non-geo traffic handled by Keenetic fwmark policy (prio 100+).\n"
+            else
+                printf "  ℹ geo-split routes through %s (= default). No VPN detected.\n" "$_geo_iface"
+            fi
+        else
+            printf "  ✓ geo-split: %s, default: %s (split active)\n" "$_geo_iface" "$_def_iface"
+        fi
+    elif [ -z "$_geo_iface" ]; then
+        printf "  — geo-split tables empty (not running?)\n"
     fi
 
     # Actual route type in tables
@@ -275,11 +410,212 @@ if command -v ip >/dev/null 2>&1; then
 
     printf "\nSample routes (table 1000, first 3):\n"
     ip route show table 1000 2>/dev/null | head -3 | sed 's/^/  /'
+
+    # ROUTE_OUT interface stats (TX/RX — shows if VPN/tunnel transmits)
+    if [ -n "$_geo_iface" ] && [ "$_geo_iface" != "$_def_iface" ]; then
+        printf "\nROUTE_OUT interface stats (%s):\n" "$_geo_iface"
+        _stats=$(ip -s link show "$_geo_iface" 2>/dev/null | grep -A1 "RX:\|TX:" | head -6)
+        if [ -n "$_stats" ]; then
+            echo "$_stats" | sed 's/^/  /'
+        else
+            printf "  (interface stats unavailable)\n"
+        fi
+    fi
+
+    # Routing validation (ip route get — proves policy routing works)
+    printf "\nRouting validation (ip route get %s):\n" "${_GEO_IP:-<no target>}"
+    if [ -n "$_GEO_IP" ]; then
+        _rget=$(ip route get "$_GEO_IP" 2>&1 | head -2)
+        if [ -n "$_rget" ]; then
+            echo "$_rget" | sed 's/^/  /'
+        else
+            printf "  (route get failed)\n"
+        fi
+        # Also test with fibmatch for table lookup visibility (kernel 4.4+)
+        _rget_fib=$(ip route get fibmatch "$_GEO_IP" 2>/dev/null | head -3)
+        if [ -n "$_rget_fib" ]; then
+            printf "  fibmatch:\n"
+            echo "$_rget_fib" | sed 's/^/    /'
+        fi
+    else
+        printf "  (no GEO target available — tables empty?)\n"
+    fi
+
+    # rp_filter (reverse path filtering — can break policy routing)
+    printf "\nReverse path filter (rp_filter):\n"
+    for _rpf_iface in all br0; do
+        _rpf_val=""
+        [ -f "/proc/sys/net/ipv4/conf/$_rpf_iface/rp_filter" ] && \
+            _rpf_val=$(cat "/proc/sys/net/ipv4/conf/$_rpf_iface/rp_filter" 2>/dev/null)
+        printf "  %s: %s\n" "$_rpf_iface" "${_rpf_val:-(not available)}"
+    done
+    if [ -n "$_geo_iface" ]; then
+        _rpf_val=""
+        [ -f "/proc/sys/net/ipv4/conf/$_geo_iface/rp_filter" ] && \
+            _rpf_val=$(cat "/proc/sys/net/ipv4/conf/$_geo_iface/rp_filter" 2>/dev/null)
+        printf "  %s: %s\n" "$_geo_iface" "${_rpf_val:-(not available)}"
+    fi
 else
     echo "ip: not found"
 fi
 
-# ─── 11. Netfilter rules (smartdns-redirect) ─────────────────────────────────
+# ─── 11. Client-path verification ────────────────────────────────────────────
+
+section "Client-path verification"
+
+if command -v ip >/dev/null 2>&1 && [ -n "$_GEO_IP" ]; then
+    # Determine ROUTE_IN from config (first interface)
+    _route_in="br0"
+    if [ -d "$_gs_conf" ]; then
+        _route_in=$(
+            _CONFIG_DIR="$_gs_conf"
+            # shellcheck disable=SC1091
+            . "$_gs_conf/defaults.conf"
+            # shellcheck disable=SC1091
+            [ -f "$_gs_conf/config.conf" ] && . "$_gs_conf/config.conf"
+            echo "${ROUTE_IN:-br0}" | awk '{print $1}'
+        )
+    fi
+
+    # Get a client IP for simulation (NOT the router itself — kernel rejects local src with iif)
+    # Strategy: ARP table (real connected client) → fallback: derive .100 from router IP
+    _lan_ip=""
+    _real_client=$(ip neigh show dev "$_route_in" 2>/dev/null \
+        | grep -v "FAILED\|INCOMPLETE" | awk '{print $1}' | grep -v ':' | head -1)
+    if [ -n "$_real_client" ]; then
+        _lan_ip="$_real_client"
+    else
+        # Fallback: take router's IP, replace last octet with 100
+        _router_ip=$(ip -4 addr show "$_route_in" 2>/dev/null | grep -o 'inet [^ /]*' | awk '{print $2}' | head -1)
+        if [ -n "$_router_ip" ]; then
+            _lan_ip=$(echo "$_router_ip" | sed 's/\.[0-9]*$/.100/')
+        fi
+    fi
+
+    printf "Simulating client traffic (iif %s, src %s):\n\n" "$_route_in" "${_lan_ip:-(unknown)}"
+
+    if [ -n "$_lan_ip" ]; then
+        # GEO target (should go through geo-split table → ROUTE_OUT interface)
+        _client_geo=$(ip route get "$_GEO_IP" from "$_lan_ip" iif "$_route_in" 2>&1 | head -1)
+        printf "  GEO target %s" "$_GEO_IP"
+        [ -n "$_GEO_DOMAIN" ] && printf " (%s)" "$_GEO_DOMAIN"
+        printf ":\n    %s\n" "$_client_geo"
+
+        # NON-GEO target (should go through default route, NOT geo-split)
+        _client_nongeo=$(ip route get "$_NON_GEO_IP" from "$_lan_ip" iif "$_route_in" 2>&1 | head -1)
+        printf "  Non-GEO target %s (%s):\n    %s\n" "$_NON_GEO_IP" "$_NON_GEO_DOMAIN" "$_client_nongeo"
+
+        # Extract interfaces and tables
+        _geo_client_dev=$(echo "$_client_geo" | sed -n 's/.*dev \([^ ]*\).*/\1/p')
+        _nongeo_client_dev=$(echo "$_client_nongeo" | sed -n 's/.*dev \([^ ]*\).*/\1/p')
+        _geo_client_table=$(echo "$_client_geo" | sed -n 's/.*table \([^ ]*\).*/\1/p')
+
+        # Check Keenetic fwmark VPN routing (stock policy for non-GEO traffic)
+        # Iterate fwmark rules to find one that routes through a VPN interface
+        _kee_fwmark="" _kee_vpn_dev=""
+        _fwmarks=$(ip rule show 2>/dev/null | grep "fwmark" \
+            | sed -n 's/.*fwmark \([^ ]*\).*/\1/p')
+        for _fm in $_fwmarks; do
+            _fm_route=$(ip route get "$_NON_GEO_IP" mark "$_fm" 2>/dev/null | head -1)
+            _fm_dev=$(echo "$_fm_route" | sed -n 's/.*dev \([^ ]*\).*/\1/p')
+            # Check if this routes through a VPN/tunnel interface
+            if echo "$_fm_dev" | grep -qE "^(nwg|awg|ovpn|tun|tap|wg|l2tp|pptp|sstp)"; then
+                _kee_fwmark="$_fm"
+                _kee_vpn_dev="$_fm_dev"
+                break
+            fi
+        done
+
+        printf "\n  Split-routing verdict (client perspective):\n"
+        if [ -n "$_geo_client_dev" ] && [ -n "$_nongeo_client_dev" ]; then
+            if [ "$_geo_client_dev" != "$_nongeo_client_dev" ]; then
+                # Case 1: Different interfaces (e.g. GEO→VPN, non-GEO→ISP via default)
+                printf "    ✓ GEO → %s, non-GEO → %s (split ACTIVE — different interfaces)\n" \
+                    "$_geo_client_dev" "$_nongeo_client_dev"
+            elif [ -n "$_geo_client_table" ] && echo "$_geo_client_table" | grep -qE "^(1000|1001)$"; then
+                # Case 2: Same interface but GEO hits geo-split table (e.g. both→ISP, VPN via fwmark)
+                printf "    ✓ GEO → %s (table %s), non-GEO → %s (default route)\n" \
+                    "$_geo_client_dev" "$_geo_client_table" "$_nongeo_client_dev"
+                printf "      geo-split policy routing active (GEO hits table %s).\n" "$_geo_client_table"
+                if [ -n "$_kee_vpn_dev" ]; then
+                    printf "    ✓ Keenetic VPN policy: non-GEO → %s (fwmark %s)\n" \
+                        "$_kee_vpn_dev" "$_kee_fwmark"
+                elif [ -n "$_fwmarks" ]; then
+                    printf "    ℹ Keenetic fwmark policies exist but no VPN interface found.\n"
+                    printf "      Non-GEO traffic goes via default route (%s).\n" "$_nongeo_client_dev"
+                else
+                    printf "    ℹ No Keenetic fwmark policy. Non-GEO via default route (%s).\n" \
+                        "$_nongeo_client_dev"
+                fi
+            else
+                # Case 3: Same interface, no geo-split table hit
+                printf "    ⚠ GEO → %s, non-GEO → %s (SAME path, no geo-split table hit!)\n" \
+                    "$_geo_client_dev" "$_nongeo_client_dev"
+                if [ -n "$_kee_vpn_dev" ]; then
+                    printf "    ℹ Keenetic VPN policy active: fwmark %s → %s\n" "$_kee_fwmark" "$_kee_vpn_dev"
+                fi
+            fi
+        else
+            printf "    ? Could not determine interfaces (route get parse failed)\n"
+            printf "      geo raw: %s\n" "$_client_geo"
+            printf "      non-geo raw: %s\n" "$_client_nongeo"
+        fi
+
+        # Reachability checks
+        printf "\n  Reachability:\n"
+        # GEO target ping through geo-split interface
+        if [ -n "$_geo_client_dev" ]; then
+            printf "    GEO  (%s → %s): " "$_geo_client_dev" "$_GEO_IP"
+            if ping -I "$_geo_client_dev" -c 1 -W 3 "$_GEO_IP" >/dev/null 2>&1; then
+                printf "✓ OK\n"
+            else
+                printf "✗ FAIL (interface down? no NAT?)\n"
+            fi
+        fi
+        # Non-GEO target — ping through VPN if found, otherwise through default interface
+        _nongeo_ping_dev="${_kee_vpn_dev:-$_nongeo_client_dev}"
+        if [ -n "$_nongeo_ping_dev" ]; then
+            printf "    non-GEO (%s → %s): " "$_nongeo_ping_dev" "$_NON_GEO_IP"
+            if ping -I "$_nongeo_ping_dev" -c 1 -W 3 "$_NON_GEO_IP" >/dev/null 2>&1; then
+                printf "✓ OK\n"
+            else
+                printf "✗ FAIL"
+                if echo "$_nongeo_ping_dev" | grep -qE "^(nwg|awg|ovpn|tun|tap|wg)"; then
+                    printf " (VPN tunnel down? no connectivity?)"
+                fi
+                printf "\n"
+            fi
+        fi
+
+        # NAT check for client traffic through geo-split interface
+        if [ -n "$_geo_client_dev" ] && command -v iptables >/dev/null 2>&1; then
+            printf "\n  NAT for client traffic via %s:\n" "$_geo_client_dev"
+            _nat_match=$(iptables -t nat -L POSTROUTING -n -v 2>/dev/null \
+                | grep -i "masq\|snat" | grep "$_geo_client_dev" || true)
+            if [ -n "$_nat_match" ]; then
+                echo "$_nat_match" | sed 's/^/    /'
+            else
+                # Check for blanket MASQUERADE (common on Keenetic — covers all)
+                _nat_all=$(iptables -t nat -L POSTROUTING -n -v 2>/dev/null \
+                    | grep -i "masq" | grep "0.0.0.0/0.*0.0.0.0/0" || true)
+                if [ -n "$_nat_all" ]; then
+                    printf "    ✓ Blanket MASQUERADE detected (covers all interfaces)\n"
+                else
+                    printf "    ⚠ No MASQUERADE/SNAT for %s — return traffic may fail!\n" "$_geo_client_dev"
+                fi
+            fi
+        fi
+    else
+        printf "  (cannot determine LAN IP for interface %s)\n" "$_route_in"
+    fi
+elif [ -z "$_GEO_IP" ]; then
+    printf "  (no GEO targets found — tables empty, domain cache missing)\n"
+    printf "  Hint: run '/opt/etc/init.d/S99geo-split start' to populate routes.\n"
+else
+    printf "  (ip command not found)\n"
+fi
+
+# ─── 12. Netfilter rules (smartdns-redirect) ─────────────────────────────────
 
 section "Netfilter (DNS redirect)"
 
@@ -287,11 +623,21 @@ if command -v iptables >/dev/null 2>&1; then
     printf "iptables NAT (DNAT/REDIRECT :53):\n"
     iptables -t nat -L PREROUTING -n --line-numbers 2>/dev/null \
         | grep -E "53|smartdns|REDIRECT|DNAT" | head -20 || echo "  (no DNS redirect rules)"
+
+    # POSTROUTING NAT (MASQUERADE/SNAT for VPN — critical for tunnel routing)
+    printf "\niptables NAT (POSTROUTING, VPN/tunnel):\n"
+    _postrouting=$(iptables -t nat -L POSTROUTING -n -v 2>/dev/null \
+        | grep -E "MASQ|SNAT|nwg|awg|ovpn|gre|tun|tap" | head -10)
+    if [ -n "$_postrouting" ]; then
+        echo "$_postrouting" | sed 's/^/  /'
+    else
+        printf "  (no VPN MASQUERADE/SNAT rules)\n"
+    fi
 else
     echo "iptables: not found"
 fi
 
-# ─── 12. Network interfaces ──────────────────────────────────────────────────
+# ─── 13. Network interfaces ──────────────────────────────────────────────────
 
 section "Network interfaces (UP only, no IPs)"
 
@@ -320,7 +666,90 @@ else
     echo "  (ip command not found)"
 fi
 
-# ─── 13. Logs (tail) ─────────────────────────────────────────────────────────
+# ─── 14. Edge-case diagnostics ───────────────────────────────────────────────
+
+section "Edge-case diagnostics"
+
+if command -v ip >/dev/null 2>&1; then
+    # IPv6 leak: if IPv6 default route exists, geo-split (IPv4-only) is bypassed
+    _v6_def=$(ip -6 route show default 2>/dev/null | head -2)
+    printf "IPv6 default route:\n"
+    if [ -n "$_v6_def" ]; then
+        echo "$_v6_def" | sed 's/^/  /'
+        printf "  ⚠ IPv6 is active — dual-stack sites may bypass geo-split (IPv4-only).\n"
+    else
+        printf "  (none — IPv6 not routed, no leak risk)\n"
+    fi
+
+    # Full ip rule (priority conflicts, other policy routing)
+    printf "\nFull ip rule show:\n"
+    ip rule show 2>/dev/null | head -25 | sed 's/^/  /'
+
+    # MTU on key interfaces (VPN tunnel MTU < ISP = TCP MSS issues)
+    printf "\nInterface MTU:\n"
+    ip -brief link show 2>/dev/null | grep -v "DOWN" | while IFS= read -r _line; do
+        _if_name=$(echo "$_line" | awk '{print $1}')
+        _mtu=$(ip link show "$_if_name" 2>/dev/null | sed -n 's/.*mtu \([0-9]*\).*/\1/p')
+        [ -n "$_mtu" ] && [ "$_mtu" -lt 1500 ] && \
+            printf "  %-16s MTU %s ⚠\n" "$_if_name" "$_mtu"
+    done
+    # Show default MTU for reference
+    _def_mtu=$(ip link show br0 2>/dev/null | sed -n 's/.*mtu \([0-9]*\).*/\1/p')
+    printf "  br0 (LAN):       MTU %s (reference)\n" "${_def_mtu:-unknown}"
+
+    # Multiple default routes (dual-WAN / bonding)
+    _def_count=$(ip route | grep -c "^default" 2>/dev/null) || _def_count=0
+    if [ "$_def_count" -gt 1 ]; then
+        printf "\n⚠ Multiple default routes (%s):\n" "$_def_count"
+        ip route | grep "^default" | sed 's/^/  /'
+    fi
+fi
+
+# Keenetic DNS interception (OUTPUT chain — may conflict with smartdns-redirect)
+if command -v iptables >/dev/null 2>&1; then
+    _out_dns=$(iptables -t nat -L OUTPUT -n 2>/dev/null | grep -E "53|DNS" | head -5)
+    if [ -n "$_out_dns" ]; then
+        printf "\niptables OUTPUT DNS (Keenetic filter profiles):\n"
+        echo "$_out_dns" | sed 's/^/  /'
+    fi
+fi
+
+# ROUTE_OUT interface health checks
+_gs_conf_dir="$BASE/geo-split/config"
+if [ -d "$_gs_conf_dir" ]; then
+    (
+        _CONFIG_DIR="$_gs_conf_dir"
+        # shellcheck disable=SC1091
+        . "$_gs_conf_dir/defaults.conf"
+        # shellcheck disable=SC1091
+        [ -f "$_gs_conf_dir/config.conf" ] && . "$_gs_conf_dir/config.conf"
+        _cfg_out="${ROUTE_OUT:-auto}"
+
+        # Check: explicit ROUTE_OUT interface exists and is UP
+        if [ "$_cfg_out" != "auto" ] && [ -n "$_cfg_out" ]; then
+            printf "\nROUTE_OUT interface check (%s):\n" "$_cfg_out"
+            if ! ip link show "$_cfg_out" >/dev/null 2>&1; then
+                printf "  ✗ Interface '%s' does not exist! (renamed after fw update?)\n" "$_cfg_out"
+            elif ip link show "$_cfg_out" 2>/dev/null | grep -q "state DOWN"; then
+                printf "  ⚠ Interface '%s' is DOWN — routes exist but traffic won't flow.\n" "$_cfg_out"
+            else
+                printf "  ✓ Interface '%s' exists and not DOWN.\n" "$_cfg_out"
+            fi
+        fi
+    )
+fi
+
+# crond health (geo-split relies on cron for cache refresh)
+printf "\nCron daemon:\n"
+if pidof crond >/dev/null 2>&1; then
+    printf "  ✓ crond running (pid %s)\n" "$(pidof crond)"
+elif pidof cron >/dev/null 2>&1; then
+    printf "  ✓ cron running (pid %s)\n" "$(pidof cron)"
+else
+    printf "  ✗ crond NOT running — geo-split subnets/domains won't auto-refresh!\n"
+fi
+
+# ─── 15. Logs (tail) ─────────────────────────────────────────────────────────
 
 section "Logs (tail)"
 

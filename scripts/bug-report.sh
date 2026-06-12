@@ -685,17 +685,18 @@ if command -v ip >/dev/null 2>&1; then
     printf "\nFull ip rule show:\n"
     ip rule show 2>/dev/null | head -25 | sed 's/^/  /'
 
-    # MTU on key interfaces (VPN tunnel MTU < ISP = TCP MSS issues)
-    printf "\nInterface MTU:\n"
-    ip -brief link show 2>/dev/null | grep -v "DOWN" | while IFS= read -r _line; do
+    # MTU on VPN/tunnel interfaces (reduced MTU — expected, shown for TCP MSS diagnostics)
+    printf "\nVPN interface MTU:\n"
+    _shown_mtu=0
+    ip -brief link show 2>/dev/null | grep -E "^(nwg|awg|ovpn|tun|tap|wg|l2tp|pptp|ngre|gre)" | while IFS= read -r _line; do
         _if_name=$(echo "$_line" | awk '{print $1}')
         _mtu=$(ip link show "$_if_name" 2>/dev/null | sed -n 's/.*mtu \([0-9]*\).*/\1/p')
-        [ -n "$_mtu" ] && [ "$_mtu" -lt 1500 ] && \
-            printf "  %-16s MTU %s ⚠\n" "$_if_name" "$_mtu"
+        if [ -n "$_mtu" ]; then
+            printf "  %-16s MTU %s\n" "$_if_name" "$_mtu"
+        fi
     done
-    # Show default MTU for reference
     _def_mtu=$(ip link show br0 2>/dev/null | sed -n 's/.*mtu \([0-9]*\).*/\1/p')
-    printf "  br0 (LAN):       MTU %s (reference)\n" "${_def_mtu:-unknown}"
+    printf "  br0 (reference): MTU %s\n" "${_def_mtu:-unknown}"
 
     # Multiple default routes (dual-WAN / bonding)
     _def_count=$(ip route | grep -c "^default" 2>/dev/null) || _def_count=0

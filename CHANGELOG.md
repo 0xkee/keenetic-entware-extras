@@ -5,6 +5,13 @@ All notable changes to `keenetic-entware-extras` (base package) are documented h
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.16.1] - 2026-06-13
+
+### Fixed
+- `scripts/bug-report.sh`: MTU check no longer crashes script on routers with
+  non-VPN interfaces having MTU >= 1500 (set -e + `&&` chain in while pipeline).
+  Now shows only VPN/tunnel MTU (informational, no ⚠ — reduced MTU is expected).
+
 ## [0.16.0] - 2026-06-13
 
 ### Fixed

@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-06-13
+
+### Added
+- User manual (`docs/user-manual.ru.md`) included in .ipk package
+- Updated description: compatibility with `smartdns-geo-conf` (renamed from `smartdns-conf-ru-split`)
+
 ## [0.3.1] - 2026-06-01
 
 ### Changed

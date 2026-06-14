@@ -190,6 +190,16 @@ collect_dns_tests_json() {
   _json_dns_tests="${_json_dns_tests}]"
 }
 
+# Get first ISP DNS IP from /tmp/ndnproxymain.conf (Keenetic).
+# Filters: SmartDNS (:6053), loopback. Returns single IP or empty.
+_status_get_first_isp_ip() {
+  local _ip=""
+  if [ -f /tmp/ndnproxymain.conf ]; then
+    _ip="$(grep '^dns_server' /tmp/ndnproxymain.conf | awk '{print $3}' | grep -v ':6053' | sed 's/:.*//' | grep -v '^127\.' | head -1)"
+  fi
+  printf '%s' "$_ip"
+}
+
 # Check direct reachability of configured upstream DNS providers.
 # Sets: _json_dns_server_checks (JSON array string)
 collect_dns_server_checks_json() {
@@ -214,6 +224,15 @@ collect_dns_server_checks_json() {
     local host_var="ZONE_${p}_TLS_HOST"
     eval "local ip=\"\${${ip_var}:-}\""
     eval "local host=\"\${${host_var}:-}\""
+    # Dynamic provider (ISP Default): resolve IP from ndnproxymain.conf
+    if [ -z "$ip" ]; then
+      eval "local _dyn=\"\${ZONE_${p}_DYNAMIC:-}\""
+      # shellcheck disable=SC2154  # _dyn assigned via eval
+      if [ "$_dyn" = "resolv" ]; then
+        ip="$(_status_get_first_isp_ip)"
+        host="$ip"
+      fi
+    fi
     [ -z "$ip" ] && continue
     local ok="false"
     if dig +short +time=3 +tries=1 "test.local" @"$ip" >/dev/null 2>&1; then
@@ -230,6 +249,15 @@ collect_dns_server_checks_json() {
     local host_var="OTHER_${p}_TLS_HOST"
     eval "local ip=\"\${${ip_var}:-}\""
     eval "local host=\"\${${host_var}:-}\""
+    # Dynamic provider (ISP Default): resolve IP from ndnproxymain.conf
+    if [ -z "$ip" ]; then
+      eval "local _dyn=\"\${OTHER_${p}_DYNAMIC:-}\""
+      # shellcheck disable=SC2154  # _dyn assigned via eval
+      if [ "$_dyn" = "resolv" ]; then
+        ip="$(_status_get_first_isp_ip)"
+        host="$ip"
+      fi
+    fi
     [ -z "$ip" ] && continue
     local ok="false"
     if dig +short +time=3 +tries=1 "test.local" @"$ip" >/dev/null 2>&1; then

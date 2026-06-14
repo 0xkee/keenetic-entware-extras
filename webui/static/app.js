@@ -809,6 +809,7 @@ var CONFIG_SCHEMAS = {
           desc: 'DNS zone preset: select countries or a geopolitical union (expands to multiple countries).' },
         { key: 'ZONE_DNS_PROVIDER', label: 'Zone DNS Provider', type: 'multi_select',
           options: [
+            { value: 'default', label: 'ISP Default' },
             { value: 'yandex', label: 'Yandex' },
             { value: 'yandex_safe', label: 'Yandex Safe' },
             { value: 'yandex_family', label: 'Yandex Family' },
@@ -817,10 +818,11 @@ var CONFIG_SCHEMAS = {
             { value: 'alidns', label: 'AliDNS (China)' },
             { value: 'tencent', label: 'Tencent (China)' }
           ],
-          hint: 'DNS for zone domains (.ru, .by, etc.)',
-          desc: 'DNS provider(s) for zone/regional group. Select one or more. These servers resolve ccTLD domains for best CDN geo-optimization.' },
-        { key: 'OTHER_DNS_PROVIDER', label: 'International DNS', type: 'multi_select',
+          hint: 'Upstream DNS for zone group',
+          desc: 'DNS provider(s) for zone/regional group. Select one or more. Resolves zone domains (ccTLDs + CDN-optimized services).' },
+        { key: 'OTHER_DNS_PROVIDER', label: 'Other DNS Provider', type: 'multi_select',
           options: [
+            { value: 'default', label: 'ISP Default' },
             { value: 'google', label: 'Google' },
             { value: 'cloudflare', label: 'Cloudflare' },
             { value: 'quad9', label: 'Quad9 (malware filter)' },
@@ -830,8 +832,8 @@ var CONFIG_SCHEMAS = {
             { value: 'controld', label: 'ControlD Free' },
             { value: 'adguard', label: 'AdGuard (ads filter)' }
           ],
-          hint: 'DNS for all other domains',
-          desc: 'DNS provider(s) for international/default group. Select one or more. Resolves all non-zone domains (.com, .net, etc.).' },
+          hint: 'Upstream DNS for default group',
+          desc: 'DNS provider(s) for international/default group. Select one or more. Resolves all non-zone domains.' },
         { key: 'ZONE_DNS_INTERFACE', label: 'Zone VPN Interface', type: 'iface_select', hint: 'Default = ISP direct',
           desc: 'Outgoing interface for zone DNS (Yandex/AdGuard). Default = ISP direct. Usually unchanged — MITM does not block.' },
         { key: 'OTHER_DNS_INTERFACES', label: 'International VPN Interfaces', type: 'iface_select', hint: 'Default = ISP direct',

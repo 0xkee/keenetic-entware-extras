@@ -166,6 +166,7 @@ DNS-провайдеры настраиваются через две перем
 
 | Значение | Провайдер | Протокол | Особенности |
 |----------|-----------|----------|-------------|
+| `default` | ISP Default | UDP | DNS от провайдера, без шифрования |
 | `google` | Google Public DNS | DoH | Быстрый, глобальный anycast |
 | `cloudflare` | Cloudflare 1.1.1.1 | DoH | Быстрый, privacy-focused |
 | `quad9` | Quad9 | DoT | Фильтрация malware |
@@ -179,6 +180,7 @@ DNS-провайдеры настраиваются через две перем
 
 | Значение | Провайдер | Протокол | Регион |
 |----------|-----------|----------|--------|
+| `default` | ISP Default | UDP | DNS от провайдера, без шифрования |
 | `yandex` | Yandex DNS (базовый) | DoT + UDP | RU/СНГ |
 | `yandex_safe` | Yandex Safe | DoT + UDP | RU/СНГ, фильтрация malware |
 | `yandex_family` | Yandex Family | DoT + UDP | RU/СНГ, семейный фильтр |

@@ -40,6 +40,18 @@ get_zone_prov() {
   eval "printf '%s' \"\$ZONE_${1}_${2}\""
 }
 
+# Resolve ISP DNS IPs dynamically from /tmp/ndnproxymain.conf (Keenetic).
+# Filters: SmartDNS forwarding (:6053), loopback (127.*).
+# Returns up to 2 IPs, one per line.
+_get_isp_dns_ips() {
+  local _ips=""
+  if [ -f /tmp/ndnproxymain.conf ]; then
+    # Format: "dns_server = <IP>[:port] ." — field 3 is IP:port
+    _ips="$(grep '^dns_server' /tmp/ndnproxymain.conf | awk '{print $3}' | grep -v ':6053' | sed 's/:.*//' | grep -v '^127\.' | head -2)"
+  fi
+  printf '%s' "$_ips"
+}
+
 # ===================================================================
 # Generate: international (other) DNS servers — default group
 # ===================================================================
@@ -56,6 +68,23 @@ HEADER
   for provider in $OTHER_DNS_PROVIDER; do
     local proto
     proto="$(get_other_prov "$provider" PROTO)"
+
+    # UDP protocol (ISP Default) — no IP/TLS fields, handle early
+    if [ "$proto" = "udp" ]; then
+      local _resolv_ips
+      _resolv_ips="$(_get_isp_dns_ips)"
+      if [ -n "$_resolv_ips" ]; then
+        printf '# %s — ISP Default (plain UDP)\n' "$provider" >> "$out"
+        for _rip in $_resolv_ips; do
+          printf 'server %s\n' "$_rip" >> "$out"
+        done
+        printf '\n' >> "$out"
+      else
+        printf '# %s — ISP Default: no ISP DNS found in ndnproxymain.conf\n\n' "$provider" >> "$out"
+      fi
+      continue
+    fi
+
     local ip1 ip2 tls_host doh_url
     ip1="$(get_other_prov "$provider" IP1)"
     ip2="$(get_other_prov "$provider" IP2)"
@@ -185,8 +214,30 @@ _generate_zone_servers() {
   fi
 
   for provider in $ZONE_DNS_PROVIDER; do
-    local proto ip1 ip2 tls_host udp_fb
+    local proto
     proto="$(get_zone_prov "$provider" PROTO)"
+
+    # UDP protocol (ISP Default) — no IP/TLS fields, handle early
+    if [ "$proto" = "udp" ]; then
+      local _resolv_ips
+      _resolv_ips="$(_get_isp_dns_ips)"
+      if [ -n "$_resolv_ips" ]; then
+        printf '# %s — ISP Default (group %s)\n' "$provider" "$_cc" >> "$_out"
+        for _rip in $_resolv_ips; do
+          if [ -n "$_iface_flag" ]; then
+            printf 'server %s %s %s\n' "$_rip" "$_group_flags" "$_iface_flag" >> "$_out"
+          else
+            printf 'server %s %s\n' "$_rip" "$_group_flags" >> "$_out"
+          fi
+        done
+        printf '\n' >> "$_out"
+      else
+        printf '# %s — ISP Default: no ISP DNS found in ndnproxymain.conf\n\n' "$provider" >> "$_out"
+      fi
+      continue
+    fi
+
+    local ip1 ip2 tls_host udp_fb
     ip1="$(get_zone_prov "$provider" IP1)"
     ip2="$(get_zone_prov "$provider" IP2)"
     tls_host="$(get_zone_prov "$provider" TLS_HOST)"

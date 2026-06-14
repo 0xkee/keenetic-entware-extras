@@ -241,15 +241,17 @@ else
     echo "  (no DNS tools available)"
 fi
 
-printf "\nSystem resolver:\n"
-if [ -f /tmp/resolv.conf ]; then
-    sed 's/^/  /' /tmp/resolv.conf | head -10
-    # Annotate if pointing to localhost (expected with SmartDNS)
-    if grep -q "nameserver 127.0.0.1" /tmp/resolv.conf 2>/dev/null; then
-        printf "  (expected: router uses local resolver → SmartDNS/ndnproxy)\n"
-    fi
-elif [ -f /etc/resolv.conf ]; then
-    sed 's/^/  /' /etc/resolv.conf | head -10
+printf "\nndnproxy config (ISP DNS):\n"
+if [ -f /tmp/ndnproxymain.conf ]; then
+    # Show dns_server lines; mask public IPs for privacy (private ranges shown as-is)
+    grep '^dns_server' /tmp/ndnproxymain.conf | while IFS= read -r _line; do
+        _masked="$(echo "$_line" | sed -E \
+            -e 's/= (10\.[0-9]+\.[0-9]+\.[0-9]+)/= \1/g' \
+            -e 's/= (172\.(1[6-9]|2[0-9]|3[01])\.[0-9]+\.[0-9]+)/= \1/g' \
+            -e 's/= (192\.168\.[0-9]+\.[0-9]+)/= \1/g' \
+            -e 's/= ([0-9]+\.[0-9]+\.[0-9]+)\.[0-9]+/= \1.xxx/g')"
+        printf "  %s\n" "$_masked"
+    done
 else
     echo "  (not found)"
 fi

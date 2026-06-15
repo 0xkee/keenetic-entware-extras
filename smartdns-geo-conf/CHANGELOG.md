@@ -5,11 +5,19 @@ All notable changes to `smartdns-geo-conf` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.10.0] — 2026-06-15
+
+### Changed
+- `default` DNS provider renamed → `system`. More accurate: resolves from
+  Keenetic system DNS config (`/tmp/ndnproxymain.conf`), not necessarily ISP-assigned.
+  Update `config.conf` if you used `OTHER_DNS_PROVIDER="default"` or `ZONE_DNS_PROVIDER="default"`.
+- `dns-providers.conf`: added `*_LABEL` variables for each provider (used by WebUI dynamic list)
+
 ## [0.9.0] — 2026-06-15
 
 ### Added
-- **`default` (ISP DNS) provider** — new provider option for both `OTHER_DNS_PROVIDER` and
-  `ZONE_DNS_PROVIDER`. Uses plain UDP to ISP DNS servers (read dynamically from
+- **`system` (Keenetic DNS) provider** — provider option for both `OTHER_DNS_PROVIDER` and
+  `ZONE_DNS_PROVIDER`. Uses plain UDP to system DNS servers (read dynamically from
   `/tmp/ndnproxymain.conf` at config generation time). Lowest latency, no encryption overhead.
 - `_get_isp_dns_ips()` helper in `generate-conf.sh` — parses ISP nameservers from
   `/tmp/ndnproxymain.conf` (filters out SmartDNS :6053 and loopback)

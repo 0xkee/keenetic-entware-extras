@@ -5,6 +5,14 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.25.0] - 2026-06-15
+
+### Changed
+- SmartDNS config editor: `ZONE_DNS_PROVIDER` and `OTHER_DNS_PROVIDER` options now loaded
+  dynamically from `/api/system/dns-providers` (parsed from `dns-providers.conf`).
+  No longer hardcoded in app.js — adding/removing providers in config auto-reflects in UI.
+- `api-router.lua`: new endpoint `GET /api/system/dns-providers` (cached 1h, parses `*_LABEL`)
+
 ## [0.24.1] - 2026-06-11
 
 ### Changed

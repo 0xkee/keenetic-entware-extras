@@ -119,7 +119,7 @@ ZONE_DNS_INTERFACE=""
 
 | Значение | Провайдер | Протокол |
 |----------|-----------|----------|
-| `default` | ISP Default (провайдерский) | UDP |
+| `system` | System (Keenetic) | UDP |
 | `google` | Google Public DNS | DoH |
 | `cloudflare` | Cloudflare | DoH |
 | `quad9` | Quad9 (malware filter) | DoT |
@@ -133,7 +133,7 @@ ZONE_DNS_INTERFACE=""
 
 | Значение | Провайдер | Протокол | Регион |
 |----------|-----------|----------|--------|
-| `default` | ISP Default (провайдерский) | UDP | — |
+| `system` | System (Keenetic) | UDP | — |
 | `yandex` | Yandex DNS | DoT+UDP | RU/CIS |
 | `yandex_safe` | Yandex Safe | DoT+UDP | RU/CIS |
 | `yandex_family` | Yandex Family | DoT+UDP | RU/CIS |

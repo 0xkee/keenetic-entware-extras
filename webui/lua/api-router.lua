@@ -606,6 +606,37 @@ local function system_zones()
         '],"unions":[' .. table.concat(union_groups, ",") .. ']}'
 end
 
+--- Build /api/system/dns-providers response: parse dns-providers.conf.
+-- Extracts provider names and labels from *_LABEL variables.
+-- @return string — JSON with "zone" and "other" arrays
+local function system_dns_providers()
+    local providers_file = base .. "/smartdns-geo-conf/config/dns-providers.conf"
+    local content = read_file(providers_file)
+    if not content then
+        return '{"ok":false,"error":"dns-providers.conf not found"}'
+    end
+
+    local zone_items = {}
+    local other_items = {}
+
+    -- Parse lines matching: {GROUP}_{name}_LABEL="..."
+    -- GROUP = OTHER or ZONE, name = provider key (may contain underscores)
+    for line in content:gmatch("[^\n]+") do
+        local n, l = line:match('^%s*OTHER_(.+)_LABEL%s*=%s*"([^"]*)"')
+        if n then
+            other_items[#other_items + 1] = '{"value":"' .. json_escape(n) .. '","label":"' .. json_escape(l) .. '"}'
+        else
+            n, l = line:match('^%s*ZONE_(.+)_LABEL%s*=%s*"([^"]*)"')
+            if n then
+                zone_items[#zone_items + 1] = '{"value":"' .. json_escape(n) .. '","label":"' .. json_escape(l) .. '"}'
+            end
+        end
+    end
+
+    return '{"ok":true,"zone":[' .. table.concat(zone_items, ",") ..
+        '],"other":[' .. table.concat(other_items, ",") .. ']}'
+end
+
 -- Status script routes: URI → shell command
 -- JSON routes call status.sh --json → output is already valid JSON
 local json_routes = {
@@ -669,6 +700,19 @@ if uri == "/api/system/zones" or uri == "/api/smartdns/zones" then
     else
         local result = system_zones()
         cache:set(zones_key, result, STATIC_TTL)
+        ngx.say(result)
+    end
+    return
+end
+
+if uri == "/api/system/dns-providers" then
+    local prov_key = "/api/system/dns-providers"
+    local cached = cache:get(prov_key)
+    if cached then
+        ngx.say(cached)
+    else
+        local result = system_dns_providers()
+        cache:set(prov_key, result, STATIC_TTL)
         ngx.say(result)
     end
     return

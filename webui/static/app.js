@@ -808,30 +808,11 @@ var CONFIG_SCHEMAS = {
         { key: 'DNS_ZONE', label: 'DNS Zone', type: 'zone_selector',
           desc: 'DNS zone preset: select countries or a geopolitical union (expands to multiple countries).' },
         { key: 'ZONE_DNS_PROVIDER', label: 'Zone DNS Provider', type: 'multi_select',
-          options: [
-            { value: 'default', label: 'ISP Default' },
-            { value: 'yandex', label: 'Yandex' },
-            { value: 'yandex_safe', label: 'Yandex Safe' },
-            { value: 'yandex_family', label: 'Yandex Family' },
-            { value: 'adguard', label: 'AdGuard (unfiltered)' },
-            { value: 'adguard_ads', label: 'AdGuard (ads filter)' },
-            { value: 'alidns', label: 'AliDNS (China)' },
-            { value: 'tencent', label: 'Tencent (China)' }
-          ],
+          dynamicOptions: 'zone',
           hint: 'Upstream DNS for zone group',
           desc: 'DNS provider(s) for zone/regional group. Select one or more. Resolves zone domains (ccTLDs + CDN-optimized services).' },
         { key: 'OTHER_DNS_PROVIDER', label: 'Other DNS Provider', type: 'multi_select',
-          options: [
-            { value: 'default', label: 'ISP Default' },
-            { value: 'google', label: 'Google' },
-            { value: 'cloudflare', label: 'Cloudflare' },
-            { value: 'quad9', label: 'Quad9 (malware filter)' },
-            { value: 'quad9uf', label: 'Quad9 Unfiltered' },
-            { value: 'mullvad', label: 'Mullvad (privacy, no-log)' },
-            { value: 'mullvad_adblock', label: 'Mullvad Adblock' },
-            { value: 'controld', label: 'ControlD Free' },
-            { value: 'adguard', label: 'AdGuard (ads filter)' }
-          ],
+          dynamicOptions: 'other',
           hint: 'Upstream DNS for default group',
           desc: 'DNS provider(s) for international/default group. Select one or more. Resolves all non-zone domains.' },
         { key: 'ZONE_DNS_INTERFACE', label: 'Zone VPN Interface', type: 'iface_select', hint: 'Default = ISP direct',
@@ -968,12 +949,17 @@ function loadConfigModal(svcId) {
     var zonesPromise = (svcId === 'smartdns' || svcId === 'geo-split')
         ? fetch('/api/system/zones').then(function(r) { return r.json(); })
         : Promise.resolve(null);
+    // Fetch DNS providers list dynamically (smartdns config editor)
+    var providersPromise = (svcId === 'smartdns')
+        ? fetch('/api/system/dns-providers').then(function(r) { return r.json(); })
+        : Promise.resolve(null);
 
-    Promise.all([configPromise, ifacesPromise, zonesPromise])
+    Promise.all([configPromise, ifacesPromise, zonesPromise, providersPromise])
         .then(function(results) {
             var configData = results[0];
             var ifacesData = results[1];
             var zonesData = results[2];
+            var providersData = results[3];
 
             if (!configData.ok) {
                 body.innerHTML = '<div class="ew-editor-msg ew-editor-msg--error">Failed: ' + escapeHtml(configData.error || 'unknown') + '</div>';
@@ -983,7 +969,7 @@ function loadConfigModal(svcId) {
             // Cache defaults for reset and diff-save
             configDefaults[svcId] = configData.defaults || {};
 
-            renderModalForm(body, svcId, schema, configData.config, configData.defaults || {}, ifacesData.interfaces || [], zonesData);
+            renderModalForm(body, svcId, schema, configData.config, configData.defaults || {}, ifacesData.interfaces || [], zonesData, providersData);
             if (footer) footer.style.display = '';
         })
         .catch(function(err) {
@@ -1000,8 +986,9 @@ function loadConfigModal(svcId) {
  * @param {Object} defaults - default values
  * @param {Array} interfaces
  * @param {Object|null} zonesData - zone selector data (for smartdns)
+ * @param {Object|null} providersData - DNS providers from /api/system/dns-providers
  */
-function renderModalForm(body, svcId, schema, config, defaults, interfaces, zonesData) {
+function renderModalForm(body, svcId, schema, config, defaults, interfaces, zonesData, providersData) {
     var html = '';
 
     for (var i = 0; i < schema.length; i++) {
@@ -1097,7 +1084,12 @@ function renderModalForm(body, svcId, schema, config, defaults, interfaces, zone
             }
             html += '</div></div>';
         } else if (field.type === 'multi_select') {
-            // Custom dropdown multi-select with checkboxes (static options from schema)
+            // Custom dropdown multi-select with checkboxes
+            // Use dynamic options from API when available (dynamicOptions: 'zone'|'other')
+            var msOptions = field.options || [];
+            if (field.dynamicOptions && providersData && providersData[field.dynamicOptions]) {
+                msOptions = providersData[field.dynamicOptions];
+            }
             var msSelected = String(val).split(/\s+/).filter(function(s) { return s; });
             var msDisplayText = msSelected.length ? msSelected.join(', ') : 'None';
             html += '<div class="ew-modal__iface-select" data-config-key="' + field.key + '" data-selection-order="' + escapeHtml(msSelected.join(' ')) + '">';
@@ -1105,8 +1097,8 @@ function renderModalForm(body, svcId, schema, config, defaults, interfaces, zone
                 '<span class="ew-modal__iface-select-text">' + escapeHtml(msDisplayText) + '</span>' +
                 '<svg class="ew-modal__select-arrow" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></button>';
             html += '<div class="ew-modal__iface-select-panel ew-hidden">';
-            for (var ms = 0; ms < field.options.length; ms++) {
-                var msOpt = field.options[ms];
+            for (var ms = 0; ms < msOptions.length; ms++) {
+                var msOpt = msOptions[ms];
                 var msChk = msSelected.indexOf(msOpt.value) !== -1;
                 html += '<label class="ew-modal__iface-select-option">' +
                     '<input type="checkbox" value="' + escapeHtml(msOpt.value) + '"' + (msChk ? ' checked' : '') + '>' +

@@ -224,7 +224,7 @@ collect_dns_server_checks_json() {
     local host_var="ZONE_${p}_TLS_HOST"
     eval "local ip=\"\${${ip_var}:-}\""
     eval "local host=\"\${${host_var}:-}\""
-    # Dynamic provider (ISP Default): resolve IP from ndnproxymain.conf
+    # Dynamic provider (System/Keenetic): resolve IP from ndnproxymain.conf
     if [ -z "$ip" ]; then
       eval "local _dyn=\"\${ZONE_${p}_DYNAMIC:-}\""
       # shellcheck disable=SC2154  # _dyn assigned via eval
@@ -249,7 +249,7 @@ collect_dns_server_checks_json() {
     local host_var="OTHER_${p}_TLS_HOST"
     eval "local ip=\"\${${ip_var}:-}\""
     eval "local host=\"\${${host_var}:-}\""
-    # Dynamic provider (ISP Default): resolve IP from ndnproxymain.conf
+    # Dynamic provider (System/Keenetic): resolve IP from ndnproxymain.conf
     if [ -z "$ip" ]; then
       eval "local _dyn=\"\${OTHER_${p}_DYNAMIC:-}\""
       # shellcheck disable=SC2154  # _dyn assigned via eval

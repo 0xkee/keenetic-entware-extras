@@ -69,18 +69,18 @@ HEADER
     local proto
     proto="$(get_other_prov "$provider" PROTO)"
 
-    # UDP protocol (ISP Default) — no IP/TLS fields, handle early
+    # UDP protocol (System/Keenetic DNS) — no IP/TLS fields, handle early
     if [ "$proto" = "udp" ]; then
       local _resolv_ips
       _resolv_ips="$(_get_isp_dns_ips)"
       if [ -n "$_resolv_ips" ]; then
-        printf '# %s — ISP Default (plain UDP)\n' "$provider" >> "$out"
+        printf '# %s — System DNS (plain UDP)\n' "$provider" >> "$out"
         for _rip in $_resolv_ips; do
           printf 'server %s\n' "$_rip" >> "$out"
         done
         printf '\n' >> "$out"
       else
-        printf '# %s — ISP Default: no ISP DNS found in ndnproxymain.conf\n\n' "$provider" >> "$out"
+        printf '# %s — System DNS: no DNS found in ndnproxymain.conf\n\n' "$provider" >> "$out"
       fi
       continue
     fi
@@ -217,12 +217,12 @@ _generate_zone_servers() {
     local proto
     proto="$(get_zone_prov "$provider" PROTO)"
 
-    # UDP protocol (ISP Default) — no IP/TLS fields, handle early
+    # UDP protocol (System/Keenetic DNS) — no IP/TLS fields, handle early
     if [ "$proto" = "udp" ]; then
       local _resolv_ips
       _resolv_ips="$(_get_isp_dns_ips)"
       if [ -n "$_resolv_ips" ]; then
-        printf '# %s — ISP Default (group %s)\n' "$provider" "$_cc" >> "$_out"
+        printf '# %s — System DNS (group %s)\n' "$provider" "$_cc" >> "$_out"
         for _rip in $_resolv_ips; do
           if [ -n "$_iface_flag" ]; then
             printf 'server %s %s %s\n' "$_rip" "$_group_flags" "$_iface_flag" >> "$_out"
@@ -232,7 +232,7 @@ _generate_zone_servers() {
         done
         printf '\n' >> "$_out"
       else
-        printf '# %s — ISP Default: no ISP DNS found in ndnproxymain.conf\n\n' "$provider" >> "$_out"
+        printf '# %s — System DNS: no DNS found in ndnproxymain.conf\n\n' "$provider" >> "$_out"
       fi
       continue
     fi

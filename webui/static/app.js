@@ -978,6 +978,104 @@ function loadConfigModal(svcId) {
 }
 
 /**
+ * Render a unified dropdown component (single-select or multi-select).
+ * Handles search bar, grouped options, pre-items with dot indicators.
+ * @param {Object} opts
+ * @param {string} opts.mode - 'single' (radio) or 'multi' (checkbox)
+ * @param {string} opts.configKey - data-config-key attribute value
+ * @param {string} opts.displayText - text shown in the trigger button
+ * @param {Array} opts.options - [{value, label, desc?}] flat options
+ * @param {Array} [opts.groups] - [{group, items:[{value, label, desc?}]}] grouped options (overrides opts.options)
+ * @param {Array} [opts.preItems] - [{value, label}] special items before main list (with dot indicator)
+ * @param {string} [opts.radioName] - name attribute for radio inputs (required for single mode)
+ * @param {string|Array} [opts.selected] - current value(s): string for single, array for multi
+ * @param {boolean} [opts.dots] - show up/down dot indicators on options
+ * @param {Array} [opts.ifaces] - [{name, label?, up}] interface data (when dots=true)
+ * @returns {string} HTML string
+ */
+function renderDropdown(opts) {
+    var mode = opts.mode || 'single';
+    var isMulti = (mode === 'multi');
+    var selected = opts.selected || (isMulti ? [] : '');
+    var selArray = isMulti ? (Array.isArray(selected) ? selected : String(selected).split(/\s+/).filter(Boolean)) : [];
+    var selVal = isMulti ? '' : String(selected);
+    var displayText = opts.displayText || (isMulti ? (selArray.length ? selArray.join(', ') : 'None') : selVal);
+
+    var html = '';
+    // Container
+    var keyAttr = opts.configKey ? ' data-config-key="' + escapeHtml(opts.configKey) + '"' : '';
+    if (isMulti) {
+        html += '<div class="ew-modal__iface-select"' + keyAttr + ' data-selection-order="' + escapeHtml(selArray.join(' ')) + '">';
+    } else {
+        html += '<div class="ew-modal__iface-select"' + keyAttr + '>';
+    }
+    // Trigger button
+    html += '<button type="button" class="ew-modal__iface-select-trigger">' +
+        '<span class="ew-modal__iface-select-text">' + escapeHtml(displayText) + '</span>' +
+        '<svg class="ew-modal__select-arrow" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></button>';
+    // Panel
+    html += '<div class="ew-modal__iface-select-panel ew-hidden">';
+    // Search bar (always present)
+    html += '<div class="ew-modal__iface-filter-wrap"><input type="text" class="ew-modal__iface-filter" placeholder="Search..." autocomplete="off"><span class="ew-modal__iface-filter-count"></span></div>';
+
+    // Pre-items (special options with dot indicators, e.g. "Default route", "All VPNs")
+    if (opts.preItems) {
+        for (var pi = 0; pi < opts.preItems.length; pi++) {
+            var pre = opts.preItems[pi];
+            var preChk = selArray.indexOf(pre.value) !== -1;
+            html += '<label class="ew-modal__iface-select-option">' +
+                '<input type="checkbox" value="' + escapeHtml(pre.value) + '"' + (preChk ? ' checked' : '') + '>' +
+                '<span class="ew-modal__iface-dot ew-modal__iface-dot--up"></span>' +
+                '<span>' + escapeHtml(pre.label) + '</span></label>';
+        }
+    }
+
+    // Grouped options (for unions)
+    if (opts.groups) {
+        for (var gi = 0; gi < opts.groups.length; gi++) {
+            var grp = opts.groups[gi];
+            html += '<div class="ew-modal__iface-select-group">' + escapeHtml(grp.group) + '</div>';
+            var items = grp.items || [];
+            for (var ui = 0; ui < items.length; ui++) {
+                var u = items[ui];
+                var uChk = (u.value === selVal);
+                html += '<label class="ew-modal__iface-select-option">' +
+                    '<input type="radio" name="' + escapeHtml(opts.radioName || '') + '" value="' + escapeHtml(u.value) + '"' + (uChk ? ' checked' : '') + '>' +
+                    '<span>' + escapeHtml(u.label) + (u.desc ? ' (' + escapeHtml(u.desc) + ')' : '') + '</span></label>';
+            }
+        }
+    } else {
+        // Flat options
+        var optionsList = opts.options || [];
+        for (var oi = 0; oi < optionsList.length; oi++) {
+            var opt = optionsList[oi];
+            if (isMulti) {
+                var mChk = selArray.indexOf(opt.value) !== -1;
+                html += '<label class="ew-modal__iface-select-option">';
+                html += '<input type="checkbox" value="' + escapeHtml(opt.value) + '"' + (mChk ? ' checked' : '') + '>';
+                if (opts.dots && opts.ifaces) {
+                    var ifc = null;
+                    for (var ii = 0; ii < opts.ifaces.length; ii++) {
+                        if (opts.ifaces[ii].name === opt.value) { ifc = opts.ifaces[ii]; break; }
+                    }
+                    var dotState = (ifc && ifc.up) ? 'up' : 'down';
+                    html += '<span class="ew-modal__iface-dot ew-modal__iface-dot--' + dotState + '"></span>';
+                }
+                html += '<span>' + escapeHtml(opt.label) + (opt.desc ? ' \u2014 ' + escapeHtml(opt.desc) : '') + '</span></label>';
+            } else {
+                var sChk = (opt.value === selVal);
+                html += '<label class="ew-modal__iface-select-option">' +
+                    '<input type="radio" name="' + escapeHtml(opts.radioName || '') + '" value="' + escapeHtml(opt.value) + '"' + (sChk ? ' checked' : '') + '>' +
+                    '<span>' + escapeHtml(opt.label) + (opt.desc ? ' \u2014 ' + escapeHtml(opt.desc) : '') + '</span></label>';
+            }
+        }
+    }
+
+    html += '</div></div>';
+    return html;
+}
+
+/**
  * Render form fields inside modal body.
  * @param {HTMLElement} body
  * @param {string} svcId
@@ -1065,48 +1163,33 @@ function renderModalForm(body, svcId, schema, config, defaults, interfaces, zone
                 '</label>';
             html += '</div>';
         } else if (field.type === 'select') {
-            // Custom dropdown single-select (unified with iface_select style)
+            // Single-select dropdown (radio buttons)
             var selDisplayText = String(val);
             for (var sd = 0; sd < field.options.length; sd++) {
                 if (field.options[sd].value === String(val)) { selDisplayText = field.options[sd].label; break; }
             }
-            html += '<div class="ew-modal__iface-select" data-config-key="' + field.key + '">';
-            html += '<button type="button" class="ew-modal__iface-select-trigger">' +
-                '<span class="ew-modal__iface-select-text">' + escapeHtml(selDisplayText) + '</span>' +
-                '<svg class="ew-modal__select-arrow" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></button>';
-            html += '<div class="ew-modal__iface-select-panel ew-hidden">';
-            for (var k = 0; k < field.options.length; k++) {
-                var opt = field.options[k];
-                var optChk = (opt.value === String(val));
-                html += '<label class="ew-modal__iface-select-option">' +
-                    '<input type="radio" name="sel-' + field.key + '" value="' + escapeHtml(opt.value) + '"' + (optChk ? ' checked' : '') + '>' +
-                    '<span>' + escapeHtml(opt.label) + '</span></label>';
-            }
-            html += '</div></div>';
+            html += renderDropdown({
+                mode: 'single',
+                configKey: field.key,
+                displayText: selDisplayText,
+                radioName: 'sel-' + field.key,
+                selected: String(val),
+                options: field.options
+            });
         } else if (field.type === 'multi_select') {
-            // Custom dropdown multi-select with checkboxes
-            // Use dynamic options from API when available (dynamicOptions: 'zone'|'other')
+            // Multi-select dropdown (checkboxes) with dynamic options from API
             var msOptions = field.options || [];
             if (field.dynamicOptions && providersData && providersData[field.dynamicOptions]) {
                 msOptions = providersData[field.dynamicOptions];
             }
-            var msSelected = String(val).split(/\s+/).filter(function(s) { return s; });
-            var msDisplayText = msSelected.length ? msSelected.join(', ') : 'None';
-            html += '<div class="ew-modal__iface-select" data-config-key="' + field.key + '" data-selection-order="' + escapeHtml(msSelected.join(' ')) + '">';
-            html += '<button type="button" class="ew-modal__iface-select-trigger">' +
-                '<span class="ew-modal__iface-select-text">' + escapeHtml(msDisplayText) + '</span>' +
-                '<svg class="ew-modal__select-arrow" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></button>';
-            html += '<div class="ew-modal__iface-select-panel ew-hidden">';
-            for (var ms = 0; ms < msOptions.length; ms++) {
-                var msOpt = msOptions[ms];
-                var msChk = msSelected.indexOf(msOpt.value) !== -1;
-                html += '<label class="ew-modal__iface-select-option">' +
-                    '<input type="checkbox" value="' + escapeHtml(msOpt.value) + '"' + (msChk ? ' checked' : '') + '>' +
-                    '<span>' + escapeHtml(msOpt.label) + '</span></label>';
-            }
-            html += '</div></div>';
+            html += renderDropdown({
+                mode: 'multi',
+                configKey: field.key,
+                selected: val,
+                options: msOptions
+            });
         } else if (field.type === 'zone_selector' && zonesData) {
-            // Determine if current value is zone(s) or a union
+            // Zone selector: wrapper with radio pills + two dropdown panels
             var zones = zonesData.zones || [];
             var unions = zonesData.unions || [];
             var valParts = String(val).split(/\s+/).filter(function(s) { return s; });
@@ -1114,97 +1197,74 @@ function renderModalForm(body, svcId, schema, config, defaults, interfaces, zone
             for (var zi = 0; zi < zones.length; zi++) { zoneValues[zones[zi].value] = true; }
             var isZone = valParts.length > 0 && valParts.every(function(v) { return zoneValues[v]; });
             var isUnion = !isZone;
-            var radioName = 'zs-mode-' + field.key;
+            var zsRadioName = 'zs-mode-' + field.key;
 
             html += '<div class="ew-modal__zone-selector" data-config-key="' + field.key + '">';
-            // Radio pills: Зона / Союз
+            // Radio pills: Zone / Union
             html += '<div class="ew-modal__zone-radio">';
             html += '<label class="ew-modal__radio-item' + (isZone ? ' ew-modal__radio-item--active' : '') + '">' +
-                '<input type="radio" name="' + radioName + '" value="zone"' + (isZone ? ' checked' : '') + '>' +
+                '<input type="radio" name="' + zsRadioName + '" value="zone"' + (isZone ? ' checked' : '') + '>' +
                 '<span class="ew-modal__radio-label">Zone</span></label>';
             html += '<label class="ew-modal__radio-item' + (isUnion ? ' ew-modal__radio-item--active' : '') + '">' +
-                '<input type="radio" name="' + radioName + '" value="union"' + (isUnion ? ' checked' : '') + '>' +
+                '<input type="radio" name="' + zsRadioName + '" value="union"' + (isUnion ? ' checked' : '') + '>' +
                 '<span class="ew-modal__radio-label">Union</span></label>';
             html += '</div>';
 
-            // Multi-select: zones (countries) — dropdown with checkboxes
+            // Zone panel: multi-select countries
             var selectedZones = isZone ? valParts : [];
-            var zDisplayText = selectedZones.length ? selectedZones.join(', ') : 'None';
             html += '<div class="ew-modal__zone-panel' + (isZone ? '' : ' ew-hidden') + '" data-zone-panel="zone">';
-            html += '<div class="ew-modal__iface-select">';
-            html += '<button type="button" class="ew-modal__iface-select-trigger">' +
-                '<span class="ew-modal__iface-select-text">' + escapeHtml(zDisplayText) + '</span>' +
-                '<svg class="ew-modal__select-arrow" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></button>';
-            html += '<div class="ew-modal__iface-select-panel ew-hidden">';
-            html += '<div class="ew-modal__iface-filter-wrap"><input type="text" class="ew-modal__iface-filter" placeholder="Search..." autocomplete="off"><span class="ew-modal__iface-filter-count"></span></div>';
-            for (var zj = 0; zj < zones.length; zj++) {
-                var z = zones[zj];
-                var zChk = selectedZones.indexOf(z.value) !== -1;
-                html += '<label class="ew-modal__iface-select-option">' +
-                    '<input type="checkbox" value="' + escapeHtml(z.value) + '"' + (zChk ? ' checked' : '') + '>' +
-                    '<span>' + escapeHtml(z.label) + (z.desc ? ' \u2014 ' + z.desc : '') + '</span></label>';
-            }
-            html += '</div></div></div>';
+            html += renderDropdown({
+                mode: 'multi',
+                configKey: '',
+                selected: selectedZones,
+                options: zones
+            });
+            html += '</div>';
 
-            // Custom dropdown single-select for unions (grouped, with search)
+            // Union panel: single-select grouped unions
+            // Pre-compute display text for union
             var unionDisplayText = 'None';
-            html += '<div class="ew-modal__zone-panel' + (isUnion ? '' : ' ew-hidden') + '" data-zone-panel="union">';
-            html += '<div class="ew-modal__iface-select">';
-            html += '<button type="button" class="ew-modal__iface-select-trigger">' +
-                '<span class="ew-modal__iface-select-text">___UNION_DISPLAY___</span>' +
-                '<svg class="ew-modal__select-arrow" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></button>';
-            html += '<div class="ew-modal__iface-select-panel ew-hidden">';
-            html += '<div class="ew-modal__iface-filter-wrap"><input type="text" class="ew-modal__iface-filter" placeholder="Search..." autocomplete="off"><span class="ew-modal__iface-filter-count"></span></div>';
-            for (var gi = 0; gi < unions.length; gi++) {
-                var grp = unions[gi];
-                html += '<div class="ew-modal__iface-select-group">' + escapeHtml(grp.group) + '</div>';
-                var items = grp.items || [];
-                for (var ui = 0; ui < items.length; ui++) {
-                    var u = items[ui];
-                    var uChk = (u.value === val);
-                    if (uChk) unionDisplayText = u.label + ' (' + u.desc + ')';
-                    html += '<label class="ew-modal__iface-select-option">' +
-                        '<input type="radio" name="zs-union-' + field.key + '" value="' + escapeHtml(u.value) + '"' + (uChk ? ' checked' : '') + '>' +
-                        '<span>' + escapeHtml(u.label) + ' (' + escapeHtml(u.desc) + ')</span></label>';
+            for (var ugi = 0; ugi < unions.length; ugi++) {
+                var uitems = unions[ugi].items || [];
+                for (var uii = 0; uii < uitems.length; uii++) {
+                    if (uitems[uii].value === val) {
+                        unionDisplayText = uitems[uii].label + ' (' + uitems[uii].desc + ')';
+                    }
                 }
             }
-            html += '</div></div></div>';
-            html = html.replace('___UNION_DISPLAY___', escapeHtml(unionDisplayText));
+            html += '<div class="ew-modal__zone-panel' + (isUnion ? '' : ' ew-hidden') + '" data-zone-panel="union">';
+            html += renderDropdown({
+                mode: 'single',
+                configKey: '',
+                displayText: unionDisplayText,
+                radioName: 'zs-union-' + field.key,
+                selected: String(val),
+                groups: unions
+            });
+            html += '</div>';
             html += '</div>';
         } else if (field.type === 'iface_select') {
-            // Custom dropdown multi-select for interfaces (sorted: up first, then down, alphabetically)
+            // Interface multi-select (sorted: up first, then down, alphabetically)
             var sortedIfaces = interfaces.slice().sort(function(a, b) {
                 if (a.up !== b.up) return a.up ? -1 : 1;
                 return (a.name || '').localeCompare(b.name || '');
             });
             var selectedIfs = String(val).split(/\s+/).filter(function(s) { return s; });
-            var displayText = selectedIfs.length ? selectedIfs.join(', ') : (field.preItems ? field.preItems[0].label : 'Default');
-            html += '<div class="ew-modal__iface-select" data-config-key="' + field.key + '" data-selection-order="' + escapeHtml(selectedIfs.join(' ')) + '">';
-            html += '<button type="button" class="ew-modal__iface-select-trigger">' +
-                '<span class="ew-modal__iface-select-text">' + escapeHtml(displayText) + '</span>' +
-                '<svg class="ew-modal__select-arrow" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>' +
-                '</button>';
-            html += '<div class="ew-modal__iface-select-panel ew-hidden">';
-            html += '<div class="ew-modal__iface-filter-wrap"><input type="text" class="ew-modal__iface-filter" placeholder="Search..." autocomplete="off"><span class="ew-modal__iface-filter-count"></span></div>';
-            // Pre-items (configurable special options: "auto", "default", "*", etc.)
-            var ifPreItems = field.preItems || [{ value: 'default', label: 'Default route' }];
-            for (var pi = 0; pi < ifPreItems.length; pi++) {
-                var pre = ifPreItems[pi];
-                html += '<label class="ew-modal__iface-select-option">' +
-                    '<input type="checkbox" value="' + escapeHtml(pre.value) + '"' + (selectedIfs.indexOf(pre.value) !== -1 ? ' checked' : '') + '>' +
-                    '<span class="ew-modal__iface-dot ew-modal__iface-dot--up"></span>' +
-                    '<span>' + escapeHtml(pre.label) + '</span></label>';
-            }
+            var ifDisplayText = selectedIfs.length ? selectedIfs.join(', ') : (field.preItems ? field.preItems[0].label : 'Default');
+            var ifaceOpts = [];
             for (var si = 0; si < sortedIfaces.length; si++) {
-                var ifc = sortedIfaces[si];
-                var ifChecked = selectedIfs.indexOf(ifc.name) !== -1;
-                var ifState = ifc.up ? 'up' : 'down';
-                html += '<label class="ew-modal__iface-select-option">' +
-                    '<input type="checkbox" value="' + escapeHtml(ifc.name) + '"' + (ifChecked ? ' checked' : '') + '>' +
-                    '<span class="ew-modal__iface-dot ew-modal__iface-dot--' + ifState + '"></span>' +
-                    '<span>' + escapeHtml(ifc.label || ifc.name) + '</span></label>';
+                ifaceOpts.push({ value: sortedIfaces[si].name, label: sortedIfaces[si].label || sortedIfaces[si].name });
             }
-            html += '</div></div>';
+            html += renderDropdown({
+                mode: 'multi',
+                configKey: field.key,
+                displayText: ifDisplayText,
+                selected: selectedIfs,
+                preItems: field.preItems || [{ value: 'default', label: 'Default route' }],
+                options: ifaceOpts,
+                dots: true,
+                ifaces: sortedIfaces
+            });
         }
 
         if (field.hint) {

@@ -7,11 +7,19 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [0.25.0] - 2026-06-15
 
+### Added
+- **Search bar on all dropdowns**: DNS provider multi-selects (`ZONE_DNS_PROVIDER`,
+  `OTHER_DNS_PROVIDER`) and plain `select` fields now have a search/filter input —
+  same as zone_selector and iface_select already had.
+
 ### Changed
 - SmartDNS config editor: `ZONE_DNS_PROVIDER` and `OTHER_DNS_PROVIDER` options now loaded
   dynamically from `/api/system/dns-providers` (parsed from `dns-providers.conf`).
   No longer hardcoded in app.js — adding/removing providers in config auto-reflects in UI.
 - `api-router.lua`: new endpoint `GET /api/system/dns-providers` (cached 1h, parses `*_LABEL`)
+- **Unified `renderDropdown()` function**: all 5 dropdown variants (select, multi_select,
+  zone_selector zones, zone_selector unions, iface_select) now rendered by a single
+  shared function. Removes ~100 lines of copy-paste, ensures consistent behavior.
 
 ## [0.24.1] - 2026-06-11
 

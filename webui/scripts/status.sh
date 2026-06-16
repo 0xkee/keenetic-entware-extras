@@ -100,18 +100,18 @@ check_upstream() {
 # Show config file presence.
 show_config() {
   if [ "$_ck_config_ok" = "true" ]; then
-    echo "    Config:      $CONF ✓"
+    status_line "Config" "$CONF" "ok"
   else
-    echo "    Config:      $CONF NOT FOUND ✗"
+    status_line "Config" "$CONF NOT FOUND" "fail"
   fi
 }
 
 # Show listen.conf presence.
 show_listen_conf() {
   if [ "$_ck_listen_conf_ok" = "true" ]; then
-    echo "    Listen conf: $LISTEN_CONF ✓"
+    status_line "Listen conf" "$LISTEN_CONF" "ok"
   else
-    echo "    Listen conf: $LISTEN_CONF NOT FOUND ✗"
+    status_line "Listen conf" "$LISTEN_CONF NOT FOUND" "fail"
   fi
 }
 
@@ -119,62 +119,62 @@ show_listen_conf() {
 show_lua_module() {
   local mod="/opt/lib/nginx/modules/ngx_http_lua_module.so"
   if [ "$_ck_lua_module_ok" = "true" ]; then
-    echo "    Lua module:  $mod ✓"
+    status_line "Lua module" "$mod" "ok"
   else
-    echo "    Lua module:  $mod NOT FOUND ✗"
+    status_line "Lua module" "$mod NOT FOUND" "fail"
   fi
 }
 
 # Show logrotate status (3 sub-checks with details).
 show_logrotate() {
   if [ -x "/opt/sbin/logrotate" ]; then
-    echo "    Binary:      /opt/sbin/logrotate ✓"
+    status_line "Binary" "/opt/sbin/logrotate" "ok"
   else
-    echo "    Binary:      /opt/sbin/logrotate NOT FOUND ✗"
+    status_line "Binary" "/opt/sbin/logrotate NOT FOUND" "fail"
   fi
 
   if [ -f "/opt/etc/logrotate.d/nginx-webui" ]; then
-    echo "    Config:      /opt/etc/logrotate.d/nginx-webui ✓"
+    status_line "Config" "/opt/etc/logrotate.d/nginx-webui" "ok"
   else
-    echo "    Config:      /opt/etc/logrotate.d/nginx-webui NOT FOUND ✗"
+    status_line "Config" "/opt/etc/logrotate.d/nginx-webui NOT FOUND" "fail"
   fi
 
   if [ -x "/opt/etc/cron.daily/logrotate" ]; then
-    echo "    Cron daily:  /opt/etc/cron.daily/logrotate ✓"
+    status_line "Cron daily" "/opt/etc/cron.daily/logrotate" "ok"
   else
-    echo "    Cron daily:  /opt/etc/cron.daily/logrotate NOT FOUND ✗"
+    status_line "Cron daily" "/opt/etc/cron.daily/logrotate NOT FOUND" "fail"
   fi
 }
 
 # Show upstream (stock httpd) reachability.
 show_upstream() {
   if [ "$_ck_upstream_ok" = 0 ]; then
-    echo "    Stock httpd: ${_ck_upstream_addr} → ${_ck_upstream_code} ✓"
+    status_line "Stock httpd" "${_ck_upstream_addr} → ${_ck_upstream_code}" "ok"
   else
-    echo "    Stock httpd: ${_ck_upstream_addr} → ${_ck_upstream_code:-timeout} ✗"
+    status_line "Stock httpd" "${_ck_upstream_addr} → ${_ck_upstream_code:-timeout}" "fail"
   fi
 }
 
 # Show HTTP endpoint checks (static page + API).
 show_http() {
   if ! command -v curl >/dev/null 2>&1; then
-    echo "    HTTP:        curl not available, skipping"
+    status_line "HTTP" "curl not available, skipping"
     return
   fi
 
   local http_code
   http_code="$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 5 "${BASE_URL}/" 2>/dev/null)" || true
   if [ "$http_code" = "200" ]; then
-    echo "    Static:      GET / → $http_code ✓"
+    status_line "Static" "GET / → $http_code" "ok"
   else
-    echo "    Static:      GET / → ${http_code:-timeout} ✗"; STATUS_OK=1
+    status_line "Static" "GET / → ${http_code:-timeout}" "fail"; STATUS_OK=1
   fi
 
   http_code="$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 5 "${BASE_URL}/api/system/info" 2>/dev/null)" || true
   if [ "$http_code" = "200" ]; then
-    echo "    API:         GET /api/system/info → $http_code ✓"
+    status_line "API" "GET /api/system/info → $http_code" "ok"
   else
-    echo "    API:         GET /api/system/info → ${http_code:-timeout} ✗"; STATUS_OK=1
+    status_line "API" "GET /api/system/info → ${http_code:-timeout}" "fail"; STATUS_OK=1
   fi
 }
 
@@ -206,51 +206,31 @@ json_output() {
   local enabled_val=1
   is_service_enabled "S80nginx-webui" && enabled_val=0
 
-  printf '{'
-  json_kv_bool "enabled" "$enabled_val"
-  printf ','
-  json_kv_bool "running" "$([ "$_st_running" = "true" ] && echo 0 || echo 1)"
-  printf ','
-  json_kv_bool "ok" "$STATUS_OK"
-  printf ',"details":{'
-  json_kv "ports" "$ports_val"
-  printf ','
-  json_kv_bool "status" "$([ "$_st_port_ok" = "true" ] && echo 0 || echo 1)"
-  printf ','
-  json_kv_bool "config" "$config_ok_val"
-  printf ','
-  json_kv "upstream" "$_ck_upstream_addr"
-  printf ','
-  json_kv_bool "lua_module" "$lua_module_ok_val"
-  printf ','
-  json_kv_bool "http" "$http_ok_val"
-  printf ','
-  json_kv "pid" "$_st_pid"
-  printf ','
-  json_kv "memory" "$mem_formatted"
-  printf ','
-  json_kv_bool "logrotate" "$logrotate_ok_val"
-  printf ','
-  json_kv_num "uptime" "$_st_uptime_seconds"
-  printf ','
-  json_kv "version" "${_st_version:-unknown}"
-  printf '},'
+  # Details
+  status_detail "ports" "$ports_val"
+  status_detail "status" "$([ "$_st_port_ok" = "true" ] && echo 0 || echo 1)" "bool"
+  status_detail "config" "$config_ok_val" "bool"
+  status_detail "upstream" "$_ck_upstream_addr"
+  status_detail "lua_module" "$lua_module_ok_val" "bool"
+  status_detail "http" "$http_ok_val" "bool"
+  status_detail "pid" "$_st_pid"
+  status_detail "memory" "$mem_formatted"
+  status_detail "logrotate" "$logrotate_ok_val" "bool"
+  status_detail "uptime" "$_st_uptime_seconds" "num"
+  status_detail "version" "${_st_version:-unknown}"
 
-  # Checks section: "ok"|"warn"|"fail" per field
-  printf '"checks":{'
-  json_check "process" "$(if [ "$_st_running" = "true" ]; then printf ok; else printf fail; fi)"
-  printf ','
-  json_check "config" "$(if [ "$config_ok_val" = 0 ]; then printf ok; else printf fail; fi)"
-  printf ','
-  json_check "lua_module" "$(if [ "$lua_module_ok_val" = 0 ]; then printf ok; else printf fail; fi)"
-  printf ','
-  json_check "http" "$(if [ "$http_ok_val" = 0 ]; then printf ok; else printf fail; fi)"
-  printf ','
-  json_check "logrotate" "$(if [ "$logrotate_ok_val" = 0 ]; then printf ok; else printf warn; fi)"
-  printf ','
-  json_check "upstream" "$(if [ "$upstream_ok_val" = 0 ]; then printf ok; else printf warn; fi)"
-  printf '}}\n'
+  # Checks
+  status_check_result "process" "$(if [ "$_st_running" = "true" ]; then printf ok; else printf fail; fi)"
+  status_check_result "config" "$(if [ "$config_ok_val" = 0 ]; then printf ok; else printf fail; fi)"
+  status_check_result "lua_module" "$(if [ "$lua_module_ok_val" = 0 ]; then printf ok; else printf fail; fi)"
+  status_check_result "http" "$(if [ "$http_ok_val" = 0 ]; then printf ok; else printf fail; fi)"
+  status_check_result "logrotate" "$(if [ "$logrotate_ok_val" = 0 ]; then printf ok; else printf warn; fi)"
+  status_check_result "upstream" "$(if [ "$upstream_ok_val" = 0 ]; then printf ok; else printf warn; fi)"
+
+  # Emit
+  status_emit_json "$enabled_val" "$([ "$_st_running" = "true" ] && echo 0 || echo 1)" "$STATUS_OK"
 }
+
 
 # --- main ---
 
@@ -276,39 +256,48 @@ check_upstream
 # Note: upstream_ok is not fatal — stock httpd could be temporarily down
 # but webui still serves custom dashboard. Reported as "warn" in checks.
 
+# --- Text output (declarative, parallel to json_output) ---
+
+text_output() {
+  # Determine status word for title line
+  local _status_word="✓ Alive"
+  if ! is_service_enabled "S80nginx-webui"; then
+    _status_word="⚠ Disabled"
+  elif [ "$STATUS_OK" -ne 0 ]; then
+    _status_word="✗ Fail"
+  fi
+
+  _text_buf="nginx-webui status: ${_status_word}
+"
+  status_section "Service"
+  status_show_process
+  show_config
+  show_listen_conf
+  show_lua_module
+  status_show_port "$LISTEN_PORT"
+  status_blank
+  status_section "HTTP"
+  show_http
+  status_blank
+  status_section "Upstream"
+  show_upstream
+  status_blank
+  status_section "Logrotate"
+  show_logrotate
+  status_blank
+  status_section "System"
+  status_show_uptime
+  status_show_version
+
+  status_emit_text
+}
+
+# --- main ---
+
 if [ "${1:-}" = "--json" ]; then
   json_output
   exit "$STATUS_OK"
 fi
 
-# Determine status word for title line
-_status_word="✓ Alive"
-if ! is_service_enabled "S80nginx-webui"; then
-  _status_word="⚠ Disabled"
-elif [ "$STATUS_OK" -ne 0 ]; then
-  _status_word="✗ Fail"
-fi
-
-echo "nginx-webui status: $_status_word"
-
-echo "  Service:"
-status_show_process
-show_config
-show_listen_conf
-show_lua_module
-status_show_port "$LISTEN_PORT"
-echo
-echo "  HTTP:"
-show_http
-echo
-echo "  Upstream:"
-show_upstream
-echo
-echo "  Logrotate:"
-show_logrotate
-echo
-echo "  System:"
-status_show_uptime
-status_show_version
-
+text_output
 exit "$STATUS_OK"

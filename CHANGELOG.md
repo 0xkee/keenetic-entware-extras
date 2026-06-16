@@ -5,6 +5,21 @@ All notable changes to `keenetic-entware-extras` (base package) are documented h
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.16.3] - 2026-06-15
+
+### Changed
+- `lib/status.sh`: add declarative text output API (accumulator + emit pattern):
+  `status_line`, `status_line_cont`, `status_section`, `status_blank`,
+  `status_emit_text`. Refactored `status_show_*` helpers to use accumulator.
+  Parallel to existing JSON accumulation API.
+
+## [0.16.2] - 2026-06-15
+
+### Changed
+- `lib/status.sh`: add declarative JSON accumulation API (`status_detail`,
+  `status_check_result`, `status_extra`, `status_emit_json`) — eliminates manual
+  printf/json_kv boilerplate in status scripts.
+
 ## [0.16.1] - 2026-06-13
 
 ### Fixed

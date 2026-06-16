@@ -70,35 +70,38 @@ check_enabled() {
 
 show_config() {
   if [ "$_ck_config_ok" = "true" ]; then
-    echo "    Config:      $CONF ($_ck_servers servers, $_ck_rules rules) ✓"
+    status_line "Config" "$CONF ($_ck_servers servers, $_ck_rules rules)" "ok"
   else
-    echo "    Config:      NOT found ✗"; STATUS_OK=1
+    status_line "Config" "NOT found" "fail"; STATUS_OK=1
   fi
 }
 
 show_cache() {
   if [ -n "$_ck_cache_size" ]; then
-    echo "    Cache:       $_ck_cache_size ($CACHE_FILE) ✓"
+    status_line "Cache" "$_ck_cache_size ($CACHE_FILE)" "ok"
   else
-    echo "    Cache:       not found"
+    status_line "Cache" "not found"
   fi
 }
 
 # Show listening ports (custom text for "none listening" case).
 show_ports() {
   if [ "$_st_port_ok" = "true" ]; then
-    local first=1
-    echo "$_st_port_addrs" | tr ' ' '\n' | while IFS= read -r addr; do
+    local first=1 addr=""
+    local _old_ifs="$IFS"
+    IFS=' '
+    for addr in $_st_port_addrs; do
       [ -z "$addr" ] && continue
       if [ "$first" = 1 ]; then
-        echo "    Ports:       $addr ✓"
+        status_line "Ports" "$addr" "ok"
         first=0
       else
-        echo "                 $addr ✓"
+        status_line_cont "$addr" "ok"
       fi
     done
+    IFS="$_old_ifs"
   else
-    echo "    Ports:       none listening ✗"; STATUS_OK=1
+    status_line "Ports" "none listening" "fail"; STATUS_OK=1
   fi
 }
 
@@ -107,13 +110,15 @@ show_ports() {
 dns_test() {
   local domain="$1" label="$2"
   local result ip_line
-  result="$(dig +short +time=3 "$domain" @127.0.0.1 -p "$SMARTDNS_PORT" 2>/dev/null || echo "FAILED")"
+  result="$(dig +short +time=2 +tries=1 "$domain" @127.0.0.1 -p "$SMARTDNS_PORT" 2>/dev/null || echo "FAILED")"
   # dig +short may return multiple lines; take first A-record
   ip_line="$(echo "$result" | head -1)"
   if [ -n "$ip_line" ] && [ "$ip_line" != "FAILED" ]; then
-    printf "    %-14s %s (%s) ✓\\n" "${domain}:" "$ip_line" "$label"
+    _text_buf="${_text_buf}$(printf '    %-14s %s (%s) ✓\n' "${domain}:" "$ip_line" "$label")
+"
   else
-    printf "    %-14s FAILED (%s) ✗\\n" "${domain}:" "$label"
+    _text_buf="${_text_buf}$(printf '    %-14s FAILED (%s) ✗\n' "${domain}:" "$label")
+"
     STATUS_OK=1
   fi
 }
@@ -122,7 +127,7 @@ dns_test() {
 # Dynamic: tests first domain from each active zone + international.
 show_dns_tests() {
   if ! command -v dig >/dev/null 2>&1; then
-    echo "    DNS test:    skipped (dig not available)"
+    status_line "DNS test" "skipped (dig not available)"
     return
   fi
   # Source test domains
@@ -155,6 +160,7 @@ show_dns_tests() {
 collect_dns_tests_json() {
   _json_dns_tests="["
   local first=1
+  local _dns_failed=0
   if ! command -v dig >/dev/null 2>&1; then
     _json_dns_tests="[]"
     return
@@ -173,7 +179,13 @@ collect_dns_tests_json() {
       if [ -n "$domains" ]; then
         local d="${domains%% *}"
         local r
-        r="$(dig +short +time=3 "$d" @127.0.0.1 -p "$SMARTDNS_PORT" 2>/dev/null | head -1 || true)"
+        # Early-exit: if previous test timed out, skip remaining (CPU-safe)
+        if [ "$_dns_failed" -ge 2 ]; then
+          r="SKIPPED"
+        else
+          r="$(dig +short +time=2 +tries=1 "$d" @127.0.0.1 -p "$SMARTDNS_PORT" 2>/dev/null | head -1 || true)"
+          [ -z "$r" ] && _dns_failed=$((_dns_failed + 1))
+        fi
         [ "$first" -eq 0 ] && _json_dns_tests="${_json_dns_tests},"
         _json_dns_tests="${_json_dns_tests}{\"domain\":\"$d\",\"group\":\"${cc}\",\"result\":\"${r:-FAILED}\"}"
         first=0
@@ -184,7 +196,11 @@ collect_dns_tests_json() {
   local intl_d="${TEST_DOMAINS_other:-google.com}"
   intl_d="${intl_d%% *}"
   local intl_r
-  intl_r="$(dig +short +time=3 "$intl_d" @127.0.0.1 -p "$SMARTDNS_PORT" 2>/dev/null | head -1 || true)"
+  if [ "$_dns_failed" -ge 2 ]; then
+    intl_r="SKIPPED"
+  else
+    intl_r="$(dig +short +time=2 +tries=1 "$intl_d" @127.0.0.1 -p "$SMARTDNS_PORT" 2>/dev/null | head -1 || true)"
+  fi
   [ "$first" -eq 0 ] && _json_dns_tests="${_json_dns_tests},"
   _json_dns_tests="${_json_dns_tests}{\"domain\":\"$intl_d\",\"group\":\"other\",\"result\":\"${intl_r:-FAILED}\"}"
   _json_dns_tests="${_json_dns_tests}]"
@@ -205,6 +221,7 @@ _status_get_first_isp_ip() {
 collect_dns_server_checks_json() {
   _json_dns_server_checks="["
   local first=1
+  local _upstream_fails=0
   if ! command -v dig >/dev/null 2>&1; then
     _json_dns_server_checks="[]"
     return
@@ -235,8 +252,13 @@ collect_dns_server_checks_json() {
     fi
     [ -z "$ip" ] && continue
     local ok="false"
-    if dig +short +time=3 +tries=1 "test.local" @"$ip" >/dev/null 2>&1; then
+    # Early-exit: if 2+ upstreams already timed out, network is down — skip rest
+    if [ "$_upstream_fails" -ge 2 ]; then
+      ok="false"
+    elif dig +short +time=2 +tries=1 "test.local" @"$ip" >/dev/null 2>&1; then
       ok="true"
+    else
+      _upstream_fails=$((_upstream_fails + 1))
     fi
     [ "$first" -eq 0 ] && _json_dns_server_checks="${_json_dns_server_checks},"
     _json_dns_server_checks="${_json_dns_server_checks}{\"provider\":\"$p\",\"group\":\"zone\",\"host\":\"${host:-$ip}\",\"ok\":$ok}"
@@ -260,8 +282,13 @@ collect_dns_server_checks_json() {
     fi
     [ -z "$ip" ] && continue
     local ok="false"
-    if dig +short +time=3 +tries=1 "test.local" @"$ip" >/dev/null 2>&1; then
+    # Early-exit: skip if network clearly down
+    if [ "$_upstream_fails" -ge 2 ]; then
+      ok="false"
+    elif dig +short +time=2 +tries=1 "test.local" @"$ip" >/dev/null 2>&1; then
       ok="true"
+    else
+      _upstream_fails=$((_upstream_fails + 1))
     fi
     [ "$first" -eq 0 ] && _json_dns_server_checks="${_json_dns_server_checks},"
     _json_dns_server_checks="${_json_dns_server_checks}{\"provider\":\"$p\",\"group\":\"other\",\"host\":\"${host:-$ip}\",\"ok\":$ok}"
@@ -272,54 +299,35 @@ collect_dns_server_checks_json() {
 }
 
 json_output() {
-  printf '{'
-  json_kv_bool "running" "$([ "$_st_running" = "true" ] && echo 0 || echo 1)"
-  printf ','
-  json_kv_bool "enabled" "$([ "$_ck_enabled" = "true" ] && echo 0 || echo 1)"
-  printf ','
-  json_kv_bool "ok" "$STATUS_OK"
-  printf ',"details":{'
-  json_kv "dns_zone" "$_ck_zone"
-  printf ','
-  json_kv "active_zones" "$_ck_active_zones"
-  printf ','
-  json_kv "zone_dns_provider" "$_ck_zone_provider"
-  printf ','
-  json_kv "other_dns_provider" "$_ck_other_provider"
-  printf ','
-  json_kv "other_interfaces" "$_ck_other_ifaces"
-  printf ','
-  json_kv "ports" "$_st_port_addrs"
-  printf ','
-  json_kv_num "servers" "$_ck_servers"
-  printf ','
-  json_kv_num "rules" "$_ck_rules"
-  printf ','
-  json_kv "cache" "$([ -n "$_ck_cache_kb" ] && format_size_kb "$_ck_cache_kb" || printf 'none')"
-  printf ','
-  json_kv "memory" "$([ "$_st_running" = "true" ] && [ "$_st_mem_kb" != "0" ] && format_size_kb "$_st_mem_kb" || printf '')"
-  printf ','
-  json_kv "pid" "$_st_pid"
-  printf ','
-  json_kv_num "uptime" "$_st_uptime_seconds"
-  printf ','
-  json_kv "version" "${_st_version:-unknown}"
-  printf '},'
+  local enabled_val=1
+  [ "$_ck_enabled" = "true" ] && enabled_val=0
 
-  # DNS tests array
-  printf '"dns_tests":%s,' "$_json_dns_tests"
+  # Details
+  status_detail "dns_zone" "$_ck_zone"
+  status_detail "active_zones" "$_ck_active_zones"
+  status_detail "zone_dns_provider" "$_ck_zone_provider"
+  status_detail "other_dns_provider" "$_ck_other_provider"
+  status_detail "other_interfaces" "$_ck_other_ifaces"
+  status_detail "ports" "$_st_port_addrs"
+  status_detail "servers" "$_ck_servers" "num"
+  status_detail "rules" "$_ck_rules" "num"
+  status_detail "cache" "$([ -n "$_ck_cache_kb" ] && format_size_kb "$_ck_cache_kb" || printf 'none')"
+  status_detail "memory" "$([ "$_st_running" = "true" ] && [ "$_st_mem_kb" != "0" ] && format_size_kb "$_st_mem_kb" || printf '')"
+  status_detail "pid" "$_st_pid"
+  status_detail "uptime" "$_st_uptime_seconds" "num"
+  status_detail "version" "${_st_version:-unknown}"
 
-  # DNS server reachability checks
-  printf '"dns_server_checks":%s,' "$_json_dns_server_checks"
+  # Extras (pre-serialized arrays)
+  status_extra "dns_tests" "$_json_dns_tests"
+  status_extra "dns_server_checks" "$_json_dns_server_checks"
 
-  # Checks section: "ok"|"warn"|"fail" per field
-  printf '"checks":{'
-  json_check "process" "$(if [ "$_st_running" = "true" ]; then printf ok; else printf fail; fi)"
-  printf ','
-  json_check "ports" "$(if [ "$_st_port_ok" = "true" ]; then printf ok; else printf fail; fi)"
-  printf ','
-  json_check "config" "$(if [ "$_ck_config_ok" = "true" ]; then printf ok; else printf fail; fi)"
-  printf '}}\n'
+  # Checks
+  status_check_result "process" "$(if [ "$_st_running" = "true" ]; then printf ok; else printf fail; fi)"
+  status_check_result "ports" "$(if [ "$_st_port_ok" = "true" ]; then printf ok; else printf fail; fi)"
+  status_check_result "config" "$(if [ "$_ck_config_ok" = "true" ]; then printf ok; else printf fail; fi)"
+
+  # Emit
+  status_emit_json "$enabled_val" "$([ "$_st_running" = "true" ] && echo 0 || echo 1)" "$STATUS_OK"
 }
 
 # --- main ---
@@ -339,6 +347,47 @@ check_enabled
 [ "$_st_port_ok" = "false" ] && STATUS_OK=1
 [ "$_ck_config_ok" = "false" ] && STATUS_OK=1
 
+# --- Text output (declarative, parallel to json_output) ---
+
+text_output() {
+  # Note: smartdns init (S38smartdns) is a regular file from opkg, not our symlink;
+  # this package has no standalone "disabled" state — it's always either running or failed.
+  local _status_word="✓ Alive"
+  if [ "$STATUS_OK" -ne 0 ]; then
+    _status_word="✗ Fail"
+  fi
+
+  _text_buf="smartdns-geo-conf status: ${_status_word}
+"
+  status_section "Service"
+  if [ "$_ck_enabled" = "true" ]; then
+    status_line "Mode" "split-DNS (enabled)" "ok"
+    status_line "Zone" "$_ck_zone → [$_ck_active_zones]"
+    status_line "Zone DNS" "$_ck_zone_provider"
+    status_line "Other DNS" "$_ck_other_provider"
+    if [ -n "$_ck_other_ifaces" ]; then
+      status_line "Other VPN" "$_ck_other_ifaces"
+    fi
+  else
+    status_line "Mode" "default (simple forwarder)"
+  fi
+  status_show_process
+  show_ports
+  show_config
+  show_cache
+  status_blank
+  status_section "System"
+  status_show_uptime
+  status_show_version
+  status_blank
+  status_section "DNS Tests"
+  show_dns_tests
+
+  status_emit_text
+}
+
+# --- main ---
+
 if [ "${1:-}" = "--json" ]; then
   # Collect DNS test results and server reachability for JSON
   collect_dns_tests_json
@@ -347,38 +396,5 @@ if [ "${1:-}" = "--json" ]; then
   exit "$STATUS_OK"
 fi
 
-# Determine status word for title line
-# Note: smartdns init (S38smartdns) is a regular file from opkg, not our symlink;
-# this package has no standalone "disabled" state — it's always either running or failed.
-_status_word="✓ Alive"
-if [ "$STATUS_OK" -ne 0 ]; then
-  _status_word="✗ Fail"
-fi
-
-echo "smartdns-geo-conf status: $_status_word"
-
-echo "  Service:"
-if [ "$_ck_enabled" = "true" ]; then
-  echo "    Mode:        split-DNS (enabled) ✓"
-  echo "    Zone:        $_ck_zone → [$_ck_active_zones]"
-  echo "    Zone DNS:    $_ck_zone_provider"
-  echo "    Other DNS:   $_ck_other_provider"
-  if [ -n "$_ck_other_ifaces" ]; then
-    echo "    Other VPN:   $_ck_other_ifaces"
-  fi
-else
-  echo "    Mode:        default (simple forwarder)"
-fi
-status_show_process
-show_ports
-show_config
-show_cache
-echo
-echo "  System:"
-status_show_uptime
-status_show_version
-echo
-echo "  DNS Tests:"
-show_dns_tests
-
+text_output
 exit "$STATUS_OK"

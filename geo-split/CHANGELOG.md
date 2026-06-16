@@ -5,7 +5,19 @@ All notable changes to `geo-split` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
-## [Unreleased]
+## [0.13.2] - 2026-06-15
+
+### Changed
+- `scripts/status.sh`: refactored text output to use declarative accumulator API
+  (`status_line`, `status_section`, `status_emit_text`). Added `text_output()`
+  function parallel to `json_output()`. No visual output change.
+
+## [0.13.1] - 2026-06-15
+
+### Changed
+- `scripts/status.sh`: refactored `json_output()` to use declarative
+  `status_detail`/`status_check_result`/`status_emit_json` API from lib/status.sh.
+  No change to JSON output format.
 
 ## [0.13.0] - 2026-06-07
 

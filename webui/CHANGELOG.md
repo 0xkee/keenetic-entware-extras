@@ -5,6 +5,31 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.25.3] - 2026-06-15
+
+### Fixed
+- **Cold-start cache stampede fix** (`api-router.lua`): when nginx restarts and
+  no stale data exists yet, concurrent workers no longer all execute status.sh
+  simultaneously. Instead, only the first worker runs the script; others return a
+  `{"status":"loading"}` placeholder. Prevents CPU cascade on MIPS routers.
+- **LOCK_TTL increased** from 15s to 45s: safety margin for slow script execution
+  under system load. Lock is released immediately on script completion; 45s is
+  only the ceiling for crash/hang protection.
+
+## [0.25.2] - 2026-06-15
+
+### Changed
+- `scripts/status.sh`: refactored text output to use declarative accumulator API
+  (`status_line`, `status_section`, `status_emit_text`). Added `text_output()`
+  function parallel to `json_output()`. No visual output change.
+
+## [0.25.1] - 2026-06-15
+
+### Changed
+- `scripts/status.sh`: refactored `json_output()` to use declarative
+  `status_detail`/`status_check_result`/`status_emit_json` API from lib/status.sh.
+  No change to JSON output format.
+
 ## [0.25.0] - 2026-06-15
 
 ### Added
@@ -13,6 +38,8 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
   same as zone_selector and iface_select already had.
 
 ### Changed
+- `api-router.lua`: unified lua_routes dispatch — replaced 4 duplicate if-blocks with
+  a `lua_routes` table + `serve_cached_lua()` helper (~50 LOC → ~30 LOC, DRY)
 - SmartDNS config editor: `ZONE_DNS_PROVIDER` and `OTHER_DNS_PROVIDER` options now loaded
   dynamically from `/api/system/dns-providers` (parsed from `dns-providers.conf`).
   No longer hardcoded in app.js — adding/removing providers in config auto-reflects in UI.

@@ -17,6 +17,7 @@ _CONFIG_DIR="${SCRIPT_DIR%/*}/config"
 . "$_CONFIG_DIR/defaults.conf"
 [ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
 . "$_CONFIG_DIR/dns-providers.conf"
+[ -f "$_CONFIG_DIR/dns-providers-custom.conf" ] && . "$_CONFIG_DIR/dns-providers-custom.conf"
 . "$SCRIPT_DIR/../../lib/geo.sh"
 
 # Zone routing rules file

@@ -34,7 +34,54 @@ EOF
     echo "WARNING: could not detect router IP, using 0.0.0.0 bind"
 fi
 
-# 2. Deploy both config variants (split-DNS and default)
+# 2. Create dns-providers-custom.conf template if missing (user-editable, never overwritten)
+if [ ! -f "$_CONFIG_DIR/dns-providers-custom.conf" ]; then
+    cat > "$_CONFIG_DIR/dns-providers-custom.conf" <<'TMPL'
+#!/opt/bin/sh
+# Custom DNS providers — user-defined servers.
+# This file is never overwritten on package upgrade.
+#
+# Add your own DNS providers here using the same format as dns-providers.conf.
+# After editing, run: /opt/etc/init.d/S37smartdns-conf restart
+#
+# Then add provider name to config.conf:
+#   OTHER_DNS_PROVIDER="google mydns"
+#   ZONE_DNS_PROVIDER="yandex myzone"
+#
+# Supported protocols: doh, dot, udp
+# shellcheck disable=SC2034
+#
+# --- Plain UDP (simplest) ---
+# OTHER_mydns_LABEL="My DNS"
+# OTHER_mydns_PROTO="udp"
+# OTHER_mydns_IP1="1.2.3.4"
+# OTHER_mydns_IP2="5.6.7.8"
+#
+# --- DoT (DNS over TLS, port 853) ---
+# OTHER_privatedot_LABEL="Private DoT"
+# OTHER_privatedot_PROTO="dot"
+# OTHER_privatedot_IP1="10.0.0.1"
+# OTHER_privatedot_IP2=""
+# OTHER_privatedot_TLS_HOST="dns.example.com"
+#
+# --- DoH (DNS over HTTPS) ---
+# OTHER_privatedoh_LABEL="Private DoH"
+# OTHER_privatedoh_PROTO="doh"
+# OTHER_privatedoh_DOH_URL="https://dns.example.com/dns-query"
+# OTHER_privatedoh_IP1="10.0.0.1"
+# OTHER_privatedoh_IP2=""
+# OTHER_privatedoh_TLS_HOST="dns.example.com"
+#
+# --- Zone provider (for regional DNS group) ---
+# ZONE_myzone_LABEL="My Zone DNS"
+# ZONE_myzone_PROTO="udp"
+# ZONE_myzone_IP1="192.168.1.1"
+# ZONE_myzone_IP2=""
+# ZONE_myzone_UDP_FALLBACK="no"
+TMPL
+fi
+
+# 3. Deploy both config variants (split-DNS and default)
 if [ -f "$_CONFIG_DIR/smartdns.conf" ]; then
     cp "$_CONFIG_DIR/smartdns.conf" "$CONF_SPLIT"
 fi
@@ -42,19 +89,19 @@ if [ -f "$_CONFIG_DIR/smartdns-default.conf" ]; then
     cp "$_CONFIG_DIR/smartdns-default.conf" "$CONF_DEFAULT"
 fi
 
-# 3. Install S37 init script
+# 4. Install S37 init script
 if [ -f "$S37" ]; then
     cp "$S37" /opt/etc/init.d/S37smartdns-conf
     chmod +x /opt/etc/init.d/S37smartdns-conf
 fi
 
-# 4. First install: enable split-DNS by default
+# 5. First install: enable split-DNS by default
 if [ ! -f "$STATE_FILE" ]; then
     mkdir -p "$(dirname "$STATE_FILE")"
     echo "enabled" > "$STATE_FILE"
 fi
 
-# 5. Generate dynamic configs + activate + restart SmartDNS
+# 6. Generate dynamic configs + activate + restart SmartDNS
 if [ -x /opt/etc/init.d/S37smartdns-conf ]; then
     /opt/etc/init.d/S37smartdns-conf restart
 fi

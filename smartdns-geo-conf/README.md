@@ -142,6 +142,27 @@ ZONE_DNS_INTERFACE=""
 | `alidns` | AliDNS | DoT+UDP | China |
 | `tencent` | Tencent DNSPod | DoT+UDP | China |
 
+### Свои DNS-серверы
+
+Файл `config/dns-providers-custom.conf` позволяет добавить произвольные DNS-серверы.
+Не перезаписывается при обновлении пакета. Формат аналогичен `dns-providers.conf`:
+
+```sh
+# Plain UDP
+OTHER_mydns_LABEL="My DNS"
+OTHER_mydns_PROTO="udp"
+OTHER_mydns_IP1="1.2.3.4"
+OTHER_mydns_IP2=""
+
+# Затем в config.conf:
+OTHER_DNS_PROVIDER="google mydns"
+```
+
+Поддерживаются протоколы: `udp`, `dot` (DoT), `doh` (DoH). Подробнее — в [user-manual.ru.md](docs/user-manual.ru.md).
+
+> Список провайдеров кешируется WebUI на 1 час. Для немедленного обновления:
+> `/opt/etc/init.d/S80nginx-webui restart`
+
 ### Применение изменений
 
 ```sh

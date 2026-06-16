@@ -5,6 +5,39 @@ All notable changes to `smartdns-geo-conf` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.10.4] — 2026-06-16
+
+### Added
+- **Custom DNS providers** (`dns-providers-custom.conf`) — user-defined DNS servers
+  preserved across package upgrades. Supports UDP, DoT, DoH protocols. Template with
+  examples created on first install by postinst. Custom providers appear in WebUI
+  dropdown alongside built-in catalog.
+
+## [0.10.3] — 2026-06-15
+
+### Fixed
+- **CPU-safe DNS checks for degraded networks**: reduced dig timeout from 3s to
+  2s for local SmartDNS queries, added `+tries=1` everywhere. Added early-exit
+  logic: if 2+ DNS tests fail (timeout), remaining tests are skipped with
+  "SKIPPED" result instead of blocking CPU for 3s×N. Prevents cascade CPU
+  overload on routers with blocked/slow uplinks (e.g., RKN blocking).
+- `collect_dns_server_checks_json()`: same early-exit for upstream reachability
+  checks — if 2+ upstreams timeout, skip remaining (network is clearly down).
+
+## [0.10.2] — 2026-06-15
+
+### Changed
+- `scripts/status.sh`: refactored text output to use declarative accumulator API
+  (`status_line`, `status_section`, `status_emit_text`). Added `text_output()`
+  function parallel to `json_output()`. No visual output change.
+
+## [0.10.1] — 2026-06-15
+
+### Changed
+- `scripts/status.sh`: refactored `json_output()` to use declarative
+  `status_detail`/`status_check_result`/`status_emit_json` API from lib/status.sh.
+  No change to JSON output format.
+
 ## [0.10.0] — 2026-06-15
 
 ### Changed

@@ -215,6 +215,65 @@ OTHER_DNS_PROVIDER="mullvad_adblock"
 ZONE_DNS_PROVIDER="adguard_ads"
 ```
 
+### Свои DNS-серверы (custom providers)
+
+Для добавления произвольных DNS-серверов (не из встроенного каталога) используйте файл:
+
+```
+config/dns-providers-custom.conf
+```
+
+Этот файл **не перезаписывается** при обновлении пакета. Формат — такой же как в `dns-providers.conf`:
+
+**Пример: plain UDP DNS:**
+```sh
+OTHER_mydns_LABEL="My DNS"
+OTHER_mydns_PROTO="udp"
+OTHER_mydns_IP1="1.2.3.4"
+OTHER_mydns_IP2="5.6.7.8"
+```
+
+**Пример: DoT:**
+```sh
+OTHER_privatedot_LABEL="Private DoT"
+OTHER_privatedot_PROTO="dot"
+OTHER_privatedot_IP1="10.0.0.1"
+OTHER_privatedot_IP2=""
+OTHER_privatedot_TLS_HOST="dns.example.com"
+```
+
+**Пример: DoH:**
+```sh
+OTHER_privatedoh_LABEL="Private DoH"
+OTHER_privatedoh_PROTO="doh"
+OTHER_privatedoh_DOH_URL="https://dns.example.com/dns-query"
+OTHER_privatedoh_IP1="10.0.0.1"
+OTHER_privatedoh_IP2=""
+OTHER_privatedoh_TLS_HOST="dns.example.com"
+```
+
+**Пример: зоновый провайдер:**
+```sh
+ZONE_myzone_LABEL="My Zone DNS"
+ZONE_myzone_PROTO="udp"
+ZONE_myzone_IP1="192.168.1.1"
+ZONE_myzone_IP2=""
+ZONE_myzone_UDP_FALLBACK="no"
+```
+
+После добавления укажите имя провайдера в `config.conf`:
+```sh
+OTHER_DNS_PROVIDER="google mydns"
+```
+
+Пользовательские провайдеры отображаются в WebUI наравне со встроенными.
+
+> 💡 **Совет:** Список провайдеров кешируется веб-сервером на 1 час. Чтобы новый провайдер
+> появился в WebUI сразу, перезапустите nginx:
+> ```sh
+> /opt/etc/init.d/S80nginx-webui restart
+> ```
+
 ### Применение изменений
 
 ```sh

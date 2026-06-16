@@ -385,18 +385,19 @@ body {
     text-transform: uppercase; letter-spacing: 0.5px;
 }
 .ew-modal__reset {
+    position: relative;
     margin-left: auto;
     background: none; border: none; cursor: pointer;
-    color: var(--text-gray, #949b9f); opacity: 0.5;
+    color: rgba(148, 155, 159, 0.5);
     padding: 4px 6px; border-radius: 4px;
-    transition: opacity .15s, color .15s, background .15s;
+    transition: color .15s, background .15s;
 }
 .ew-modal__reset:hover {
-    opacity: 1; color: var(--primary-color, #0086cb);
+    color: var(--primary-color, #0086cb);
     background: rgba(0, 134, 203, 0.1);
 }
 .ew-modal__reset--default {
-    opacity: 0.2; cursor: default;
+    color: rgba(148, 155, 159, 0.5); cursor: default;
 }
 .ew-modal__input {
     background: var(--input-background, #141c29);
@@ -448,11 +449,14 @@ body {
     background: var(--primary-color, #0086cb);
     color: #fff;
 }
-.ew-modal__help::after {
+/* Tooltip shared (help icon + reset button) */
+.ew-modal__help::after,
+.ew-modal__reset[data-tooltip]::after {
     content: attr(data-tooltip);
     position: absolute;
-    left: 0;
     top: calc(100% + 6px);
+    bottom: auto;
+    transform: none;
     background: var(--card-background, #1c2433);
     border: 1px solid var(--stroke, #4d545f);
     border-radius: 6px;
@@ -460,7 +464,8 @@ body {
     font-size: 12px;
     font-weight: 400;
     color: var(--primary-text, #c2c2c2);
-    white-space: normal;
+    text-align: left;
+    white-space: pre-line;
     width: max-content;
     max-width: 280px;
     line-height: 1.4;
@@ -468,13 +473,17 @@ body {
     pointer-events: none;
     opacity: 0;
     visibility: hidden;
-    transition: opacity .15s, visibility .15s;
+    transition: opacity 0s 0.15s, visibility 0s 0.15s;
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
+.ew-modal__help::after { left: 0; }
+.ew-modal__reset[data-tooltip]::after { right: 0; left: auto; }
 .ew-modal__help:hover::after,
-.ew-modal__help:focus::after {
+.ew-modal__help:focus::after,
+.ew-modal__reset[data-tooltip]:hover::after {
     opacity: 1;
     visibility: visible;
+    transition-delay: 0s;
 }
 /* Zone selector compound field */
 .ew-modal__zone-selector {

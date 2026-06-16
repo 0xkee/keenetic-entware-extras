@@ -5,6 +5,19 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.25.4] - 2026-06-16
+
+### Fixed
+- **Tooltip CSS conflict**: `.ew-modal__help::after` properties (`bottom`, `transform`)
+  leaked from generic `[data-tooltip]::after` in common.css — tooltip was stretched/misplaced.
+  Added explicit resets and unified tooltip rule for both help icon and reset button.
+- **Reset button tooltip**: replaced native `title` with styled `data-tooltip` (same as `?`
+  icon). Right-aligned, pre-line whitespace, 150ms hover delay. Removed `opacity` from
+  `.ew-modal__reset` (replaced with transparent `color`) to prevent tooltip fade-through.
+- **Sidebar duplication (×5)**: added DOM-level dedupe guard in `tryInject()` — checks
+  container for existing `.entware-menu-section` before appending. MutationObserver now
+  removes duplicate sections if somehow created.
+
 ## [0.25.3] - 2026-06-15
 
 ### Fixed

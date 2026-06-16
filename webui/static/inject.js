@@ -1028,6 +1028,11 @@
         }
         var container = document.querySelector('ndw-menu .menu__contents');
         if (!container) return false;
+        // DOM-level dedupe: section already present (Angular kept it)
+        if (container.querySelector('.entware-menu-section')) {
+            injected = true;
+            return true;
+        }
         container.appendChild(buildSection());
         injected = true;
         injectDashStyles();

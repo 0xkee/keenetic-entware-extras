@@ -1115,7 +1115,7 @@ function renderModalForm(body, svcId, schema, config, defaults, interfaces, zone
                 '<span class="ew-toggle__bar"></span></label>';
             html += '<label class="ew-modal__label ew-modal__label--clickable" for="' + toggleId + '">' + escapeHtml(field.label) + '</label>';
             html += helpHtml;
-            html += '<button class="ew-modal__reset' + (isDefault ? ' ew-modal__reset--default' : '') + '" data-reset-key="' + field.key + '" data-reset-val="' + escapeHtml(String(defVal)) + '" title="Reset to default: ' + escapeHtml(String(defVal)) + '">' +
+            html += '<button class="ew-modal__reset' + (isDefault ? ' ew-modal__reset--default' : '') + '" data-reset-key="' + field.key + '" data-reset-val="' + escapeHtml(String(defVal)) + '" data-tooltip="Reset to default:\n' + escapeHtml(String(defVal)) + '">' +
                 '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5 8c-2.65 0-5.05 1.04-6.83 2.73L3 8v8h8l-2.81-2.81C9.59 11.82 10.96 11 12.5 11c2.76 0 5.07 1.75 5.94 4.2l2.37-.78C19.63 10.96 16.35 8 12.5 8z"/></svg>' +
                 '</button>';
             html += '</div>';
@@ -1124,7 +1124,7 @@ function renderModalForm(body, svcId, schema, config, defaults, interfaces, zone
             html += '<div class="ew-modal__field-header">';
             html += '<label class="ew-modal__label">' + escapeHtml(field.label) + '</label>';
             html += helpHtml;
-            html += '<button class="ew-modal__reset' + (isDefault ? ' ew-modal__reset--default' : '') + '" data-reset-key="' + field.key + '" data-reset-val="' + escapeHtml(String(defVal)) + '" title="Reset to default: ' + escapeHtml(String(defVal)) + '">' +
+            html += '<button class="ew-modal__reset' + (isDefault ? ' ew-modal__reset--default' : '') + '" data-reset-key="' + field.key + '" data-reset-val="' + escapeHtml(String(defVal)) + '" data-tooltip="Reset to default:\n' + escapeHtml(String(defVal)) + '">' +
                 '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5 8c-2.65 0-5.05 1.04-6.83 2.73L3 8v8h8l-2.81-2.81C9.59 11.82 10.96 11 12.5 11c2.76 0 5.07 1.75 5.94 4.2l2.37-.78C19.63 10.96 16.35 8 12.5 8z"/></svg>' +
                 '</button>';
             html += '</div>';

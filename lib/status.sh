@@ -135,57 +135,168 @@ status_check_version() {
   _st_version="$(installed_pkg_version "$1")"
 }
 
-# --- Show functions (text output for CLI) ---
+# --- Declarative text output API (accumulator + emit) ---
+# Parallel to JSON accumulator: register lines, then flush with status_emit_text.
+# Format: 4-space indent + 13-char label column + value + mark.
 
-# Print process status line.
+_text_buf=""
+
+# Accumulate a section header.
+# Args: $1 - title (without colon)
+status_section() {
+  _text_buf="${_text_buf}$(printf '  %s:\n' "$1")
+"
+}
+
+# Accumulate a status line.
+# Args: $1 - label (without colon), $2 - value, $3 - status: "ok"|"fail"|"warn"|"" (default: "")
+status_line() {
+  local label="$1" value="$2" status="${3:-}"
+  local mark=""
+  case "$status" in
+    ok)   mark=" ✓" ;;
+    fail) mark=" ✗" ;;
+    warn) mark=" ⚠" ;;
+    *)    mark="" ;;
+  esac
+  _text_buf="${_text_buf}$(printf '    %-13s%s%s\n' "${label}:" "$value" "$mark")
+"
+}
+
+# Accumulate a continuation line (no label, aligned with value column).
+# Args: $1 - value, $2 - status: "ok"|"fail"|"warn"|"" (default: "")
+status_line_cont() {
+  local value="$1" status="${2:-}"
+  local mark=""
+  case "$status" in
+    ok)   mark=" ✓" ;;
+    fail) mark=" ✗" ;;
+    warn) mark=" ⚠" ;;
+    *)    mark="" ;;
+  esac
+  _text_buf="${_text_buf}$(printf '                 %s%s\n' "$value" "$mark")
+"
+}
+
+# Accumulate a blank separator line.
+status_blank() {
+  _text_buf="${_text_buf}
+"
+}
+
+# Emit accumulated text to stdout and reset buffer.
+status_emit_text() {
+  printf '%s' "$_text_buf"
+  _text_buf=""
+}
+
+# --- Show functions (text output helpers, use accumulator) ---
+
+# Register process status line.
 # Requires: _st_running, _st_pid, _st_mem_kb, _st_pid_source
 status_show_process() {
   if [ "$_st_running" = "true" ]; then
-    echo "    Process:     running (pid $_st_pid via $_st_pid_source, RSS ${_st_mem_kb}kB) ✓"
+    status_line "Process" "running (pid $_st_pid via $_st_pid_source, RSS ${_st_mem_kb}kB)" "ok"
   else
-    echo "    Process:     NOT running ✗"
+    status_line "Process" "NOT running" "fail"
   fi
 }
 
-# Print uptime line.
+# Register uptime line.
 # Requires: _st_uptime_seconds, _st_running
 status_show_uptime() {
   if [ "$_st_running" = "true" ] && [ "$_st_uptime_seconds" -gt 0 ] 2>/dev/null; then
-    echo "    Uptime:      $(format_age "$_st_uptime_seconds") ✓"
+    status_line "Uptime" "$(format_age "$_st_uptime_seconds")" "ok"
   elif [ "$_st_running" = "true" ]; then
-    echo "    Uptime:      unknown"
+    status_line "Uptime" "unknown"
   else
-    echo "    Uptime:      — (not running)"
+    status_line "Uptime" "— (not running)"
   fi
 }
 
-# Print version line.
+# Register version line.
 # Requires: _st_version
 status_show_version() {
   if [ -n "$_st_version" ]; then
-    echo "    Version:     $_st_version"
+    status_line "Version" "$_st_version"
   else
-    echo "    Version:     — (not installed via opkg)"
+    status_line "Version" "— (not installed via opkg)"
   fi
 }
 
-# Print listening port(s) line.
+# Register listening port(s) line.
 # Args: $1 - port number (for "not listening" message)
 # Requires: _st_port_ok, _st_port_addrs
 status_show_port() {
   local port="${1:-?}"
   if [ "$_st_port_ok" = "true" ]; then
-    local first=1
-    echo "$_st_port_addrs" | tr ' ' '\n' | while IFS= read -r addr; do
+    local first=1 addr=""
+    local _old_ifs="$IFS"
+    IFS=' '
+    for addr in $_st_port_addrs; do
       [ -z "$addr" ] && continue
       if [ "$first" = 1 ]; then
-        echo "    Ports:       $addr ✓"
+        status_line "Ports" "$addr" "ok"
         first=0
       else
-        echo "                 $addr ✓"
+        status_line_cont "$addr" "ok"
       fi
     done
+    IFS="$_old_ifs"
   else
-    echo "    Ports:       :${port} not listening ✗"
+    status_line "Ports" ":${port} not listening" "fail"
   fi
+}
+
+# --- Declarative JSON accumulation API ---
+# Accumulators for building structured JSON output without manual printf.
+# Usage: call status_detail/status_check/status_extra, then status_emit_json.
+
+_json_details=""
+_json_checks=""
+_json_extras=""
+
+# Register a detail key-value pair for the "details" object.
+# Args: $1 - key, $2 - value, $3 - type: "str" (default) | "num" | "bool"
+# For bool: value is 0 (true) or non-0 (false), same convention as json_kv_bool.
+status_detail() {
+  local key="$1" val="$2" typ="${3:-str}"
+  [ -n "$_json_details" ] && _json_details="${_json_details},"
+  case "$typ" in
+    num)  _json_details="${_json_details}$(json_kv_num "$key" "$val")" ;;
+    bool) _json_details="${_json_details}$(json_kv_bool "$key" "$val")" ;;
+    *)    _json_details="${_json_details}$(json_kv "$key" "$val")" ;;
+  esac
+}
+
+# Register a check result for the "checks" object.
+# Args: $1 - check name, $2 - "ok"|"warn"|"fail"
+status_check_result() {
+  [ -n "$_json_checks" ] && _json_checks="${_json_checks},"
+  _json_checks="${_json_checks}$(json_check "$1" "$2")"
+}
+
+# Register an extra top-level key with pre-serialized JSON value.
+# Use for arrays or nested objects that are already JSON strings.
+# Args: $1 - key, $2 - raw JSON value (array/object, already serialized)
+status_extra() {
+  [ -n "$_json_extras" ] && _json_extras="${_json_extras},"
+  _json_extras="${_json_extras}\"$1\":$2"
+}
+
+# Emit the full JSON object to stdout.
+# Structure: {enabled, running, ok, details:{...}, [extras...], checks:{...}}
+# Args: $1 - enabled (0=true|1=false), $2 - running (0|1), $3 - ok (0|1)
+status_emit_json() {
+  local enabled="$1" running="$2" ok="$3"
+  printf '{'
+  json_kv_bool "enabled" "$enabled"
+  printf ','
+  json_kv_bool "running" "$running"
+  printf ','
+  json_kv_bool "ok" "$ok"
+  printf ',"details":{%s}' "$_json_details"
+  [ -n "$_json_extras" ] && printf ',%s' "$_json_extras"
+  printf ',"checks":{%s}' "$_json_checks"
+  printf '}\n'
 }

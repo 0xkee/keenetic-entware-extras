@@ -96,15 +96,15 @@ check_init() {
 
 # Show configuration: source file and resolver parameters.
 show_mode() {
-  echo "  Mode:"
-  echo "    Config:      $CONFIG_FILE"
-  echo "    Upstream:    127.0.0.1:$UPSTREAM_PORT (${_ck_upstream_name:-unknown})"
+  status_section "Mode"
+  status_line "Config" "$CONFIG_FILE"
+  status_line "Upstream" "127.0.0.1:$UPSTREAM_PORT (${_ck_upstream_name:-unknown})"
   if [ -n "$INTERFACES" ]; then
-    echo "    Interfaces:  $INTERFACES"
+    status_line "Interfaces" "$INTERFACES"
   else
-    echo "    Interfaces:  — (empty → disabled)"
+    status_line "Interfaces" "— (empty → disabled)"
   fi
-  echo "    IPv6:        $ENABLE_IPV6"
+  status_line "IPv6" "$ENABLE_IPV6"
 }
 
 # Check a single iptables REDIRECT rule for (family, iface, proto).
@@ -118,18 +118,20 @@ check_rule() {
   esac
   if "$bin" -t nat -C PREROUTING -i "$iface" -p "$proto" --dport 53 \
       -j REDIRECT --to-ports "$UPSTREAM_PORT" 2>/dev/null; then
-    printf "    %-4s %-6s %s → :%s ✓\n" "$family" "$proto" "$iface" "$UPSTREAM_PORT"
+    _text_buf="${_text_buf}$(printf '    %-4s %-6s %s → :%s ✓\n' "$family" "$proto" "$iface" "$UPSTREAM_PORT")
+"
   else
-    printf "    %-4s %-6s %s → :%s ✗\n" "$family" "$proto" "$iface" "$UPSTREAM_PORT"
+    _text_buf="${_text_buf}$(printf '    %-4s %-6s %s → :%s ✗\n' "$family" "$proto" "$iface" "$UPSTREAM_PORT")
+"
     STATUS_OK=1
   fi
 }
 
 # Report expected rules (per configured iface × proto); mark missing as ✗.
 show_rules() {
-  echo "  Rules:"
+  status_section "Rules"
   if [ -z "$INTERFACES" ]; then
-    echo "    (disabled: INTERFACES is empty)"
+    status_line_cont "(disabled: INTERFACES is empty)"
     return
   fi
   local iface proto
@@ -140,7 +142,7 @@ show_rules() {
   done
   if [ "$ENABLE_IPV6" = "yes" ]; then
     if ! command -v ip6tables >/dev/null 2>&1; then
-      echo "    IPv6 enabled but ip6tables not available ✗"
+      status_line "IPv6" "enabled but ip6tables not available" "fail"
       STATUS_OK=1
     else
       for iface in $INTERFACES; do
@@ -154,11 +156,11 @@ show_rules() {
 
 # Display upstream probe result.
 show_upstream() {
-  echo "  Upstream probe:"
+  status_section "Upstream probe"
   if [ "$_ck_upstream_ok" = 0 ]; then
-    echo "    UDP :$UPSTREAM_PORT: listening ($_ck_upstream_listening) ✓"
+    status_line "UDP :$UPSTREAM_PORT" "listening ($_ck_upstream_listening)" "ok"
   else
-    echo "    UDP :$UPSTREAM_PORT: no listener ✗"
+    status_line "UDP :$UPSTREAM_PORT" "no listener" "fail"
     STATUS_OK=1
   fi
 }
@@ -167,12 +169,12 @@ show_upstream() {
 show_ndm_hook() {
   local hook="/opt/etc/ndm/netfilter.d/smartdns-redirect-hook"
   if [ "$_ck_ndm_hook_ok" = 0 ]; then
-    echo "    NDM hook:    $hook ✓"
+    status_line "NDM hook" "$hook" "ok"
   elif [ -f "$hook" ]; then
-    echo "    NDM hook:    $hook (not executable) ✗"
+    status_line "NDM hook" "$hook (not executable)" "fail"
     STATUS_OK=1
   else
-    echo "    NDM hook:    ✗ (missing)"
+    status_line "NDM hook" "(missing)" "fail"
     STATUS_OK=1
   fi
 }
@@ -181,12 +183,12 @@ show_ndm_hook() {
 show_init() {
   local init="/opt/etc/init.d/S39smartdns-redirect"
   if [ "$_ck_init_ok" = 0 ]; then
-    echo "    Init:        $init ✓"
+    status_line "Init" "$init" "ok"
   elif [ -f "$init" ]; then
-    echo "    Init:        $init (not executable) ✗"
+    status_line "Init" "$init (not executable)" "fail"
     STATUS_OK=1
   else
-    echo "    Init:        ✗ (missing)"
+    status_line "Init" "(missing)" "fail"
     STATUS_OK=1
   fi
 }
@@ -196,7 +198,7 @@ show_uptime() {
   if [ "$_st_running" = "true" ]; then
     status_show_uptime
   else
-    echo "    Uptime:      — (not running)"
+    status_line "Uptime" "— (not running)" "fail"
     STATUS_OK=1
   fi
 }
@@ -222,46 +224,27 @@ json_output() {
   local enabled_val=1
   is_service_enabled "S39smartdns-redirect" && enabled_val=0
 
-  printf '{'
-  json_kv_bool "enabled" "$enabled_val"
-  printf ','
-  json_kv_bool "running" "$([ "$running" = "true" ] && echo 0 || echo 1)"
-  printf ','
-  json_kv_bool "ok" "$STATUS_OK"
-  printf ',"details":{'
-  json_kv "interfaces" "$INTERFACES"
-  printf ','
-  json_kv "ipv6" "$ENABLE_IPV6"
-  printf ','
-  json_kv_bool "ndm_hook" "$_ck_ndm_hook_ok"
-  printf ','
-  json_kv "upstream" "127.0.0.1:${UPSTREAM_PORT}"
-  printf ','
-  json_kv "name" "$_ck_upstream_name"
-  printf ','
-  json_kv_bool "status" "$_ck_upstream_ok"
-  printf ','
-  json_kv_bool "init" "$_ck_init_ok"
-  printf ','
-  json_kv_bool "rules" "$_ck_rules_ok"
-  printf ','
-  json_kv_num "uptime" "$uptime_seconds_val"
-  printf ','
-  json_kv "version" "${_st_version:-unknown}"
-  printf '},'
+  # Details
+  status_detail "interfaces" "$INTERFACES"
+  status_detail "ipv6" "$ENABLE_IPV6"
+  status_detail "ndm_hook" "$_ck_ndm_hook_ok" "bool"
+  status_detail "upstream" "127.0.0.1:${UPSTREAM_PORT}"
+  status_detail "name" "$_ck_upstream_name"
+  status_detail "status" "$_ck_upstream_ok" "bool"
+  status_detail "init" "$_ck_init_ok" "bool"
+  status_detail "rules" "$_ck_rules_ok" "bool"
+  status_detail "uptime" "$uptime_seconds_val" "num"
+  status_detail "version" "${_st_version:-unknown}"
 
-  # Checks section: "ok"|"warn"|"fail" per field
-  printf '"checks":{'
-  json_check "running" "$(if [ "$running" = "true" ]; then printf ok; else printf fail; fi)"
-  printf ','
-  json_check "upstream" "$(if [ "$_ck_upstream_ok" = 0 ]; then printf ok; else printf fail; fi)"
-  printf ','
-  json_check "ndm_hook" "$(if [ "$_ck_ndm_hook_ok" = 0 ]; then printf ok; else printf fail; fi)"
-  printf ','
-  json_check "init" "$(if [ "$_ck_init_ok" = 0 ]; then printf ok; else printf fail; fi)"
-  printf ','
-  json_check "rules" "$(if [ "$_ck_rules_ok" = 0 ]; then printf ok; else printf fail; fi)"
-  printf '}}\n'
+  # Checks
+  status_check_result "running" "$(if [ "$running" = "true" ]; then printf ok; else printf fail; fi)"
+  status_check_result "upstream" "$(if [ "$_ck_upstream_ok" = 0 ]; then printf ok; else printf fail; fi)"
+  status_check_result "ndm_hook" "$(if [ "$_ck_ndm_hook_ok" = 0 ]; then printf ok; else printf fail; fi)"
+  status_check_result "init" "$(if [ "$_ck_init_ok" = 0 ]; then printf ok; else printf fail; fi)"
+  status_check_result "rules" "$(if [ "$_ck_rules_ok" = 0 ]; then printf ok; else printf fail; fi)"
+
+  # Emit
+  status_emit_json "$enabled_val" "$([ "$running" = "true" ] && echo 0 || echo 1)" "$STATUS_OK"
 }
 
 # --- main ---
@@ -279,31 +262,39 @@ _st_running="false"
 [ -f "$PIDFILE" ] && _st_running="true" || true
 [ "$_st_running" = "false" ] && STATUS_OK=1 || true
 
+# --- Text output (declarative, parallel to json_output) ---
+
+text_output() {
+  local _status_word="✓ Alive"
+  if ! is_service_enabled "S39smartdns-redirect"; then
+    _status_word="⚠ Disabled"
+  elif [ "$STATUS_OK" -ne 0 ]; then
+    _status_word="✗ Fail"
+  fi
+
+  _text_buf="smartdns-redirect status: ${_status_word}
+"
+  show_mode
+  status_blank
+  show_rules
+  status_blank
+  show_upstream
+  status_blank
+  status_section "System"
+  show_uptime
+  show_init
+  show_ndm_hook
+  show_version
+
+  status_emit_text
+}
+
+# --- main ---
+
 if [ "${1:-}" = "--json" ]; then
   json_output
   exit "$STATUS_OK"
 fi
 
-# Determine status word for title line
-_status_word="✓ Alive"
-if ! is_service_enabled "S39smartdns-redirect"; then
-  _status_word="⚠ Disabled"
-elif [ "$STATUS_OK" -ne 0 ]; then
-  _status_word="✗ Fail"
-fi
-
-echo "smartdns-redirect status: $_status_word"
-
-show_mode
-echo
-show_rules
-echo
-show_upstream
-echo
-echo "  System:"
-show_uptime
-show_init
-show_ndm_hook
-show_version
-
+text_output
 exit "$STATUS_OK"

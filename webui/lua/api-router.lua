@@ -13,7 +13,7 @@ local shell_env = "export PATH=/opt/sbin:/opt/bin:/usr/sbin:/usr/bin:/sbin:/bin;
 local cache = ngx.shared.status_cache
 local CACHE_TTL = 5       -- default fresh cache lifetime (seconds)
 local STALE_TTL = 30      -- stale fallback while script is running (seconds)
-local LOCK_TTL = 15       -- max time to hold execution lock (seconds)
+local LOCK_TTL = 45       -- max time to hold execution lock (seconds)
 local STATIC_TTL = 3600   -- static data cache (zones, unions) — 1 hour
 local IFACE_TTL = 60      -- interfaces list — changes rarely (VPN toggle)
 
@@ -21,7 +21,7 @@ local IFACE_TTL = 60      -- interfaces list — changes rarely (VPN toggle)
 -- POST actions (start/stop/config) invalidate cache instantly regardless of TTL.
 local ENDPOINT_TTLS = {
     ["/api/geo-split/status"]        = 10,  -- detect_dns_port inside = 2×dig
-    ["/api/smartdns/status"]          = 15,  -- collect_dns_tests_json = N×dig +time=3
+    ["/api/smartdns/status"]          = 15,  -- collect_dns_tests_json = N×dig +time=2
     ["/api/smartdns-redirect/status"] = 5,   -- iptables -C (fast)
     ["/api/webui/status"]             = 5,   -- netstat + pidof (fast)
 }
@@ -83,7 +83,9 @@ local function cached_run(key, cmd)
         if stale then
             return stale
         end
-        -- No stale data (first ever request) — must wait and run ourselves
+        -- No stale data (cold start) — return placeholder to prevent pile-up.
+        -- Next poll (30s) will get real data once the first worker finishes.
+        return '{"running":false,"status":"loading","error":"cache warming up"}'
     end
 
     -- Execute the script
@@ -611,9 +613,16 @@ end
 -- @return string — JSON with "zone" and "other" arrays
 local function system_dns_providers()
     local providers_file = base .. "/smartdns-geo-conf/config/dns-providers.conf"
+    local custom_file = base .. "/smartdns-geo-conf/config/dns-providers-custom.conf"
     local content = read_file(providers_file)
     if not content then
         return '{"ok":false,"error":"dns-providers.conf not found"}'
+    end
+
+    -- Append custom providers (user-defined, preserved on upgrade)
+    local custom = read_file(custom_file)
+    if custom then
+        content = content .. "\n" .. custom
     end
 
     local zone_items = {}
@@ -667,54 +676,35 @@ local action_routes = {
     ["/api/geo-split/update-domains"]  = "(" .. base .. "/geo-split/scripts/update-domains.sh --force >/dev/null 2>&1 &)",
 }
 
--- Dispatch
-if uri == "/api/system/info" then
-    local cached = cache:get(uri)
+-- Lua-computed routes: cached JSON endpoints
+local lua_routes = {
+    ["/api/system/info"]          = { fn = system_info,          ttl = CACHE_TTL },
+    ["/api/system/interfaces"]    = { fn = system_interfaces,    ttl = IFACE_TTL },
+    ["/api/system/zones"]         = { fn = system_zones,         ttl = STATIC_TTL },
+    ["/api/system/dns-providers"] = { fn = system_dns_providers, ttl = STATIC_TTL },
+}
+
+-- Alias: /api/smartdns/zones → same handler & cache key as /api/system/zones
+lua_routes["/api/smartdns/zones"] = { fn = system_zones, ttl = STATIC_TTL, cache_key = "/api/system/zones" }
+
+--- Serve a lua_routes entry with shared_dict caching.
+-- @param cfg table {fn, ttl, cache_key?}
+local function serve_cached_lua(cfg)
+    local key = cfg.cache_key or uri
+    local cached = cache:get(key)
     if cached then
         ngx.say(cached)
     else
-        local result = system_info()
-        cache:set(uri, result, CACHE_TTL)
+        local result = cfg.fn()
+        cache:set(key, result, cfg.ttl)
         ngx.say(result)
     end
-    return
 end
 
-if uri == "/api/system/interfaces" then
-    local cached = cache:get(uri)
-    if cached then
-        ngx.say(cached)
-    else
-        local result = system_interfaces()
-        cache:set(uri, result, IFACE_TTL)
-        ngx.say(result)
-    end
-    return
-end
-
-if uri == "/api/system/zones" or uri == "/api/smartdns/zones" then
-    local zones_key = "/api/system/zones"
-    local cached = cache:get(zones_key)
-    if cached then
-        ngx.say(cached)
-    else
-        local result = system_zones()
-        cache:set(zones_key, result, STATIC_TTL)
-        ngx.say(result)
-    end
-    return
-end
-
-if uri == "/api/system/dns-providers" then
-    local prov_key = "/api/system/dns-providers"
-    local cached = cache:get(prov_key)
-    if cached then
-        ngx.say(cached)
-    else
-        local result = system_dns_providers()
-        cache:set(prov_key, result, STATIC_TTL)
-        ngx.say(result)
-    end
+-- Dispatch: lua_routes lookup
+local route_cfg = lua_routes[uri]
+if route_cfg then
+    serve_cached_lua(route_cfg)
     return
 end
 

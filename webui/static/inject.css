@@ -183,6 +183,14 @@
 .ew-chip--error .ew-chip__dot {
     background: var(--error, #de3d3d);
 }
+.ew-chip--stale {
+    background: rgba(0, 134, 203, .08);
+    color: var(--text-gray, #949b9f);
+}
+.ew-chip--stale .ew-chip__dot {
+    background: var(--text-link, #0086cb);
+    opacity: 0.7;
+}
 
 /* ── Expand button — stock toggle vars ───────────────────────────── */
 .ew-expand-btn {

@@ -5,6 +5,35 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.25.5] — 2026-06-17
+
+### Fixed
+- **False-positive red indicators**: status badges no longer show red "Stopped"/"Error"
+  when service is actually running but API is momentarily unreachable. New 5-state badge:
+  green (running), yellow (warnings), gray (stopped/disabled), blue (stale/no data),
+  red (only for genuine crash: enabled=true but process dead).
+- **Stale-while-revalidate**: on fetch error, previous badge preserved for 30s before
+  showing neutral "stale" indicator. Eliminates flicker from transient network issues.
+- **Cold start false "Stopped"**: Lua placeholder changed from `running:false` to
+  `status:"pending"` — frontend no longer shows false "Stopped" during cache warm-up.
+- **Stopped vs Failed**: `enabled:true` + `running:false` = red "Failed" (crash);
+  `enabled:false` = gray "Stopped"/"Disabled" (user-intended). Previously all
+  `running:false` showed red.
+- **Toggle flash suppression**: "Failed" badge no longer flashes during service
+  restart when fast-poller is active.
+
+### Changed
+- SmartDNS disabled state: "DEFAULT MODE" (yellow) → "DISABLED" (gray) in both
+  stock dashboard card and custom dashboard.
+- Card accent border now reflects 5 states (was: running/error only).
+- `updateCardAccent(id, state)` — simplified string-based API.
+
+### Added
+- CSS `.status--stopped` (gray) and `.status--stale` (blue) badge styles.
+- CSS `.ew-chip--stale` for stock dashboard chip.
+- CSS `.dashboard-card--caution` and `.dashboard-card--stale` for card accent border.
+- `_lastGoodData` tracking + `STALE_MAX` (30s) in app.js.
+
 ## [0.25.4] - 2026-06-16
 
 ### Fixed

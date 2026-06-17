@@ -5,6 +5,14 @@ All notable changes to `smartdns-geo-conf` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.10.5] — 2026-06-17
+
+### Fixed
+- **DNS probe timeout**: increased from 2s to 3s (`+time=3`) in both
+  `collect_dns_tests_json()` and `collect_dns_server_checks_json()`. Reduces
+  false-positive ✗ indicators when upstream DNS (DoT/DoH via VPN) is momentarily
+  slow. Early-exit logic (skip after 2 fails) limits worst-case impact.
+
 ## [0.10.4] — 2026-06-16
 
 ### Added

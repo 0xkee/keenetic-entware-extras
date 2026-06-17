@@ -863,10 +863,21 @@
      * @returns {{state: string, text: string}}
      */
     function parseServiceStatus(data) {
+        // Pending response (cache warming) — signal to not update chip
+        if (data.status === "pending" && data.running === undefined) {
+            return { state: 'pending', text: '' };
+        }
         var state = data.running ? 'running' : 'stopped';
-        // Handle error response from api-router fallback
+        // Distinguish: service crashed (enabled but not running) vs user disabled
+        if (!data.running && !data.error) {
+            if (typeof data.enabled === 'boolean' && data.enabled) {
+                state = 'error';  // Should be running but isn't → red
+            }
+            // else: stopped (gray) — default from line above
+        }
+        // Handle error/unknown response from api-router
         if (!data.running && data.error) {
-            state = 'error';
+            state = 'stale';  // Unknown state, not a real "error"
         }
         // Determine chip state from checks or fallback
         if (data.running) {
@@ -879,15 +890,15 @@
                 state = 'caution';
             }
         }
-        // Services with "enabled" field: running but disabled → "default mode" (yellow)
+        // Services with "enabled" field: running but disabled → grey "Disabled"
         if (data.running && typeof data.enabled === 'boolean' && !data.enabled) {
-            state = 'caution';
+            state = 'stopped';
         }
         var text = data.running ? 'RUNNING' : 'STOPPED';
         if (data.running && typeof data.enabled === 'boolean' && !data.enabled) {
-            text = 'DEFAULT MODE';
+            text = 'DISABLED';
         }
-        if (data.running && data.details && data.details.uptime) {
+        if (data.running && !(typeof data.enabled === 'boolean' && !data.enabled) && data.details && data.details.uptime) {
             text += ' ' + EW.formatUptimeStock(data.details.uptime);
         }
         return { state: state, text: text };
@@ -907,6 +918,8 @@
         var chip = row.querySelector('.ew-chip');
         var detailsEl = document.getElementById('ew-details-' + svc.id);
         var s = parseServiceStatus(data);
+        // Pending: don't update chip (data is not real yet)
+        if (s.state === 'pending') return;
 
         // Update toggle: services with "enabled" field use it; others use "running"
         if (toggle) {
@@ -994,12 +1007,14 @@
                     }
                 })
                 .catch(function() {
+                    // Stale-while-revalidate: don't overwrite chip if it already has real data.
+                    // Only show "stale" if chip is still in initial LOADING state.
                     var chip = document.querySelector('#ew-dash-' + svc.id + ' .ew-chip');
-                    if (chip) {
-                        chip.className = 'ew-chip ew-chip--error';
-                        chip.innerHTML = '<span class="ew-chip__dot"></span> ERROR';
+                    if (chip && chip.textContent.indexOf('LOADING') !== -1) {
+                        chip.className = 'ew-chip ew-chip--stale';
+                        chip.innerHTML = '<span class="ew-chip__dot"></span> NO DATA';
                     }
-                    // Also remove shimmer on error
+                    // Remove shimmer on error (first load failed)
                     var content = document.getElementById('entware-dash-content');
                     if (content && content.classList.contains('ew-loading')) {
                         content.classList.remove('ew-loading');

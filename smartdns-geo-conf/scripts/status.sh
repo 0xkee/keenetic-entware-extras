@@ -183,7 +183,7 @@ collect_dns_tests_json() {
         if [ "$_dns_failed" -ge 2 ]; then
           r="SKIPPED"
         else
-          r="$(dig +short +time=2 +tries=1 "$d" @127.0.0.1 -p "$SMARTDNS_PORT" 2>/dev/null | head -1 || true)"
+          r="$(dig +short +time=3 +tries=1 "$d" @127.0.0.1 -p "$SMARTDNS_PORT" 2>/dev/null | head -1 || true)"
           [ -z "$r" ] && _dns_failed=$((_dns_failed + 1))
         fi
         [ "$first" -eq 0 ] && _json_dns_tests="${_json_dns_tests},"
@@ -199,7 +199,7 @@ collect_dns_tests_json() {
   if [ "$_dns_failed" -ge 2 ]; then
     intl_r="SKIPPED"
   else
-    intl_r="$(dig +short +time=2 +tries=1 "$intl_d" @127.0.0.1 -p "$SMARTDNS_PORT" 2>/dev/null | head -1 || true)"
+    intl_r="$(dig +short +time=3 +tries=1 "$intl_d" @127.0.0.1 -p "$SMARTDNS_PORT" 2>/dev/null | head -1 || true)"
   fi
   [ "$first" -eq 0 ] && _json_dns_tests="${_json_dns_tests},"
   _json_dns_tests="${_json_dns_tests}{\"domain\":\"$intl_d\",\"group\":\"other\",\"result\":\"${intl_r:-FAILED}\"}"
@@ -255,7 +255,7 @@ collect_dns_server_checks_json() {
     # Early-exit: if 2+ upstreams already timed out, network is down — skip rest
     if [ "$_upstream_fails" -ge 2 ]; then
       ok="false"
-    elif dig +short +time=2 +tries=1 "test.local" @"$ip" >/dev/null 2>&1; then
+    elif dig +short +time=3 +tries=1 "test.local" @"$ip" >/dev/null 2>&1; then
       ok="true"
     else
       _upstream_fails=$((_upstream_fails + 1))
@@ -285,7 +285,7 @@ collect_dns_server_checks_json() {
     # Early-exit: skip if network clearly down
     if [ "$_upstream_fails" -ge 2 ]; then
       ok="false"
-    elif dig +short +time=2 +tries=1 "test.local" @"$ip" >/dev/null 2>&1; then
+    elif dig +short +time=3 +tries=1 "test.local" @"$ip" >/dev/null 2>&1; then
       ok="true"
     else
       _upstream_fails=$((_upstream_fails + 1))

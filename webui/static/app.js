@@ -38,6 +38,8 @@ var autoRefreshTimer = null;
 var activeTab = "all";
 var _skipHashPush = false;      // Guard: skip pushState when applying hash from popstate/hashchange
 var _inflightControllers = {};  // { serviceId: AbortController } — cancel stale in-flight requests
+var _lastGoodData = {};    // { serviceId: { data: Object, timestamp: number } }
+var STALE_MAX = 30000;     // 30s — после этого показываем "stale" badge
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -64,7 +66,7 @@ function escapeHtml(str) {
 /**
  * Set status badge for a service card using stock ndw-status classes.
  * @param {string} id - service id
- * @param {"ok"|"warn"|"fail"|"error"|"loading"} state
+ * @param {"ok"|"caution"|"warn"|"fail"|"error"|"stopped"|"stale"|"loading"} state
  * @param {string} [text] - status text
  */
 function setStatus(id, state, text) {
@@ -88,6 +90,12 @@ function setStatus(id, state, text) {
         iconHtml = '<div class="status__icon"></div>';
     } else if (state === "fail" || state === "error") {
         statusClass = "status status--warning";
+        iconHtml = '<div class="status__icon"></div>';
+    } else if (state === "stopped") {
+        statusClass = "status status--stopped";
+        iconHtml = '<div class="status__icon"></div>';
+    } else if (state === "stale") {
+        statusClass = "status status--stale";
         iconHtml = '<div class="status__icon"></div>';
     }
 
@@ -235,16 +243,13 @@ function setDetails(id, data) {
 /**
  * Update left accent border color on card based on service state.
  * @param {string} id - service id
- * @param {boolean} running
- * @param {boolean} hasError
+ * @param {"running"|"caution"|"stopped"|"stale"|"error"} state
  */
-function updateCardAccent(id, running, hasError) {
+function updateCardAccent(id, state) {
     var card = document.getElementById("card-" + id);
     if (!card) return;
-    card.classList.remove("dashboard-card--running", "dashboard-card--stopped", "dashboard-card--error");
-    if (hasError) card.classList.add("dashboard-card--error");
-    else if (running) card.classList.add("dashboard-card--running");
-    else card.classList.add("dashboard-card--stopped");
+    card.classList.remove("dashboard-card--running", "dashboard-card--caution", "dashboard-card--stopped", "dashboard-card--stale", "dashboard-card--error");
+    if (state) card.classList.add("dashboard-card--" + state);
 }
 
 // ── Tab switching ────────────────────────────────────────────────────────────
@@ -355,10 +360,34 @@ function fetchStatus(url, id, skipLoading) {
             if (!data) return;
             _inflightControllers[id] = null;
 
+            // Handle "pending" response (Lua cache warming, no actual status data)
+            if (data.status === "pending" && data.running === undefined) {
+                // Backend doesn't know yet — keep showing previous state
+                // Don't update badge, details, or toggle
+                return;
+            }
+
             // Structured JSON from status.sh --json
             if (data.running !== undefined) {
+                // Store last good data for stale-while-revalidate
+                _lastGoodData[id] = { data: data, timestamp: Date.now() };
+
+                // Suppress transient "Failed" during toggle transition (service restarting)
+                if (togglePollers[id]) {
+                    if (!data.running && typeof data.enabled === 'boolean' && data.enabled) {
+                        // Would show "Failed" but service is still transitioning — skip
+                        return;
+                    }
+                    // State settled (running or cleanly stopped) — stop fast-poller
+                    stopTogglePoller(id);
+                }
+
                 // New structured format
-                if (data.running) {
+                if (data.running && typeof data.enabled === 'boolean' && !data.enabled) {
+                    // Process is running but user disabled the feature → grey "Disabled"
+                    setStatus(id, "stopped", "Disabled");
+                    updateCardAccent(id, "stopped");
+                } else if (data.running) {
                     // Check if any detail field is false → caution badge
                     var hasFail = false;
                     if (data.details) {
@@ -375,8 +404,16 @@ function fetchStatus(url, id, skipLoading) {
                         setStatus(id, badgeState, "Running");
                     }
                 } else {
-                    setStatus(id, "fail", "Stopped");
-                    updateCardAccent(id, false, false);
+                    // Distinguish: user disabled vs service crashed
+                    if (typeof data.enabled === 'boolean' && data.enabled) {
+                        // Should be running but isn't → real failure
+                        setStatus(id, "error", "Failed");
+                        updateCardAccent(id, "error");
+                    } else {
+                        // Disabled by user or no enabled concept → neutral
+                        setStatus(id, "stopped", "Stopped");
+                        updateCardAccent(id, "stopped");
+                    }
                 }
 
                 // Update toggle switch state
@@ -384,19 +421,16 @@ function fetchStatus(url, id, skipLoading) {
                 if (toggle) {
                     toggle.checked = (typeof data.enabled === "boolean") ? data.enabled : data.running;
                     toggle.disabled = false;
-                    // Stop fast-poller if state settled
-                    if (togglePollers[id]) {
-                        var expected = toggle.checked;
-                        var actual = (typeof data.enabled === "boolean") ? data.enabled : data.running;
-                        if (actual === expected) {
-                            stopTogglePoller(id);
-                        }
-                    }
                 }
                 setDetails(id, data);
-                updateCardAccent(id, data.running, hasFail);
+                // Card accent: disabled/stopped/error branches already set it;
+                // only override for running+enabled
+                var isDisabled = (typeof data.enabled === 'boolean' && !data.enabled);
+                if (!isDisabled && data.running) {
+                    updateCardAccent(id, hasFail ? "caution" : "running");
+                }
                 // Update uptime baseline (store badge state for ticker)
-                if (data.running && data.details && data.details.uptime) {
+                if (data.running && !isDisabled && data.details && data.details.uptime) {
                     ticker.setUptimeBaseline(id, data.details.uptime, { state: badgeState });
                 } else {
                     ticker.removeUptimeBaseline(id);
@@ -424,18 +458,21 @@ function fetchStatus(url, id, skipLoading) {
             } else if (data.output !== undefined) {
                 // Legacy text format (webui/status.sh)
                 setStatus(id, data.ok ? "ok" : "fail", data.ok ? "OK" : "Error");
+                updateCardAccent(id, data.ok ? "running" : "error");
                 var el = document.getElementById("details-" + id);
                 if (el) {
                     el.innerHTML = '<pre class="ew-details-pre">' + escapeHtml(data.output) + '</pre>';
                 }
             } else if (data.error) {
                 setStatus(id, "error", "Script error");
+                updateCardAccent(id, "error");
                 var el2 = document.getElementById("details-" + id);
                 if (el2) {
                     el2.innerHTML = '<pre class="ew-details-pre ew-details-pre--error">' + escapeHtml(data.error) + '</pre>';
                 }
             } else {
                 setStatus(id, "warn", "Unknown format");
+                updateCardAccent(id, "caution");
             }
         })
         .catch(function(err) {
@@ -443,13 +480,17 @@ function fetchStatus(url, id, skipLoading) {
             // Ignore AbortError from superseded requests (new fetch replaced this one)
             if (err.name === "AbortError" && _inflightControllers[id] !== controller) return;
             _inflightControllers[id] = null;
-            // Show error immediately — ticker CSS guard prevents overwrite
-            ticker.removeUptimeBaseline(id);
-            if (err.name === "AbortError") {
-                setStatus(id, "error", "Timeout (" + (FETCH_TIMEOUT / 1000) + "s)");
-            } else {
-                setStatus(id, "error", escapeHtml(err.message));
+
+            // Stale-while-revalidate: don't immediately show error if we have recent data
+            var last = _lastGoodData[id];
+            if (last && (Date.now() - last.timestamp) < STALE_MAX) {
+                // Silent stale — keep showing previous badge, do nothing
+                return;
             }
+            // Stale expired or never had data — show neutral "stale" badge (not red error!)
+            ticker.removeUptimeBaseline(id);
+            setStatus(id, "stale", "No data");
+            updateCardAccent(id, "stale");
         });
 }
 
@@ -713,9 +754,8 @@ var togglePollers = {};
 /**
  * Start fast polling for a service after toggle until state settles.
  * @param {string} serviceId
- * @param {boolean} targetRunning - expected state after toggle
  */
-function startTogglePoller(serviceId, targetRunning) {
+function startTogglePoller(serviceId) {
     stopTogglePoller(serviceId);
     var svc = null;
     for (var i = 0; i < EW.SERVICE_APIS.length; i++) {
@@ -751,7 +791,6 @@ function stopTogglePoller(serviceId) {
  */
 function handleToggle(serviceId, checkbox) {
     var action = checkbox.checked ? "start" : "stop";
-    var targetRunning = checkbox.checked;
     checkbox.disabled = true;
 
     fetch("/api/" + serviceId + "/" + action, { method: "POST" })
@@ -762,7 +801,7 @@ function handleToggle(serviceId, checkbox) {
                 // Revert toggle on failure
                 checkbox.checked = !checkbox.checked;
             } else {
-                startTogglePoller(serviceId, targetRunning);
+                startTogglePoller(serviceId);
             }
         })
         .catch(function() {

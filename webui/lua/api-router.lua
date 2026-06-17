@@ -21,7 +21,7 @@ local IFACE_TTL = 60      -- interfaces list — changes rarely (VPN toggle)
 -- POST actions (start/stop/config) invalidate cache instantly regardless of TTL.
 local ENDPOINT_TTLS = {
     ["/api/geo-split/status"]        = 10,  -- detect_dns_port inside = 2×dig
-    ["/api/smartdns/status"]          = 15,  -- collect_dns_tests_json = N×dig +time=2
+    ["/api/smartdns/status"]          = 15,  -- collect_dns_tests_json = N×dig +time=3
     ["/api/smartdns-redirect/status"] = 5,   -- iptables -C (fast)
     ["/api/webui/status"]             = 5,   -- netstat + pidof (fast)
 }
@@ -83,9 +83,9 @@ local function cached_run(key, cmd)
         if stale then
             return stale
         end
-        -- No stale data (cold start) — return placeholder to prevent pile-up.
-        -- Next poll (30s) will get real data once the first worker finishes.
-        return '{"running":false,"status":"loading","error":"cache warming up"}'
+        -- No stale data (cold start) — return pending indicator.
+        -- Frontend treats missing "running" field as "status unknown, don't update badge".
+        return '{"status":"pending"}'
     end
 
     -- Execute the script

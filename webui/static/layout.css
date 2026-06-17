@@ -130,10 +130,14 @@ body {
     box-shadow: 0 2px 8px rgba(0, 134, 203, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 .dashboard-card--running { border-left: 3px solid var(--indicator-online, #7dce70); }
+.dashboard-card--caution { border-left: 3px solid var(--indicator-yellow, #f2e572); }
 .dashboard-card--stopped { border-left: 3px solid var(--text-gray, #949b9f); }
+.dashboard-card--stale { border-left: 3px solid rgba(0, 134, 203, 0.5); }
 .dashboard-card--error { border-left: 3px solid var(--error, #de3d3d); }
 .dashboard-card--running:hover { border-left-color: var(--indicator-online, #7dce70); }
+.dashboard-card--caution:hover { border-left-color: var(--indicator-yellow, #f2e572); }
 .dashboard-card--stopped:hover { border-left-color: var(--text-gray, #949b9f); }
+.dashboard-card--stale:hover { border-left-color: rgba(0, 134, 203, 0.5); }
 .dashboard-card--error:hover { border-left-color: var(--error, #de3d3d); }
 .dashboard-card__header {
     display: flex; align-items: center;
@@ -175,6 +179,12 @@ body {
 .status--success { background: rgba(125, 206, 112, 0.08); }
 .status--caution { background: rgba(242, 229, 114, 0.08); }
 .status--warning { background: rgba(222, 61, 61, 0.08); }
+.status--stopped .status__icon { background: var(--text-gray, #949b9f); }
+.status--stopped .status__text { color: var(--text-gray, #949b9f); }
+.status--stopped { background: rgba(148, 155, 159, 0.06); }
+.status--stale .status__icon { background: var(--text-link, #0086cb); opacity: 0.7; }
+.status--stale .status__text { color: var(--text-gray, #949b9f); }
+.status--stale { background: rgba(0, 134, 203, 0.06); }
 
 /* ── Buttons — 1:1 stock ndw-button replica ──────────────────────── */
 .ndw-button {

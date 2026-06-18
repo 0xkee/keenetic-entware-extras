@@ -5,6 +5,25 @@ All notable changes to `geo-split` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.14.0] - 2026-06-18
+
+### Fixed
+- **NDM hook: tables not refilled on interface switch** — when uplink interface
+  went down, kernel removed routes from custom tables before the hook ran. The old
+  hook checked `ip route show table X | grep "dev iface"` which always returned
+  empty (routes already gone) → hook exited without action → tables stayed empty
+  until next 15-min cron. New reconciliation pattern checks table health on EVERY
+  `ifstatechanged` event and refills if tables are empty or point to wrong interface.
+- NDM hook: failover to backup ISP (already-UP interface) now triggers refill
+  immediately instead of waiting for cron.
+
+### Changed
+- `ndm-hook.sh`: complete rewrite — reconciliation pattern replaces reactive
+  UP/DOWN case handler. Single `tables_ok()` check covers all scenarios.
+- `lib/ip.sh`: `fill_routes_batch()` stamp files now store interface name
+  (was empty `touch`). Enables fast dev-mismatch detection in hook without
+  `ip route` fork. Backward-compatible (status.sh reads only mtime).
+
 ## [0.13.2] - 2026-06-15
 
 ### Changed

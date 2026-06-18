@@ -198,7 +198,7 @@ fill_routes_batch() {
     elapsed=$((t_end - t_start))
 
     rm -f "$batch_file"
-    touch "${TABLE_STAMP_PREFIX}${table}.filled"
+    echo "$dev" > "${TABLE_STAMP_PREFIX}${table}.filled"
     log "Routes loaded via ip-full -batch (table $table: $count entries in ${elapsed}s)"
   else
     log "ip-full not found, using BusyBox loop (slow)"
@@ -219,7 +219,7 @@ fill_routes_batch() {
     t_end=$(date +%s)
     elapsed=$((t_end - t_start))
 
-    touch "${TABLE_STAMP_PREFIX}${table}.filled"
+    echo "$dev" > "${TABLE_STAMP_PREFIX}${table}.filled"
     log "Routes loaded via BusyBox loop (table $table: $count entries in ${elapsed}s)"
   fi
 }

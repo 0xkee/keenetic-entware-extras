@@ -5,6 +5,12 @@ All notable changes to `keenetic-entware-extras` (base package) are documented h
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.16.4] - 2026-06-18
+
+### Changed
+- `lib/ip.sh`: `fill_routes_batch()` stamp files now store interface name
+  (enables fast dev-mismatch detection by geo-split NDM hook without ip route fork)
+
 ## [0.16.3] - 2026-06-15
 
 ### Changed

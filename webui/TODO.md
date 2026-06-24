@@ -38,6 +38,7 @@
 
 ## � Важные
 
+- [ ] **Route check из WebUI** — проверка выбора маршрута для конкретного хоста/домена прямо из интерфейса (диагностика: через какой интерфейс/таблицу пойдёт трафик).
 - [x] добавить Upstream в status + webui (Ok когда доступен) ✅ — `check_upstream()` в status.sh: парсит listen.conf для IP, curl probe. JSON: `details.upstream` (addr) + `checks.upstream` ("ok"|"warn"). Карточка рендерит автоматически через `parseDetails`.
 - [ ] **Service icons: SVG иконки в card headers + tabs** — визуальная дифференциация (route/globe для Geo-Split, DNS для SmartDNS, shield для DNS Redirect, monitor для WebUI). Inline SVG в `SERVICE_APIS`. (target-gui: #1, #3)
 - [ ] **System info: donut rings вместо thin bars** — SVG кольца 24×24 с заливкой по %, заменят текущие 48×4px полоски. Уникальная фича (stock dashboard не имеет system info). (target-gui: #2 Tech)

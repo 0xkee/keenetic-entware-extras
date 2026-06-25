@@ -5,14 +5,6 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
-## [0.26.1] — 2026-06-25
-
-### Added
-- **Cache invalidation for dns-providers**: `/api/system/dns-providers` now detects
-  changes to `dns-providers-custom.conf` via content comparison on each cache HIT.
-  Custom providers appear instantly after file creation/edit/deletion — no need to
-  wait for 1-hour TTL expiry or restart nginx.
-
 ## [0.25.5] — 2026-06-17
 
 ### Fixed

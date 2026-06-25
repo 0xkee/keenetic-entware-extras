@@ -688,40 +688,17 @@ local lua_routes = {
 lua_routes["/api/smartdns/zones"] = { fn = system_zones, ttl = STATIC_TTL, cache_key = "/api/system/zones" }
 
 --- Serve a lua_routes entry with shared_dict caching.
--- For /api/system/dns-providers: invalidate cache when dns-providers-custom.conf
--- changes (content comparison — file is tiny, ~50-200 bytes, costs ~30μs).
 -- @param cfg table {fn, ttl, cache_key?}
 local function serve_cached_lua(cfg)
     local key = cfg.cache_key or uri
     local cached = cache:get(key)
     if cached then
-        -- Content-based invalidation for dns-providers custom file
-        if key == "/api/system/dns-providers" then
-            local cur = read_file(base .. "/smartdns-geo-conf/config/dns-providers-custom.conf") or "\0"
-            local prev = cache:get(key .. "::src")
-            if prev == nil then
-                -- First HIT after deploy/restart: seed snapshot for future checks
-                cache:set(key .. "::src", cur, cfg.ttl + 60)
-            elseif cur ~= prev then
-                -- File changed → invalidate
-                cache:delete(key)
-                cache:delete(key .. "::src")
-                cached = nil
-            end
-        end
-        if cached then
-            ngx.say(cached)
-            return
-        end
+        ngx.say(cached)
+    else
+        local result = cfg.fn()
+        cache:set(key, result, cfg.ttl)
+        ngx.say(result)
     end
-    local result = cfg.fn()
-    cache:set(key, result, cfg.ttl)
-    -- Store custom file snapshot for change detection on next HIT
-    if key == "/api/system/dns-providers" then
-        local src = read_file(base .. "/smartdns-geo-conf/config/dns-providers-custom.conf") or "\0"
-        cache:set(key .. "::src", src, cfg.ttl + 60)
-    end
-    ngx.say(result)
 end
 
 -- Dispatch: lua_routes lookup

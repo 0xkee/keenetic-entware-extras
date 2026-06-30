@@ -309,6 +309,46 @@ SUBNET_URL="https://stat.ripe.net/data/country-resource-list/data.json?resource=
 
 > ⚠️ После `disable` нельзя запустить сервис через `/opt/etc/init.d/S99geo-split start` — этого файла больше нет. Чтобы вернуть сервис, используйте `enable` через полный путь.
 
+### Диагностика маршрутов (route-check)
+
+Утилита `route-check.sh` определяет, через какой интерфейс пойдёт трафик к указанному хосту или IP.
+
+```sh
+/opt/keenetic-entware-extras/geo-split/scripts/route-check.sh <домен-или-IP>
+```
+
+**Примеры:**
+```sh
+# Проверить маршрут до домена
+route-check.sh ozon.ru
+# ⇒  ozon.ru → geo-split (subnet 5.188.140.0/22 table 1001) → eth3
+
+# Проверить как конкретный клиент
+route-check.sh github.com --from AA:BB:CC:DD:EE:FF
+# ⊙  github.com → tunnel (policy table 4097) → nwg0
+
+# JSON-формат (для WebUI/автоматизации)
+route-check.sh --json ozon.ru
+```
+
+**Опции:**
+
+| Опция | Описание |
+|-------|----------|
+| `--json` | Вывод в формате JSON |
+| `--from <MAC>` | Проверить маршрут от лица конкретного клиента (MAC-адрес) |
+
+**Вердикты:**
+
+| Символ | Значение |
+|--------|----------|
+| `⇒` (geo-split) | Трафик идёт через geo-split (domain table или subnet table) |
+| `⊙` (tunnel) | Трафик идёт через VPN-туннель (политика клиента) |
+| `⚠` (mixed) | CDN — разные IP идут разными путями |
+| `→` (default) | Трафик идёт по маршруту по умолчанию |
+
+> 💡 **В WebUI**: Route Check доступен через кнопку «Диагностика» → «Route Check» на дашборде.
+
 ### Управление списком доменов
 
 Список доменов находится в `/opt/keenetic-entware-extras/geo-split-data/lists/domains.txt`.

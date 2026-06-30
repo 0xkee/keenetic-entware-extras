@@ -154,6 +154,15 @@ opkg install webui_<версия>_all.ipk
 | `/api/geo-split/update-subnets` | Обновить подсети (фоново) |
 | `/api/geo-split/update-domains` | Обновить домены (фоново) |
 
+**GET — диагностика (rate-limited: 1 запрос/сек):**
+
+| Эндпоинт | Описание |
+|----------|----------|
+| `/api/geo-split/route-check?host=...&from=...` | Проверка маршрута до хоста. `from` — MAC клиента или `local` |
+| `/api/smartdns/dns-check?host=...` | Диагностика DNS: зона, upstream-сервер, IP-адреса |
+| `/api/geo-split/wan-paths` | WAN-пути (JSON массив для SVG-диаграммы) |
+| `/api/system/clients` | Клиенты с VPN-политиками (имя, MAC, fwmark, интерфейс) |
+
 **Пример использования API:**
 ```sh
 # Получить статус geo-split

@@ -5,6 +5,13 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.27.2] — 2026-06-30
+
+### Changed
+- **user-manual.ru.md**: complete rewrite for v0.27 — Route Check, DNS Check,
+  Config Editor, dashboard cards/tabs, API with TTLs, troubleshooting updates
+- **README.md**: added diagnostic API endpoints table
+
 ## [0.27.1] — 2026-06-30
 
 ### Fixed

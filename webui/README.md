@@ -146,6 +146,18 @@ Browser → nginx :8080
 | POST | `/api/geo-split/update-subnets` | Обновить подсети (фон) |
 | POST | `/api/geo-split/update-domains` | Обновить домены (фон) |
 
+### GET (диагностика)
+
+Лимитировано: 1 запрос/сек на IP (nginx `limit_req`).
+
+| Метод | Эндпоинт | Описание |
+|-------|----------|----------|
+| GET | `/api/geo-split/route-check?host=...&from=...` | Проверка маршрута до хоста (from: MAC клиента или `local`) |
+| GET | `/api/smartdns/dns-check?host=...` | DNS-диагностика: зона, upstream, резолв |
+| GET | `/api/geo-split/wan-paths` | Список WAN-путей (для диаграммы) |
+| GET | `/api/system/clients` | Список клиентов с политиками маршрутизации |
+| GET | `/api/system/interfaces` | Сетевые интерфейсы с метками |
+
 ### Формат ответа
 
 **system/info:**

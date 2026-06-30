@@ -124,6 +124,21 @@ Hook слушает интерфейс в зависимости от `ROUTE_OUT
 | `update-subnets` | `update-subnets.sh --force` | Синхронно |
 | `update-domains` | `update-domains.sh --force` | Синхронно |
 
+### Диагностика маршрутов
+
+```sh
+# Проверить через какой интерфейс пойдёт трафик
+geo-split/scripts/route-check.sh ozon.ru
+
+# Проверить от лица конкретного клиента (MAC)
+geo-split/scripts/route-check.sh github.com --from AA:BB:CC:DD:EE:FF
+
+# JSON для автоматизации / WebUI
+geo-split/scripts/route-check.sh --json ozon.ru
+```
+
+Вердикты: `⇒` geo-split | `⊙` tunnel | `⚠` mixed (CDN) | `→` default
+
 ## Настройка
 
 Конфигурация: `config/config.conf`

@@ -5,6 +5,39 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.28.1] — 2026-07-01
+
+### Fixed
+- **Batch table: expanded diagrams collapse on update** — When checking multiple
+  domains, each new result caused full table re-render, closing any expanded
+  diagram rows. Now `_renderBatchTable` preserves open/closed state across
+  incremental re-renders by tracking expanded domains.
+- **Route diagram: policy path not shown / not active** — `_buildPaths` early-returned
+  when `all_paths` was injected from wan-paths cache, skipping policy path append.
+  Now always appends policy path from `data.default_route`. For `verdict=default`,
+  policy signpost is active (blue) and ISP globe is inactive (gray). Label under
+  signpost icon always shows "Policy" instead of interface name.
+
+## [0.28.0] — 2026-07-01
+
+### Fixed
+- **Interface labels: ppp0/eth0 now resolve to human names** — Expanded
+  `NDM_TYPE_TO_PREFIX` with PPPoE, PPTP, L2TP, AmneziaWG types for deterministic
+  id→prefix mapping. Replaced whitelist filter in `system_interfaces()` with
+  blacklist (excludes only infra: lo, tunnels, radios, VLANs). `eth*` ports
+  included only when NDM resolves a label (IPoE WAN with IP). Fixes: ppp0
+  showing as raw "ppp0" instead of ISP name.
+
+### Added
+- **Route diagram: policy path (signpost icon)** — NDM default route (def/deg.def)
+  always shown on diagram as a separate path with signpost icon (🪧). Helps
+  visualize where traffic goes "normally" vs where geo-split/tunnel redirects it.
+  Active when verdict=default+fwmark, inactive otherwise. Blue path animation
+  (same as tunnel).
+- **Verdict display: "⊙ policy"** — when verdict is "default" but client has an
+  fwmark (VPN policy), legend and batch table show "policy" instead of "default"
+  to clarify that NDM policy routing determined the path.
+
 ## [0.27.3] — 2026-06-30
 
 ### Fixed

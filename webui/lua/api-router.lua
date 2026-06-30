@@ -214,10 +214,15 @@ end
 --- NDM id type → Linux interface name prefix mapping.
 -- Deterministic: works even when interface is down (no IP needed).
 local NDM_TYPE_TO_PREFIX = {
-    Bridge    = "br",
-    Wireguard = "nwg",
-    UsbLte    = "lte_br",
-    OpenVPN   = "ovpn_br",
+    Bridge      = "br",
+    Wireguard   = "nwg",
+    AmneziaWG   = "awg",
+    UsbLte      = "lte_br",
+    OpenVPN     = "ovpn_br",
+    PPPoE       = "ppp",
+    PPTP        = "ppp",
+    L2TP        = "ppp",
+    Ip6in4      = "ppp",
 }
 
 --- Get interface labels from ndmc.
@@ -300,6 +305,7 @@ end
 
 --- List network interfaces with UP/DOWN state and human labels.
 -- Enriched with descriptions from Keenetic NDM (matched by IP address).
+-- Uses blacklist to exclude infrastructure interfaces (tunnels, radios, VLANs).
 -- @return string — JSON array of {name, up, label?}
 local function system_interfaces()
     local output, _, _ = run_cmd("ip -o link show 2>/dev/null")
@@ -310,8 +316,21 @@ local function system_interfaces()
         local name = line:match(":%s+([^:@]+)")
         if name then
             name = name:gsub("%s+$", "")
-            if name:match("^br%d") or name:match("^lte_br%d") or
-               name:match("^nwg%d") or name:match("^ovpn_") then
+            -- Blacklist: exclude loopback, kernel tunnels, radios, VLAN sub-ifaces, infra
+            local excluded = (
+                name == "lo" or
+                name:match("^tunl") or name:match("^ip6tnl") or
+                name:match("^sit") or name:match("^gre") or
+                name:match("^ethoip") or name:match("^dummy") or
+                name:match("^ezcfg") or name:match("^ifb") or
+                name:match("^ra%d") or name:match("^apcli") or
+                name:match("%.%d+$")          -- VLAN sub-interfaces (eth2.1, ra7.1)
+            )
+            -- eth* ports: include only if NDM resolved a label (IPoE WAN with IP)
+            if not excluded and name:match("^eth%d+$") and not labels[name] then
+                excluded = true
+            end
+            if not excluded then
                 local flags = line:match("<([^>]+)>") or ""
                 local is_up = flags:match("UP") and true or false
                 local label_json = ""

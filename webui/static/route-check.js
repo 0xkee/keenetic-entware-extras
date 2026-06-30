@@ -376,8 +376,10 @@ function _renderFullResult(container, data, type) {
         legend.className = 'rc-result__legend';
         var verdict = (data && data.verdict) ? data.verdict : '';
         if (verdict) {
-            var lIcon = verdict === 'geo-split' ? '\u21c4' : (verdict === 'tunnel' ? '\u2299' : (verdict === 'mixed' ? '\u26a0' : '\u21d2'));
-            legend.textContent = query + ' ' + lIcon + ' ' + verdict;
+            var isPolicy = verdict === 'default';
+            var displayVerdict = isPolicy ? 'policy' : verdict;
+            var lIcon = verdict === 'geo-split' ? '\u21c4' : (verdict === 'tunnel' ? '\u2299' : (verdict === 'mixed' ? '\u26a0' : (isPolicy ? '\u2299' : '\u21d2')));
+            legend.textContent = query + ' ' + lIcon + ' ' + displayVerdict;
         } else {
             legend.textContent = query;
         }
@@ -438,6 +440,17 @@ function _renderFullResult(container, data, type) {
  * @param {string} type - "route" or "dns"
  */
 function _renderBatchTable(container, results, type) {
+    // Preserve expanded rows state before re-render
+    var openDomains = {};
+    var prevRows = container.querySelectorAll('.rc-batch-row');
+    for (var p = 0; p < prevRows.length; p++) {
+        var nxt = prevRows[p].nextElementSibling;
+        if (nxt && nxt.classList.contains('rc-batch-detail-row') && !nxt.classList.contains('rc-hidden')) {
+            var domCell = prevRows[p].querySelector('.rc-batch-domain');
+            if (domCell) openDomains[domCell.textContent] = true;
+        }
+    }
+
     container.innerHTML = '';
     var table = document.createElement('table');
     table.className = 'rc-batch-table';
@@ -478,7 +491,9 @@ function _renderBatchTable(container, results, type) {
                     routeText = rt.table_name || 'geo';
                     if (rt.match_prefix && rt.match_prefix !== 'default') {
                         var pfx = rt.match_prefix.split('/');
-                        routeText += pfx[1] ? ' /' + pfx[1] : ' ' + rt.match_prefix;
+                        if (pfx[1] && pfx[1] !== '32') {
+                            routeText += ' /' + pfx[1];
+                        }
                     }
                     ifaceText = _ifaceLabel(rt.dev || '?');
                     verdictText = 'geo-split';
@@ -496,12 +511,12 @@ function _renderBatchTable(container, results, type) {
                     ifaceText = (data.verdict_devs || []).map(function(d) { return _ifaceLabel(d); }).join(', ');
                     verdictText = 'mixed';
                 } else {
-                    icon = '\u21d2';
+                    icon = '\u2299';
                     rowCls = 'rc-batch-row--default';
                     var def = data.default_route || {};
-                    routeText = 'main';
+                    routeText = 'policy';
                     ifaceText = _ifaceLabel(def.dev || (data.routes && data.routes[0] ? data.routes[0].dev : '?'));
-                    verdictText = 'default';
+                    verdictText = 'policy';
                 }
 
                 row.className += ' ' + rowCls;
@@ -564,6 +579,16 @@ function _renderBatchTable(container, results, type) {
                     }
                 }
             });
+
+            // Restore expanded state if was open before re-render
+            if (openDomains[item.domain]) {
+                detailRow.classList.remove('rc-hidden');
+                expandBtn.textContent = '\u25be';
+                var restoreContent = detailRow.querySelector('.rc-batch-detail-content');
+                if (!restoreContent.hasChildNodes()) {
+                    _renderFullResult(restoreContent, data, type);
+                }
+            }
 
             tbody.appendChild(row);
             tbody.appendChild(detailRow);

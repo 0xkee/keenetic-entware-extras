@@ -306,6 +306,7 @@ body {
 }
 .ew-summary-mode .dashboard-card { cursor: pointer; }
 .ew-summary-mode .ew-edit-btn { display: none !important; }
+.ew-summary-mode .ew-diag-btn { display: none !important; }
 /* Hide low-priority details in summary mode */
 .ew-summary-mode .ew-detail-item[data-priority="low"] { display: none; }
 /* Summary cards are narrow (~300px) — use smaller grid min for 2-col layout */

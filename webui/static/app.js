@@ -697,8 +697,21 @@ function buildUI() {
         var editBtnHtml = '';
         if (CONFIG_SCHEMAS[svc.id]) {
             editBtnHtml =
-                '<button class="ndw-button ndw-button--toggle ndw-button--toggle-enabled ndw-button--small ndw-button--no-text ew-edit-btn" title="Edit Config" data-edit="' + svc.id + '">' +
+                '<button class="ndw-button ndw-button--toggle ndw-button--toggle-enabled ndw-button--small ndw-button--no-text ew-edit-btn" data-tooltip="Edit Config" data-edit="' + svc.id + '">' +
                     '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>' +
+                '</button>';
+        }
+
+        var diagBtnHtml = '';
+        if (svc.id === 'geo-split') {
+            diagBtnHtml =
+                '<button class="ndw-button ndw-button--toggle ndw-button--toggle-enabled ndw-button--small ndw-button--no-text ew-diag-btn" data-tooltip="Route Check" data-diag="route">' +
+                    '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>' +
+                '</button>';
+        } else if (svc.id === 'smartdns') {
+            diagBtnHtml =
+                '<button class="ndw-button ndw-button--toggle ndw-button--toggle-enabled ndw-button--small ndw-button--no-text ew-diag-btn" data-tooltip="DNS Check" data-diag="dns">' +
+                    '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>' +
                 '</button>';
         }
 
@@ -709,6 +722,7 @@ function buildUI() {
                     '<span class="text-card-heading">' + escapeHtml(svc.label.toUpperCase()) + '</span>' +
                 '</div>' +
                 '<div class="dashboard-card__header-buttons">' +
+                    diagBtnHtml +
                     editBtnHtml +
                 '</div>' +
             '</div>' +
@@ -919,7 +933,7 @@ function openConfigModal(svcId) {
     backdrop.innerHTML =
         '<div class="ew-modal">' +
             '<div class="ew-modal__header">' +
-                '<h2 class="ew-modal__title">' + escapeHtml(label) + ' \u2014 Settings</h2>' +
+                '<h2 class="ew-modal__title"><span style="display:inline-block;transform:scaleX(-1)">\u270f\ufe0f</span> ' + escapeHtml(label) + ' Settings</h2>' +
                 '<button class="ew-modal__close" data-modal-close>&times;</button>' +
             '</div>' +
             '<div class="ew-modal__body" id="modal-body">' +
@@ -1808,6 +1822,14 @@ document.addEventListener("DOMContentLoaded", function() {
         if (resetAllBtn) {
             var resetSvcId = resetAllBtn.getAttribute('data-reset-all');
             handleResetAll(resetSvcId);
+            return;
+        }
+        // Per-card Diagnostic button → open Route/DNS Check modal
+        var diagBtn = e.target.closest('[data-diag]');
+        if (diagBtn) {
+            var diagType = diagBtn.getAttribute('data-diag');
+            if (diagType === 'route') openRouteCheckModal();
+            else if (diagType === 'dns') openDnsCheckModal();
             return;
         }
         // Per-card Edit button → open config modal

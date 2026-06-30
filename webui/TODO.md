@@ -38,10 +38,17 @@
 
 ## � Важные
 
+- [x] **Route check из WebUI** ✅ — проверка выбора маршрута для конкретного хоста/домена прямо из интерфейса (диагностика: через какой интерфейс/таблицу пойдёт трафик).
+- [x] **Route check: цветные history pills** ✅ — бейджи в истории окрашены по verdict последнего теста (зелёный=geo-split, синий=tunnel, оранжевый=mixed). localStorage: `[{d:"domain", v:"tunnel"}]`, backward-compat с plain strings.
+- [ ] **Route check: стилизация Technical Details** — улучшить визуал таблицы tech details (DNS, Routes per IP, Default Route): spacing, группировка, иконки секций, аккордеон для секций.
+- [ ] **Route check: показывать policy name для tunnel клиентов** — при verdict=tunnel в "Via" колонке и на диаграмме отображать название VPN-policy (не просто первый tunnel интерфейс). Требует расширения backend `route-check.sh` для возврата policy name.
+- [ ] **Route check: семантические названия секций в Tech Details** — "Default Route" → "System Fallback" или "Main Gateway"; "Device" → "Interface". Улучшить ясность терминологии для неспециалистов.
+- [ ] **Route check: IPs overflow в batch tech details** — в batch-режиме длинный список IPs вылезает за карточку. Нужен overflow containment на `.rc-result__details` (batch контекст) или `table-layout: fixed` с автоширой первой колонки. Может просто каждый ip с новой строки?
 - [x] добавить Upstream в status + webui (Ok когда доступен) ✅ — `check_upstream()` в status.sh: парсит listen.conf для IP, curl probe. JSON: `details.upstream` (addr) + `checks.upstream` ("ok"|"warn"). Карточка рендерит автоматически через `parseDetails`.
+- [x] **Модалы диагностики: увеличить размер** ✅ — max-height 95vh, шрифты 14px (batch table, summary) / 13px (details, examples, legend), Check All absolute-pinned top-right, flex-shrink:0 на history (fix наплывания при росте таблицы). Оба модала (Route Check + DNS Check) унифицированы.
 - [ ] **Service icons: SVG иконки в card headers + tabs** — визуальная дифференциация (route/globe для Geo-Split, DNS для SmartDNS, shield для DNS Redirect, monitor для WebUI). Inline SVG в `SERVICE_APIS`. (target-gui: #1, #3)
 - [ ] **System info: donut rings вместо thin bars** — SVG кольца 24×24 с заливкой по %, заменят текущие 48×4px полоски. Уникальная фича (stock dashboard не имеет system info). (target-gui: #2 Tech)
-- [ ] + таймер на лейбл , когда сервис stopped (disabled)?
+- [ ] - таймер на лейбл , когда сервис stopped (disabled)?
 - [x] **Status flicker fix** ✅ — stale-while-revalidate: при ошибке fetch НЕ перезаписывать badge если есть предыдущие данные. Error показывается только при 3+ подряд неудачах или если данных ещё не было. app.js: `_hasGoodData`/`_consecutiveErrors`/`ERRORS_BEFORE_SHOW`. inject.js: `.catch()` в `fetchDashboardStatuses()` молчит если chip уже имеет данные.
 - [x] **False-positive badges fix** ✅ — 5-state badge (ok/caution/stopped/stale/error), stale-while-revalidate (30s), pending response, stopped vs failed, disabled state (gray), card accent 5 colors, toggle flash suppression.
 - [x] **upstream: использовать LAN IP вместо 127.0.0.1** ✅ — удалён блок `upstream keenetic_ui`, `proxy_pass $stock_httpd` (nginx-переменная из `listen.conf`). Self-healing в init-скрипте генерирует listen.conf с `set $stock_httpd http://<LAN_IP>:80;` при старте. Команда `update-listen` для ручного обновления IP.
@@ -96,27 +103,29 @@
 > Исследование прошивки KN-1711 stable 4.3.7 (`docs/knowledge/stock-firmware/KN-1711_stable_4.3.7_4.03.C.7.0-3.bin`) показало: NDW4 (Angular) **присутствует**.
 
 **Отличия от 5.x:**
+
 - Бандл: `main.790e5e1f5b169fd2.js` (ТОЧКА в имени, на 5.x — тире: `main-HASH.js`)
 - Отдельный `vendor.238eaa341d3874ba.js` + `runtime.2fb25874618f03d2.js` (на 5.x bundled)
 - CSS: `styles.1d2e1ec4187acf13.css`
 
 **Анализ паттернов v1 против бандла 4.3.7:**
 
-| # | Паттерн | 4.3 | Статус |
-|---|---------|-----|--------|
-| #6 | `TELEPHONY:"TELEPHONY"}` | Идентичен | ✅ |
-| #6a | `.values(Po))` | `.values(we))` — enum `Po`→`we` | ✅ тривиально |
-| #7 | `[Po.TELEPHONY]:...title"};` | `[we.TELEPHONY]:...title"},` — `Po`→`we` + `;`→`,` | ⚠️ тривиально |
-| #8 | `filter(a=>this.viewService...)` | `filter(r=>this.viewService...)` — var `a`→`r` | ⚠️ тривиально |
-| #QS | `Po.INTERNET,...Po.TELEPHONY]` | `we.INTERNET,...we.TELEPHONY]` — `Po`→`we` | ✅ тривиально |
-| #2 | `set order(e){this.elementsOrder=e}` | Идентичен | ✅ |
-| #3 | `getTemplate(e){return this.templateMap.get(e)}` | Идентичен | ✅ |
-| #9 | `d("ngTemplateOutlet",i.getTemplate(e))` | `Y8G("ngTemplateOutlet",...)` — другая Ivy-инструкция | ❌ новый паттерн |
-| #4 | `enterPredicate=(n,r)=>...` | Не найден — CDK в `vendor.js`? | ❌ исследовать |
+| #   | Паттерн                                          | 4.3                                                   | Статус           |
+| --- | ------------------------------------------------ | ----------------------------------------------------- | ---------------- |
+| #6  | `TELEPHONY:"TELEPHONY"}`                         | Идентичен                                             | ✅               |
+| #6a | `.values(Po))`                                   | `.values(we))` — enum `Po`→`we`                       | ✅ тривиально    |
+| #7  | `[Po.TELEPHONY]:...title"};`                     | `[we.TELEPHONY]:...title"},` — `Po`→`we` + `;`→`,`    | ⚠️ тривиально    |
+| #8  | `filter(a=>this.viewService...)`                 | `filter(r=>this.viewService...)` — var `a`→`r`        | ⚠️ тривиально    |
+| #QS | `Po.INTERNET,...Po.TELEPHONY]`                   | `we.INTERNET,...we.TELEPHONY]` — `Po`→`we`            | ✅ тривиально    |
+| #2  | `set order(e){this.elementsOrder=e}`             | Идентичен                                             | ✅               |
+| #3  | `getTemplate(e){return this.templateMap.get(e)}` | Идентичен                                             | ✅               |
+| #9  | `d("ngTemplateOutlet",i.getTemplate(e))`         | `Y8G("ngTemplateOutlet",...)` — другая Ivy-инструкция | ❌ новый паттерн |
+| #4  | `enterPredicate=(n,r)=>...`                      | Не найден — CDK в `vendor.js`?                        | ❌ исследовать   |
 
 **Вывод:** 5/9 ✅, 2/9 ⚠️ тривиальная адаптация, 2/9 ❌ требуют исследования (Ivy instructions + CDK DragDrop в vendor.js).
 
 **Задачи:**
+
 - [ ] `patch-stock-ui.sh`: поддержка паттерна `main.*.js` (сейчас ищет `main-*.js`)
 - [ ] Создать `v0.sh` patch-set: адаптировать 7 тривиальных паттернов (`Po`→`we`, `;`→`,`, `a`→`r`)
 - [ ] #9: найти `Y8G("ngTemplateOutlet"...)` + `getTemplate` в контексте и написать новый sed

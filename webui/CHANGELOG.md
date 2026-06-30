@@ -5,6 +5,13 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.27.3] — 2026-06-30
+
+### Fixed
+- **nginx: map_hash_bucket_size 64** — fix `[emerg] could not build map_hash`
+  on MIPS routers (bucket_size 32 < sizeof(elt) + key_len for 28-char URIs in
+  `$diag_limit_key` map). Affected: all MIPS 1004Kc routers. aarch64  unaffected (default bucket=64).
+
 ## [0.27.2] — 2026-06-30
 
 ### Changed

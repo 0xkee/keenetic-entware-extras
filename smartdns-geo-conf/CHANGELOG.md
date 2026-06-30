@@ -5,6 +5,11 @@ All notable changes to `smartdns-geo-conf` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.10.6] — 2026-06-29
+
+### Added
+- `dns-check.sh`: diagnostic tool — shows DNS zone, upstream, resolved IPs for WebUI
+
 ## [0.10.5] — 2026-06-17
 
 ### Fixed

@@ -5,6 +5,34 @@ All notable changes to `geo-split` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.16.0] - 2026-06-30
+
+### Added
+- `route-check.sh --from <MAC>`: check route as specific client. Resolves MAC → fwmark
+  via iptables mangle HOTSPOT chain internally. Non-VPN clients correctly show default
+  route (no longer auto-detect stray VPN fwmark). Resolves client name via ndmc hotspot.
+- JSON output: `from_mac`, `from_name` fields when `--from` is used
+
+### Fixed
+- **Client selection bug**: non-VPN clients no longer inherit first VPN tunnel fwmark
+  from auto-detect. When `--from` specifies a client without VPN policy, FWMARK stays
+  empty → route lookup uses main table (correct behavior)
+
+### Changed
+- Default verdict CLI symbol: `→` → `⇒` (visually heavier, distinct from tunnel `=`)
+- FWMARK env-var no longer required for client checks; `--from` replaces the
+  `FWMARK=0x... route-check.sh host iif` pattern
+
+## [0.15.0] - 2026-06-29
+
+### Added
+- `route-check.sh`: diagnostic tool — determines where traffic to a host/IP routes
+- `wan-paths.sh`: list all WAN egress paths as JSON for WebUI diagram
+- CDN mixed verdict: detects when domain IPs route through different interfaces
+- Per-IP verdict tracking (geo-split/tunnel/default for each resolved IP)
+- JSON output: `verdict_details[]`, `verdict_devs[]`, per-route `verdict` field
+- CLI: "⚠ mixed (dev1,dev2)" verdict display with per-IP annotations
+
 ## [0.14.0] - 2026-06-18
 
 ### Fixed

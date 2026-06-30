@@ -4,6 +4,20 @@
 # shellcheck disable=SC3043  # 'local' supported by ash/busybox sh
 set -eu
 
+# Check if string is a valid IPv4 address pattern.
+# Args: $1 - string to check
+# Returns: 0 if valid IPv4, 1 otherwise
+is_ipv4() {
+  echo "$1" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+}
+
+# Check if string is a plausible domain name.
+# Args: $1 - string to check
+# Returns: 0 if valid domain, 1 otherwise
+is_domain() {
+  echo "$1" | grep -qE '^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$'
+}
+
 # Pipe filter: aggregate (merge overlapping/adjacent) CIDR subnets.
 # Uses ISC aggregate (opkg install aggregate). IPv4 only.
 # Future: fork aggregate6 for IPv6 support.
@@ -31,6 +45,20 @@ detect_dns_port() {
     return
   fi
   echo "0 system resolver"
+}
+
+# Check if an interface name is a VPN/tunnel device.
+# Standard Keenetic: nwg*, awg*, ovpn*, l2tp*, pptp*, sstp*, ipsec*
+# Kernel tunnel:     tun[0-9]*, tap*, gre*, vti*, sit*, ip6tnl*, xfrm*
+# Third-party pkgs:  wg* (standalone WireGuard)
+# Args: $1 - interface name
+# Returns: 0 if tunnel, 1 otherwise
+is_tunnel_iface() {
+  case "$1" in
+    nwg*|awg*|wg*|ovpn*|l2tp*|pptp*|sstp*|ipsec*) return 0 ;;
+    tun[0-9]*|tap*|gre*|vti*|sit*|ip6tnl*|xfrm*) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 # Detect outgoing ISP interface for geo-split routes.

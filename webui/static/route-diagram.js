@@ -240,6 +240,36 @@ function _iconShield(cx, cy, extraClass) {
 }
 
 /**
+ * Signpost icon — policy/NDM routing (two directional arrows on a pole).
+ * @param {number} cx - center x
+ * @param {number} cy - center y
+ * @param {string} [extraClass]
+ * @returns {SVGGElement}
+ */
+function _iconSignpost(cx, cy, extraClass) {
+    var g = _svgEl("g", { "class": "route-icon" + (extraClass ? " " + extraClass : "") });
+    // Vertical pole
+    g.appendChild(_svgEl("line", { x1: cx, y1: cy - 12, x2: cx, y2: cy + 12 }));
+    // Upper arrow sign (pointing right)
+    g.appendChild(_svgEl("path", {
+        d: "M" + (cx - 8) + "," + (cy - 11) +
+           " L" + (cx + 5) + "," + (cy - 11) +
+           " L" + (cx + 9) + "," + (cy - 8) +
+           " L" + (cx + 5) + "," + (cy - 5) +
+           " L" + (cx - 8) + "," + (cy - 5) + " Z"
+    }));
+    // Lower arrow sign (pointing left)
+    g.appendChild(_svgEl("path", {
+        d: "M" + (cx + 8) + "," + (cy + 1) +
+           " L" + (cx - 5) + "," + (cy + 1) +
+           " L" + (cx - 9) + "," + (cy + 4) +
+           " L" + (cx - 5) + "," + (cy + 7) +
+           " L" + (cx + 8) + "," + (cy + 7) + " Z"
+    }));
+    return g;
+}
+
+/**
  * Zone icon — filter/funnel shape.
  * @param {number} cx
  * @param {number} cy
@@ -332,13 +362,14 @@ function _renderError(container, data) {
  * @param {number} cy - center y
  * @param {string} verdict - "geo-split", "default", or error text
  */
-function _renderVerdict(svg, cx, cy, verdict) {
+function _renderVerdict(svg, cx, cy, verdict, hasPolicy) {
     var isGeo = verdict === "geo-split";
     var isTunnel = verdict === "tunnel";
     var isMixed = verdict === "mixed";
     var isDefault = verdict === "default";
-    var label = isMixed ? "⚠ mixed" : (isGeo ? "✓ geo-split" : (isTunnel ? "= tunnel" : (isDefault ? "→ default" : "✗ " + verdict)));
-    var cls = isMixed ? "mixed" : (isGeo ? "geo" : (isTunnel ? "tunnel" : (isDefault ? "default" : "error")));
+    var isPolicy = isDefault && hasPolicy;
+    var label = isMixed ? "⚠ mixed" : (isGeo ? "✓ geo-split" : (isTunnel ? "= tunnel" : (isPolicy ? "⊙ policy" : (isDefault ? "→ default" : "✗ " + verdict))));
+    var cls = isMixed ? "mixed" : (isGeo ? "geo" : (isTunnel ? "tunnel" : ((isPolicy || isDefault) ? "default" : "error")));
 
     var bgW = label.length * 5.5 + 16;
     svg.appendChild(_svgEl("rect", {
@@ -389,10 +420,36 @@ function _buildPaths(data) {
                 mixed: isMixed && !!activeDevs[p.dev || ""]
             });
         }
+        // Always append policy path (NDM default route) if not already present
+        if (defaultRoute.dev) {
+            var hasPolicy = false;
+            for (var k = 0; k < paths.length; k++) {
+                if (paths[k].type === "policy") { hasPolicy = true; break; }
+            }
+            if (!hasPolicy) {
+                var isDefaultVerdict = (data.verdict === "default");
+                var policyActive = !!activeDevs[defaultRoute.dev];
+                var alreadySeen = false;
+                for (var m = 0; m < paths.length; m++) {
+                    if (paths[m].dev === defaultRoute.dev) { alreadySeen = true; break; }
+                }
+                // For "default" verdict, policy IS the active path (don't suppress)
+                var policyIsActive = (alreadySeen && !isDefaultVerdict) ? false : policyActive;
+                paths.push({ dev: defaultRoute.dev, via: defaultRoute.via || "", type: "policy", active: policyIsActive, mixed: isMixed && policyActive });
+                // When policy is active on same dev, demote ISP/tunnel path to inactive
+                if (policyIsActive && alreadySeen) {
+                    for (var n = 0; n < paths.length; n++) {
+                        if (paths[n].dev === defaultRoute.dev && paths[n].type !== "policy") {
+                            paths[n].active = false;
+                        }
+                    }
+                }
+            }
+        }
         return paths;
     }
 
-    // Fallback: derive paths from legacy fields (2 branches: ISP + VPN)
+    // Fallback: derive paths from legacy fields (up to 3 branches: ISP + VPN + Policy)
     var paths = [];
     var seen = {};
 
@@ -400,28 +457,34 @@ function _buildPaths(data) {
     var ispDev = "";
     if (data.verdict === "geo-split" && activeRoute) {
         ispDev = activeRoute.dev;
-    } else if (defaultRoute.dev) {
-        ispDev = defaultRoute.dev;
     }
     if (ispDev) {
-        paths.push({ dev: ispDev, via: (data.verdict === "geo-split" && activeRoute) ? activeRoute.via : defaultRoute.via, type: "isp", active: !!activeDevs[ispDev], mixed: isMixed && !!activeDevs[ispDev] });
+        paths.push({ dev: ispDev, via: activeRoute.via, type: "isp", active: true, mixed: isMixed && !!activeDevs[ispDev] });
         seen[ispDev] = true;
     }
 
-    // VPN/tunnel path
+    // VPN/tunnel path (client's VPN policy fwmark → policy table default route)
     var vpnDev = tunnelRoute.dev || "";
-    if (!vpnDev && defaultRoute.dev && defaultRoute.dev !== ispDev) {
-        vpnDev = defaultRoute.dev;
-    }
     if (vpnDev && !seen[vpnDev]) {
-        var vpnVia = (data.verdict !== "geo-split" && activeRoute) ? activeRoute.via : "";
-        paths.push({ dev: vpnDev, via: vpnVia, type: "tunnel", active: !!activeDevs[vpnDev], mixed: isMixed && !!activeDevs[vpnDev] });
+        paths.push({ dev: vpnDev, via: "", type: "tunnel", active: !!activeDevs[vpnDev], mixed: isMixed && !!activeDevs[vpnDev] });
         seen[vpnDev] = true;
     }
 
-    // If still no paths — at least show default
-    if (paths.length === 0 && defaultRoute.dev) {
-        paths.push({ dev: defaultRoute.dev, via: defaultRoute.via, type: "isp", active: true, mixed: false });
+    // Policy path (NDM def/deg.def default route — ALWAYS shown regardless of other paths)
+    if (defaultRoute.dev) {
+        var isDefVerdict = (data.verdict === "default");
+        var policyActive = !!activeDevs[defaultRoute.dev];
+        // For "default" verdict, policy IS the active path; otherwise suppress if same dev seen
+        var policyIsActive = (seen[defaultRoute.dev] && !isDefVerdict) ? false : policyActive;
+        paths.push({ dev: defaultRoute.dev, via: defaultRoute.via, type: "policy", active: policyIsActive, mixed: isMixed && policyActive });
+        // When policy is active on same dev, demote other paths to inactive
+        if (policyIsActive && seen[defaultRoute.dev]) {
+            for (var j = 0; j < paths.length; j++) {
+                if (paths[j].dev === defaultRoute.dev && paths[j].type !== "policy") {
+                    paths[j].active = false;
+                }
+            }
+        }
     }
 
     return paths;
@@ -499,8 +562,8 @@ function renderRouteDiagram(container, data) {
         var py = pathYs[pi];
         var isActive = paths[pi].active;
         var isMixedPath = paths[pi].mixed;
-        var isTunnelPath = paths[pi].type === "tunnel" && isActive;
-        var pathCls = isMixedPath ? "route-path--mixed" : (isTunnelPath ? "route-path--tunnel" : (isActive ? "route-path--active" : "route-path--inactive"));
+        var isPolicyPath = (paths[pi].type === "tunnel" || paths[pi].type === "policy") && isActive;
+        var pathCls = isMixedPath ? "route-path--mixed" : (isPolicyPath ? "route-path--tunnel" : (isActive ? "route-path--active" : "route-path--inactive"));
 
         // Router → path node
         var routerExitY = routerY + ((py - routerY) * 0.15);
@@ -557,7 +620,7 @@ function renderRouteDiagram(container, data) {
     svg.appendChild(_iconRouter(routerX, routerY, ""));
     svg.appendChild(_svgText("Router", routerX, routerY + 26, "route-node-label"));
 
-    // Path nodes (globe for ISP, shield for tunnel)
+    // Path nodes (globe for ISP, shield for tunnel, signpost for policy)
     // Icons use fixed type-based color (not highlighted on active — only paths animate)
     for (var pi2 = 0; pi2 < pathCount; pi2++) {
         var py2 = pathYs[pi2];
@@ -566,10 +629,13 @@ function renderRouteDiagram(container, data) {
 
         if (p.type === "tunnel") {
             svg.appendChild(_iconShield(pathNodeX, py2, iconClass));
+        } else if (p.type === "policy") {
+            svg.appendChild(_iconSignpost(pathNodeX, py2, ""));
         } else {
             svg.appendChild(_iconGlobe(pathNodeX, py2, iconClass));
         }
-        svg.appendChild(_svgText(_ifaceLabel(p.dev), pathNodeX, py2 + 27, "route-node-sublabel"));
+        var pathLabel = (p.type === "policy") ? "Policy" : _ifaceLabel(p.dev);
+        svg.appendChild(_svgText(pathLabel, pathNodeX, py2 + 27, "route-node-sublabel"));
         if (p.via) {
             svg.appendChild(_svgText("via " + p.via, pathNodeX, py2 + 39, "route-node-sublabel"));
         }

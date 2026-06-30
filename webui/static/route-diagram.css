@@ -1,0 +1,617 @@
+/* route-diagram.css — Styles for SVG route/DNS diagrams.
+ * Uses stock Keenetic CSS variables from styles-*.css.
+ * Part of the diagnostic visualization (Phase 2).
+ */
+
+/* ── Container ────────────────────────────────────────────────────── */
+.route-diagram {
+    width: 100%;
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 12px 0;
+}
+.route-diagram svg {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+/* ── Error state ──────────────────────────────────────────────────── */
+.route-diagram--error {
+    border: 1.5px solid var(--error, #de3d3d);
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+    color: var(--error, #de3d3d);
+    font-size: 13px;
+}
+.route-diagram--error .route-diagram__error-title {
+    font-weight: 500;
+    margin-bottom: 6px;
+}
+.route-diagram--error .route-diagram__error-msg {
+    color: var(--text-gray, #949b9f);
+    font-size: 12px;
+}
+
+/* ── Active path — animated marching ants ─────────────────────────── */
+.route-path--active {
+    stroke: var(--indicator-online, #7dce70);
+    stroke-width: 3;
+    stroke-dasharray: 8 4;
+    stroke-linecap: round;
+    animation: route-flow 1s linear infinite;
+}
+@keyframes route-flow {
+    to { stroke-dashoffset: -12; }
+}
+
+/* ── Inactive path — dim dashed ───────────────────────────────────── */
+.route-path--inactive {
+    stroke: var(--stroke, #4d545f);
+    stroke-width: 1.5;
+    stroke-dasharray: 4 4;
+    stroke-linecap: round;
+    opacity: 0.6;
+}
+
+/* ── Mixed path — orange animated (CDN split routing) ─────────────── */
+.route-path--mixed {
+    stroke: #ffa726;
+    stroke-width: 2.5;
+    stroke-dasharray: 6 4;
+    stroke-linecap: round;
+    animation: route-flow 0.8s linear infinite;
+}
+
+/* ── Tunnel path — blue animated (VPN routing) ────────────────────── */
+.route-path--tunnel {
+    stroke: var(--primary-color, #0086cb);
+    stroke-width: 2.5;
+    stroke-dasharray: 6 4;
+    stroke-linecap: round;
+    animation: route-flow 0.8s linear infinite;
+}
+
+/* ── DNS flow path (blue) ─────────────────────────────────────────── */
+.route-path--dns {
+    stroke: var(--primary-color, #0086cb);
+    stroke-width: 2.5;
+    stroke-dasharray: 6 3;
+    stroke-linecap: round;
+    animation: route-flow 1.2s linear infinite;
+}
+
+/* ── Node labels ──────────────────────────────────────────────────── */
+.route-node-label {
+    fill: var(--primary-text, #c2c2c2);
+    font-family: 'Roboto', sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    text-anchor: middle;
+}
+.route-node-sublabel {
+    fill: var(--text-gray, #949b9f);
+    font-family: 'Roboto', sans-serif;
+    font-size: 9px;
+    text-anchor: middle;
+}
+
+/* ── Verdict badge inside SVG ─────────────────────────────────────── */
+.route-verdict-bg {
+    rx: 4;
+    ry: 4;
+}
+.route-verdict-bg--geo { fill: rgba(125, 206, 112, 0.15); stroke: var(--indicator-online, #7dce70); stroke-width: 1; }
+.route-verdict-bg--mixed { fill: rgba(255, 167, 38, 0.12); stroke: #ffa726; stroke-width: 1; }
+.route-verdict-bg--tunnel { fill: rgba(0, 134, 203, 0.1); stroke: var(--primary-color, #0086cb); stroke-width: 1; }
+.route-verdict-bg--default { fill: rgba(0, 134, 203, 0.1); stroke: var(--primary-color, #0086cb); stroke-width: 1; }
+.route-verdict-bg--error { fill: rgba(222, 61, 61, 0.12); stroke: var(--error, #de3d3d); stroke-width: 1; }
+
+.route-verdict-text {
+    font-family: 'Roboto', sans-serif;
+    font-size: 10px;
+    font-weight: 500;
+    text-anchor: middle;
+}
+.route-verdict-text--geo { fill: var(--indicator-online, #7dce70); }
+.route-verdict-text--mixed { fill: #ffa726; }
+.route-verdict-text--tunnel { fill: var(--primary-color, #0086cb); }
+.route-verdict-text--default { fill: var(--primary-color, #0086cb); }
+.route-verdict-text--error { fill: var(--error, #de3d3d); }
+
+/* ── SVG icon styles ──────────────────────────────────────────────── */
+.route-icon {
+    fill: none;
+    stroke: var(--text-gray, #949b9f);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.route-icon--tunnel {
+    stroke: var(--primary-color, #0086cb);
+}
+.route-icon--primary {
+    stroke: var(--primary-color, #0086cb);
+}
+.route-icon--error {
+    stroke: var(--error, #de3d3d);
+}
+.route-icon--skipped {
+    stroke: var(--stroke, #4d545f);
+    opacity: 0.5;
+}
+
+/* ── Responsive ───────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+    .route-diagram { max-width: 100%; padding: 8px 0; }
+    .route-node-label { font-size: 10px; }
+    .route-node-sublabel { font-size: 8px; }
+    .route-verdict-text { font-size: 9px; }
+}
+@media (max-width: 400px) {
+    .route-node-label { font-size: 9px; }
+    .route-node-sublabel { font-size: 7px; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Route Check / DNS Check modal UI styles (rc-* prefix).
+ * Dark theme using stock Keenetic CSS variables.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+/* ── Diagnostic button in card header ─────────────────────────────── */
+/* .ew-diag-btn inherits sizing from ndw-button--small ndw-button--no-text (same as ew-edit-btn) */
+
+/* ── Modal overrides for diagnostic modals ────────────────────────── */
+.rc-modal {
+    width: 70%;
+    min-width: 360px;
+    max-width: 1100px;
+    max-height: 95vh;
+}
+.rc-modal__body {
+    font-size: 14px;
+    gap: 12px;
+    min-height: 0;
+}
+
+/* ── Input row (input + select + button) ──────────────────────────── */
+.rc-input-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+.rc-input {
+    flex: 2;
+    background: var(--input-background, #141c29);
+    border: 1px solid var(--stroke, #4d545f);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 14px;
+    color: var(--primary-text, #c2c2c2);
+    outline: none;
+    min-width: 120px;
+}
+.rc-input:focus {
+    border-color: var(--primary-color, #0086cb);
+}
+.rc-input::placeholder {
+    color: var(--text-gray, #949b9f);
+    opacity: 0.7;
+}
+.rc-iface-label {
+    font-size: 13px;
+    color: var(--text-gray, #949b9f);
+    white-space: nowrap;
+}
+.rc-iface-wrap {
+    position: relative;
+    flex: 3;
+    min-width: 140px;
+}
+.rc-iface-dropdown {
+    font-size: 13px;
+}
+.rc-iface-dropdown .ew-modal__iface-select-trigger {
+    padding: 7px 10px;
+    width: 100%;
+}
+
+/* ── Quick examples ───────────────────────────────────────────────── */
+.rc-examples {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-gray, #949b9f);
+    flex-wrap: wrap;
+}
+.rc-examples__label {
+    opacity: 0.8;
+}
+.rc-examples__link {
+    color: var(--primary-color, #0086cb);
+    text-decoration: none;
+    cursor: pointer;
+}
+.rc-examples__link:hover {
+    text-decoration: underline;
+}
+.rc-examples__sep {
+    color: var(--stroke, #4d545f);
+    font-size: 10px;
+}
+
+/* ── History pills ────────────────────────────────────────────────── */
+.rc-history {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    min-height: 28px;
+    position: relative;
+    padding-right: 92px;
+    flex-shrink: 0;
+}
+.rc-history__label {
+    font-size: 11px;
+    color: var(--text-gray, #949b9f);
+    opacity: 0.8;
+}
+.rc-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    background: rgba(0, 134, 203, 0.1);
+    border: 1px solid rgba(0, 134, 203, 0.25);
+    border-radius: 12px;
+    padding: 2px 6px 2px 8px;
+    font-size: 11px;
+    color: var(--primary-text, #c2c2c2);
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+}
+.rc-pill:hover {
+    background: rgba(0, 134, 203, 0.18);
+    border-color: var(--primary-color, #0086cb);
+}
+.rc-pill__text {
+    cursor: pointer;
+}
+.rc-pill__x {
+    background: none;
+    border: none;
+    color: var(--text-gray, #949b9f);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 2px;
+    border-radius: 50%;
+}
+.rc-pill__x:hover {
+    color: var(--error, #de3d3d);
+}
+/* Verdict-colored pills */
+.rc-pill--geo-split {
+    background: rgba(125, 206, 112, 0.12);
+    border-color: rgba(125, 206, 112, 0.4);
+}
+.rc-pill--tunnel {
+    background: rgba(0, 134, 203, 0.12);
+    border-color: rgba(0, 134, 203, 0.4);
+}
+.rc-pill--mixed {
+    background: rgba(255, 167, 38, 0.12);
+    border-color: rgba(255, 167, 38, 0.4);
+}
+.rc-pill--default {
+    background: rgba(148, 155, 159, 0.1);
+    border-color: rgba(148, 155, 159, 0.3);
+}
+
+/* ── Check All button (pinned top-right of history row) ───────────── */
+.rc-check-all-btn {
+    position: absolute;
+    top: 0;
+    right: 0;
+    font-size: 11px;
+    margin-left: 0;
+}
+
+/* ── Progress bar ─────────────────────────────────────────────────── */
+.rc-progress {
+    min-height: 24px;
+    padding: 6px 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 4px;
+    background: var(--card-background, #1c2433);
+}
+.rc-progress:empty {
+    min-height: 0;
+    padding: 0;
+    background: transparent;
+}
+.rc-progress__bar {
+    flex: 1;
+    height: 4px;
+    background: var(--stroke, #4d545f);
+    border-radius: 2px;
+    overflow: hidden;
+}
+.rc-progress__fill {
+    display: block;
+    height: 100%;
+    background: var(--primary-color, #0086cb);
+    border-radius: 2px;
+    transition: width .3s ease;
+}
+.rc-progress__stop {
+    order: -1;
+    flex-shrink: 0;
+}
+.rc-progress__text {
+    font-size: 13px;
+    color: var(--text-gray, #949b9f);
+    white-space: nowrap;
+}
+
+/* ── Results container ────────────────────────────────────────────── */
+.rc-results {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* ── Loading spinner ──────────────────────────────────────────────── */
+.rc-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+
+/* ── Single result card ───────────────────────────────────────────── */
+.rc-result {
+    position: relative;
+    border: 1px solid var(--stroke, #4d545f);
+    border-radius: 8px;
+    padding: 12px;
+    background: var(--card-background, #1c2433);
+    min-width: 0;
+}
+.rc-result--geosplit {
+    border-color: var(--indicator-online, #7dce70);
+    border-left: 3px solid var(--indicator-online, #7dce70);
+}
+.rc-result--mixed {
+    border-color: #ffa726;
+    border-left: 3px solid #ffa726;
+}
+.rc-result--default {
+    border-color: var(--primary-color, #0086cb);
+    border-left: 3px solid var(--primary-color, #0086cb);
+}
+.rc-result--tunnel {
+    border-color: var(--primary-color, #0086cb);
+    border-left: 3px solid var(--primary-color, #0086cb);
+}
+.rc-result--error {
+    border-color: var(--error, #de3d3d);
+    border-left: 3px solid var(--error, #de3d3d);
+}
+/* Legend label on top border */
+.rc-result__legend {
+    position: absolute;
+    top: -9px;
+    left: 12px;
+    padding: 0 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--primary-text, #c2c2c2);
+    background: var(--card-background, #1c2433);
+    line-height: 1;
+}
+
+/* ── Result diagram area ──────────────────────────────────────────── */
+.rc-result__diagram {
+    margin-bottom: 8px;
+    overflow: hidden;
+}
+
+/* ── Result summary line ──────────────────────────────────────────── */
+.rc-result__summary {
+    font-size: 14px;
+    font-family: 'Roboto Mono', monospace;
+    color: var(--primary-text, #c2c2c2);
+    padding: 4px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ── Collapsible technical details ────────────────────────────────── */
+.rc-result__details {
+    margin-top: 8px;
+}
+.rc-result__details-header {
+    font-size: 12px;
+    color: var(--text-gray, #949b9f);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 4px;
+}
+/* Summary line is clickable when details exist */
+.rc-result__summary--clickable {
+    cursor: pointer;
+    user-select: none;
+    border-radius: 3px;
+    padding: 2px 6px;
+    margin: 0 -6px;
+    transition: background .15s;
+}
+.rc-result__summary--clickable:hover {
+    background: rgba(0, 134, 203, 0.08);
+}
+.rc-result__summary--open {
+    background: rgba(0, 134, 203, 0.05);
+}
+.rc-details-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-top: 6px;
+}
+.rc-details-table th {
+    text-align: left;
+    color: var(--primary-color, #0086cb);
+    font-weight: 500;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--stroke, #4d545f);
+}
+.rc-details-table td {
+    padding: 3px 8px;
+    color: var(--primary-text, #c2c2c2);
+}
+.rc-details-table td:first-child {
+    color: var(--text-gray, #949b9f);
+    white-space: nowrap;
+    width: 100px;
+}
+
+/* ── Batch results table ──────────────────────────────────────────── */
+.rc-batch-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    table-layout: fixed;
+}
+.rc-batch-table > thead th {
+    text-align: left;
+    font-weight: 500;
+    color: var(--text-gray, #949b9f);
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--stroke, #4d545f);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.rc-batch-table > thead th:first-child,
+.rc-batch-table > thead th:last-child {
+    width: 28px;
+}
+.rc-batch-table > tbody > tr > td {
+    padding: 5px 6px;
+    color: var(--primary-text, #c2c2c2);
+    border-bottom: 1px solid rgba(77, 84, 95, 0.3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.rc-batch-row {
+    cursor: pointer;
+    transition: background .1s;
+    user-select: none;
+}
+.rc-batch-row:hover {
+    background: rgba(0, 134, 203, 0.08);
+}
+.rc-batch-row--geosplit td:first-child {
+    color: var(--indicator-online, #7dce70);
+}
+.rc-batch-row--default td:first-child {
+    color: var(--primary-color, #0086cb);
+}
+.rc-batch-row--tunnel td:first-child {
+    color: var(--primary-color, #0086cb);
+}
+.rc-batch-row--error td:first-child {
+    color: var(--error, #de3d3d);
+}
+.rc-batch-icon {
+    width: 20px;
+    text-align: center;
+}
+.rc-batch-expand {
+    background: none;
+    border: none;
+    color: var(--text-gray, #949b9f);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 2px 4px;
+}
+.rc-batch-expand:hover {
+    color: var(--primary-text, #c2c2c2);
+}
+.rc-batch-detail-row td {
+    padding: 0;
+}
+.rc-batch-detail-content {
+    padding: 8px 12px;
+    margin: 4px 0;
+}
+
+/* ── Result section (batch mode headers) ──────────────────────────── */
+.rc-result-section {
+    margin-top: 8px;
+}
+.rc-result-section__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    margin-bottom: 4px;
+}
+.rc-result-section__domain {
+    font-weight: 500;
+    font-size: 13px;
+    color: var(--primary-text, #c2c2c2);
+}
+
+/* ── Utility ──────────────────────────────────────────────────────── */
+.rc-hidden {
+    display: none !important;
+}
+
+/* ── Per-route verdict badges (inside details table) ──────────────── */
+.rc-verdict-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 500;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+.rc-verdict-badge--geo-split {
+    background: rgba(125, 206, 112, 0.15);
+    color: var(--indicator-online, #7dce70);
+}
+.rc-verdict-badge--tunnel {
+    background: rgba(0, 134, 203, 0.1);
+    color: var(--primary-color, #0086cb);
+}
+.rc-verdict-badge--default {
+    background: rgba(148, 155, 159, 0.12);
+    color: var(--text-gray, #949b9f);
+}
+.rc-verdict-badge--mixed {
+    background: rgba(255, 167, 38, 0.12);
+    color: #ffa726;
+}
+
+/* ── Batch table: mixed row ───────────────────────────────────────── */
+.rc-batch-row--mixed .rc-batch-icon { color: #ffa726; }
+
+/* ── Responsive for RC modal ──────────────────────────────────────── */
+@media (max-width: 600px) {
+    .rc-modal { max-width: 100%; width: 95vw; min-width: 0; max-height: 95vh; }
+    .rc-input-row { flex-wrap: wrap; }
+    .rc-input { width: 100%; }
+    .rc-iface-wrap { min-width: 0; width: 100%; }
+    .rc-history { padding-right: 80px; }
+    .rc-result__summary { font-size: 13px; }
+    .rc-batch-table { font-size: 13px; }
+    .rc-details-table { font-size: 13px; }
+}

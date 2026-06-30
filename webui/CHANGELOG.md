@@ -5,6 +5,57 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.27.1] — 2026-06-30
+
+### Fixed
+- **Route check: client selection works** — API passes `--from <MAC>` to route-check.sh
+  (MAC→fwmark resolved inside script). Non-VPN clients no longer show tunnel verdict.
+- **Route diagram: source label** — shows client name (from backend `from_name` field)
+  instead of always "Home network". Shows "Router" when `from=local`.
+- **Long client names** — truncated to 18 chars with ellipsis in SVG diagram
+
+### Changed
+- **api-router.lua**: removed `resolve_mac_to_mark()` — fwmark resolution moved to
+  route-check.sh for CLI/API consistency
+- **Default verdict icon**: `→` → `⇒` (U+21D2, double arrow — visually heavier)
+
+## [0.27.0] — 2026-06-30
+
+### Added
+- **Route diagram: Server node** — destination server rack icon + domain/IP label at right end of topology
+- **Route diagram: DNS bypass arc** — when query is IP, green rectangular arc bypasses DNS node (DNS stays dimmed with gray path through it)
+- **Colored history pills** — verdict-based pill colors (green=geo-split, blue=tunnel, orange=mixed); localStorage migrated to `[{d, v}]` format with backward-compat
+- **Verdict in card legend** — `github.com ⊙ tunnel` shown in card border label (icon + text)
+
+### Changed
+- **Route diagram: tunnel path blue** — dedicated `route-path--tunnel` CSS class (animated blue, matches shield icon)
+- **Summary line: pipeline format** — `2 IPs → geo subnet (table 1001) → Beeline 4G` with `→` arrows, `geo`/`system` prefix, no domain duplication
+- **Summary line: unified verdict icons** — `⇄` geo-split, `⊙` tunnel, `⚠` mixed, `→` default (batch table + legend)
+- **Summary line: text-overflow ellipsis** — truncated with "..." instead of horizontal scrollbar
+- **Batch table: "Interface" → "Via"** column header rename
+- **Input row: flex proportions** — input `flex:2`, interface dropdown `flex:3` (responsive, no fixed min-width)
+- **Batch table: table-layout fixed** — column widths stable, `nowrap` + `text-overflow: ellipsis` on cells
+- **Diagram: .rc-result__diagram overflow hidden** — SVG stays within card bounds
+- **Node label spacing** — unified gap between icons and labels across all diagram nodes
+
+### Removed
+- SVG verdict badge inside diagram (redundant with legend)
+- Verdict icon prefix from summary (moved to legend)
+- Domain duplication in summary (shown in legend + server node)
+- DNS time from summary
+
+## [0.26.0] — 2026-06-29
+
+### Added
+- **Route Check** diagnostic modal with SVG network topology diagram
+- **DNS Check** diagnostic modal with horizontal flow diagram
+- CDN mixed verdict: orange badge, all paths highlighted, per-IP routes table
+- All DNS IPs shown on diagram (up to 3 + "+N more")
+- **Batch mode**: Check All history items with sequential requests
+- Client/interface selector with VPN policy detection (MAC → fwmark)
+- Rate-limited diagnostic API endpoints in `api-router.lua`
+- History pills with delete, localStorage persistence
+
 ## [0.25.5] — 2026-06-17
 
 ### Fixed

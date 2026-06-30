@@ -21,6 +21,7 @@ local IFACE_TTL = 60      -- interfaces list — changes rarely (VPN toggle)
 -- POST actions (start/stop/config) invalidate cache instantly regardless of TTL.
 local ENDPOINT_TTLS = {
     ["/api/geo-split/status"]        = 10,  -- detect_dns_port inside = 2×dig
+    ["/api/geo-split/wan-paths"]     = 60,  -- ip rule/route scanning (stable between VPN changes)
     ["/api/smartdns/status"]          = 15,  -- collect_dns_tests_json = N×dig +time=3
     ["/api/smartdns-redirect/status"] = 5,   -- iptables -C (fast)
     ["/api/webui/status"]             = 5,   -- netstat + pidof (fast)
@@ -92,8 +93,8 @@ local function cached_run(key, cmd)
     local output, _, _ = run_cmd(cmd)
     output = output:gsub("%s+$", "")
 
-    -- Validate JSON and cache with per-endpoint TTL
-    if output:sub(1, 1) == "{" then
+    -- Validate JSON (object or array) and cache with per-endpoint TTL
+    if output:sub(1, 1) == "{" or output:sub(1, 1) == "[" then
         local ttl = ENDPOINT_TTLS[key] or CACHE_TTL
         cache:set(key, output, ttl)
         cache:set(key .. "::stale", output, STALE_TTL)
@@ -323,6 +324,136 @@ local function system_interfaces()
     end
 
     return '{"ok":true,"interfaces":[' .. table.concat(items, ",") .. ']}'
+end
+
+--- List registered clients with their routing policy (fwmark → VPN dev).
+-- Joins data from: ndmc hotspot (name/mac/ip), iptables mangle (mac→mark),
+-- ip rule (mark→table), ip route (table→dev).
+-- @return string — JSON {ok, clients: [{name, mac, ip?, mark?, dev?}]}
+local function system_clients()
+    local labels = get_iface_labels()
+
+    -- 1) MAC → fwmark mapping AND MAC → policy type from iptables mangle HOTSPOT chain
+    --    VPN policy: "-j MARK --set-xmark 0xffff..." (VPN fwmark)
+    --    Default policy: "CONNNDMMARK --set-xmark" (NDM connection priority)
+    --    Segment default (conform): only "-j RETURN" (no MARK, no CONNNDMMARK)
+    local chain_out, _, _ = run_cmd(
+        "iptables -t mangle -S _NDM_HOTSPOT_PREROUTING_MANGL 2>/dev/null")
+    local mac_to_mark = {}
+    local mac_has_connndm = {}
+    local mac_has_return = {}
+    for line in chain_out:gmatch("[^\n]+") do
+        -- VPN mark: "-j MARK --set-xmark 0xffff..."
+        local mac_vpn, mark = line:match("%-%-mac%-source%s+(%S+).-%s+%-j%s+MARK%s+%-%-set%-xmark%s+(0xffff%x+)")
+        if mac_vpn and mark then
+            mac_to_mark[mac_vpn:upper()] = mark
+        else
+            -- NDM connection mark: "CONNNDMMARK --set-xmark"
+            local mac_ndm = line:match("%-%-mac%-source%s+(%S+).-%s+CONNNDMMARK")
+            if mac_ndm then
+                mac_has_connndm[mac_ndm:upper()] = true
+            else
+                -- Plain RETURN (registered, no special marks)
+                local mac_ret = line:match("%-%-mac%-source%s+(%S+).-%s+%-j%s+RETURN")
+                if mac_ret then
+                    mac_has_return[mac_ret:upper()] = true
+                end
+            end
+        end
+    end
+
+    -- 2) fwmark → table mapping from ip rule
+    local rule_out, _, _ = run_cmd("ip rule show 2>/dev/null | grep fwmark")
+    local mark_to_table = {}
+    for line in rule_out:gmatch("[^\n]+") do
+        local mark, tbl = line:match("fwmark%s+(0x%x+)%s+lookup%s+(%d+)")
+        if mark and tbl then
+            mark_to_table[mark] = tbl
+        end
+    end
+
+    -- 3) table → dev mapping from default routes
+    local route_out, _, _ = run_cmd("ip route show table all 2>/dev/null | grep '^default'")
+    local table_to_dev = {}
+    for line in route_out:gmatch("[^\n]+") do
+        local dev, tbl = line:match("dev%s+(%S+)%s+table%s+(%d+)")
+        if dev and tbl and not table_to_dev[tbl] then
+            table_to_dev[tbl] = dev
+        end
+    end
+
+    -- 4) Parse ndmc hotspot for client list (name, mac, ip)
+    local ndm_out, _, _ = run_cmd('ndmc -c "show ip hotspot" 2>/dev/null')
+    local clients = {}
+    local cur = {}
+
+    local function flush_client()
+        if not cur.mac then return end
+        local mac_upper = cur.mac:upper()
+        local mark = mac_to_mark[mac_upper]
+        local tbl = mark and mark_to_table[mark]
+        local dev = tbl and table_to_dev[tbl]
+        local name = cur.name and cur.name ~= "" and cur.name or cur.hostname or mac_upper
+        local entry = '{"name":' .. '"' .. json_escape(name) .. '"'
+            .. ',"mac":"' .. json_escape(mac_upper) .. '"'
+        if cur.ip and cur.ip ~= "" then
+            entry = entry .. ',"ip":"' .. json_escape(cur.ip) .. '"'
+        end
+        if mark then
+            entry = entry .. ',"mark":"' .. json_escape(mark) .. '"'
+        end
+        if dev then
+            entry = entry .. ',"dev":"' .. json_escape(dev) .. '"'
+            if labels[dev] then
+                entry = entry .. ',"dev_label":"' .. json_escape(labels[dev]) .. '"'
+            end
+        end
+        -- Segment: NDM Bridge ID → linux bridge (Bridge0→br0, Bridge1→br1)
+        if cur.bridge_id then
+            local seg_idx = cur.bridge_id:match("^Bridge(%d+)$")
+            if seg_idx then
+                local seg_dev = "br" .. seg_idx
+                entry = entry .. ',"segment":"' .. seg_dev .. '"'
+                -- Use description from interface sub-block, fallback to iface labels
+                local seg_lbl = cur.seg_desc or labels[seg_dev]
+                if seg_lbl and seg_lbl ~= "" then
+                    entry = entry .. ',"segment_label":"' .. json_escape(seg_lbl) .. '"'
+                end
+            end
+        end
+        -- active: true if ndmc reports "active: yes"
+        if cur.active == "yes" then
+            entry = entry .. ',"active":true'
+        else
+            entry = entry .. ',"active":false'
+        end
+        entry = entry .. '}'
+        clients[#clients + 1] = entry
+        cur = {}
+    end
+
+    for line in ndm_out:gmatch("[^\n]+") do
+        if line:match("^%s+host:%s*$") or line:match("^%s*$") then
+            flush_client()
+        else
+            local key, val = line:match("^%s+(%S+):%s+(.+)$")
+            if key == "mac" then cur.mac = val
+            elseif key == "name" and not cur.name then cur.name = val
+            elseif key == "hostname" and not cur.hostname then cur.hostname = val
+            elseif key == "ip" and not cur.ip then cur.ip = val
+            elseif key == "active" then cur.active = val
+            elseif key == "id" and not cur.bridge_id then
+                -- Capture Bridge ID from interface sub-block (e.g. "Bridge0")
+                if val:match("^Bridge%d+$") then cur.bridge_id = val end
+            elseif key == "description" and not cur.seg_desc then
+                -- Capture segment description from interface sub-block
+                cur.seg_desc = val
+            end
+        end
+    end
+    flush_client()
+
+    return '{"ok":true,"clients":[' .. table.concat(clients, ",") .. ']}'
 end
 
 --- Config file registry: service → {defaults, config, restart_cmd, keys}.
@@ -650,6 +781,7 @@ end
 -- JSON routes call status.sh --json → output is already valid JSON
 local json_routes = {
     ["/api/geo-split/status"]        = base .. "/geo-split/scripts/status.sh --json 2>&1",
+    ["/api/geo-split/wan-paths"]     = base .. "/geo-split/scripts/wan-paths.sh 2>&1",
     ["/api/smartdns/status"]          = base .. "/smartdns-geo-conf/scripts/status.sh --json 2>&1",
     ["/api/smartdns-redirect/status"] = base .. "/smartdns-redirect/scripts/status.sh --json 2>&1",
     ["/api/webui/status"]             = base .. "/webui/scripts/status.sh --json 2>&1",
@@ -680,6 +812,7 @@ local action_routes = {
 local lua_routes = {
     ["/api/system/info"]          = { fn = system_info,          ttl = CACHE_TTL },
     ["/api/system/interfaces"]    = { fn = system_interfaces,    ttl = IFACE_TTL },
+    ["/api/system/clients"]       = { fn = system_clients,       ttl = IFACE_TTL },
     ["/api/system/zones"]         = { fn = system_zones,         ttl = STATIC_TTL },
     ["/api/system/dns-providers"] = { fn = system_dns_providers, ttl = STATIC_TTL },
 }
@@ -753,7 +886,7 @@ end
 local json_cmd = json_routes[uri]
 if json_cmd then
     local output = cached_run(uri, json_cmd)
-    if output:sub(1, 1) == "{" then
+    if output:sub(1, 1) == "{" or output:sub(1, 1) == "[" then
         ngx.say(output)
     else
         -- Fallback: script failed before JSON output
@@ -768,6 +901,99 @@ if text_cmd then
     local output, _, exit_code = run_cmd(text_cmd)
     output = json_escape(output)
     ngx.say('{"ok":' .. tostring(exit_code == 0) .. ',"output":"' .. output .. '"}')
+    return
+end
+
+-- ── Diagnostic routes (GET, rate-limited at nginx level) ─────────────────────
+-- Real-time diagnostic tools: call external scripts with sanitized query params.
+-- Rate limiting is handled by nginx limit_req zone=api_diag (1r/s per IP).
+
+--- Validate host parameter: only [a-zA-Z0-9._-] allowed, max 253 chars.
+-- @param s string|nil
+-- @return string|nil — sanitized host or nil if invalid
+local function validate_host(s)
+    if not s or s == "" then return nil end
+    if #s <= 253 and s:match("^[a-zA-Z0-9._%-]+$") then
+        return s
+    end
+    return nil
+end
+
+--- Validate interface parameter: only [a-z0-9_] allowed, max 15 chars.
+-- @param s string|nil
+-- @return string|nil — sanitized iif or nil if invalid
+local function validate_iif(s)
+    if not s or s == "" then return nil end
+    if #s <= 15 and s:match("^[a-z0-9_]+$") then
+        return s
+    end
+    return nil
+end
+
+--- Validate MAC address: XX:XX:XX:XX:XX:XX format (hex + colons).
+-- @param s string|nil
+-- @return string|nil — uppercased MAC or nil if invalid
+local function validate_mac(s)
+    if not s or s == "" then return nil end
+    if s:match("^%x%x:%x%x:%x%x:%x%x:%x%x:%x%x$") then
+        return s:upper()
+    end
+    return nil
+end
+
+-- Diagnostic: /api/geo-split/route-check?host=...&from=...
+-- "from" can be an interface name (br0, local) or a client MAC (XX:XX:XX:XX:XX:XX).
+-- MAC resolution to fwmark is done inside route-check.sh via --from flag.
+if uri == "/api/geo-split/route-check" then
+    local args = ngx.req.get_uri_args()
+    local host = validate_host(args.host)
+    if not host then
+        ngx.say('{"ok":false,"error":"invalid_input","message":"host parameter required: only [a-zA-Z0-9._-] allowed"}')
+        return
+    end
+    local from_arg = ""
+    local from = args.from or args.iif  -- backward compat: accept both "from" and "iif"
+    if from then
+        local mac = validate_mac(from)
+        if mac then
+            -- Client MAC → pass to script's --from flag (resolves fwmark internally)
+            from_arg = ' --from "' .. mac .. '"'
+        else
+            local iif = validate_iif(from)
+            if not iif then
+                ngx.say('{"ok":false,"error":"invalid_input","message":"from parameter invalid: interface [a-z0-9_] or MAC XX:XX:XX:XX:XX:XX"}')
+                return
+            end
+            from_arg = ' "' .. iif .. '"'
+        end
+    end
+    local cmd = base .. '/geo-split/scripts/route-check.sh --json "' .. host .. '"' .. from_arg .. " 2>&1"
+    local output, _, _ = run_cmd(cmd)
+    output = output:gsub("%s+$", "")
+    if output == "" or output:sub(1, 1) ~= "{" then
+        ngx.say('{"ok":false,"error":"script_error","message":"' .. json_escape(output ~= "" and output or "empty output") .. '"}')
+        return
+    end
+    ngx.say(output)
+    return
+end
+
+-- Diagnostic: /api/smartdns/dns-check?host=...
+if uri == "/api/smartdns/dns-check" then
+    local args = ngx.req.get_uri_args()
+    local host = validate_host(args.host)
+    if not host then
+        ngx.say('{"ok":false,"error":"invalid_input","message":"host parameter required: only [a-zA-Z0-9._-] allowed"}')
+        return
+    end
+    local cmd = base .. '/smartdns-geo-conf/scripts/dns-check.sh --json "' .. host .. '" 2>&1'
+    local output, _, _ = run_cmd(cmd)
+    output = output:gsub("%s+$", "")
+    if output == "" or output:sub(1, 1) ~= "{" then
+        ngx.say('{"ok":false,"error":"script_error","message":"' .. json_escape(output ~= "" and output or "empty output") .. '"}')
+        return
+    end
+    ngx.say(output)
     return
 end
 

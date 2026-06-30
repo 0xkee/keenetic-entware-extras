@@ -5,6 +5,12 @@ All notable changes to `keenetic-entware-extras` (base package) are documented h
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.16.5] - 2026-06-29
+
+### Added
+- `lib/common.sh`: `get_ms()` millisecond timer, `json_kv`/`json_kv_bool` helpers
+- `lib/ip.sh`: `is_tunnel_iface()` VPN/tunnel interface detection
+
 ## [0.16.4] - 2026-06-18
 
 ### Changed

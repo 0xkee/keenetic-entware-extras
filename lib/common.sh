@@ -175,3 +175,14 @@ json_kv_bool() {
 json_check() {
   printf '"%s":"%s"' "$1" "$2"
 }
+
+# Get monotonic milliseconds (BusyBox date has no %N).
+# Uses /proc/uptime centiseconds if available, else seconds*1000.
+# stdout: integer milliseconds
+get_ms() {
+  if [ -f /proc/uptime ]; then
+    awk '{printf "%d", $1 * 1000}' /proc/uptime
+  else
+    printf '%d000' "$(date +%s)"
+  fi
+}

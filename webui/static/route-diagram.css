@@ -35,12 +35,14 @@
 }
 
 /* ── Active path — animated marching ants ─────────────────────────── */
+/* steps(20) instead of linear — halves repaint count (~20fps vs ~60fps)
+   while keeping visually smooth marching-ants effect on dashed paths */
 .route-path--active {
     stroke: var(--indicator-online, #7dce70);
     stroke-width: 3;
     stroke-dasharray: 8 4;
     stroke-linecap: round;
-    animation: route-flow 1s linear infinite;
+    animation: route-flow 1s steps(20) infinite;
 }
 @keyframes route-flow {
     to { stroke-dashoffset: -12; }
@@ -61,7 +63,7 @@
     stroke-width: 2.5;
     stroke-dasharray: 6 4;
     stroke-linecap: round;
-    animation: route-flow 0.8s linear infinite;
+    animation: route-flow 0.8s steps(20) infinite;
 }
 
 /* ── Tunnel path — blue animated (VPN routing) ────────────────────── */
@@ -70,16 +72,7 @@
     stroke-width: 2.5;
     stroke-dasharray: 6 4;
     stroke-linecap: round;
-    animation: route-flow 0.8s linear infinite;
-}
-
-/* ── DNS flow path (blue) ─────────────────────────────────────────── */
-.route-path--dns {
-    stroke: var(--primary-color, #0086cb);
-    stroke-width: 2.5;
-    stroke-dasharray: 6 3;
-    stroke-linecap: round;
-    animation: route-flow 1.2s linear infinite;
+    animation: route-flow 0.8s steps(20) infinite;
 }
 
 /* ── Node labels ──────────────────────────────────────────────────── */
@@ -305,8 +298,8 @@
     border-color: rgba(255, 167, 38, 0.4);
 }
 .rc-pill--default {
-    background: rgba(148, 155, 159, 0.1);
-    border-color: rgba(148, 155, 159, 0.3);
+    background: rgba(0, 134, 203, 0.1);
+    border-color: rgba(0, 134, 203, 0.25);
 }
 
 /* ── Check All button (pinned top-right of history row) ───────────── */
@@ -478,6 +471,19 @@
     color: var(--text-gray, #949b9f);
     white-space: nowrap;
     width: 100px;
+    vertical-align: top;
+}
+/* Multi-line value items (Servers, IPs, Providers with 2+ entries) */
+.rc-mline {
+    padding: 1px 0;
+}
+/* Rows containing multi-line values get visible top/bottom borders
+   to visually bracket them from neighboring single-value rows */
+.rc-details-table tr:has(.rc-mline) > td {
+    border-top: 1px solid rgba(77, 84, 95, 0.5);
+    border-bottom: 1px solid rgba(77, 84, 95, 0.5);
+    padding-top: 5px;
+    padding-bottom: 5px;
 }
 
 /* ── Batch results table ──────────────────────────────────────────── */

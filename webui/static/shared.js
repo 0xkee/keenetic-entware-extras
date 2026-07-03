@@ -15,10 +15,13 @@ window.EW = (function() {
     /** Detail keys whose numeric values are seconds — formatted and live-ticked. */
     var TIMER_KEYS = { subnet_freshness: 1, domain_freshness: 1 };
 
-    /** Updatable detail keys → POST action URL (geo-split only). */
-    var GEO_UPDATE_ACTIONS = {
+    /** Updatable detail keys → POST action config.
+     *  String values are shorthand for { url: ... , tooltip: 'Force Reload' }.
+     *  Object values may override tooltip text. */
+    var UPDATE_ACTIONS = {
         'geo_zone':       '/api/geo-split/update-subnets',
-        'domain_sources': '/api/geo-split/update-domains'
+        'domain_sources': '/api/geo-split/update-domains',
+        'webui:cache':    { url: '/api/webui/flush-cache', tooltip: 'Flush UI Cache' }
     };
 
     /**
@@ -208,6 +211,19 @@ window.EW = (function() {
                 });
             }
 
+            var actionCfg = (opts.serviceId ? UPDATE_ACTIONS[opts.serviceId + ':' + key] : null) || UPDATE_ACTIONS[key] || null;
+            var updateUrl = null;
+            var updateTooltip = null;
+            if (actionCfg) {
+                if (typeof actionCfg === 'string') {
+                    updateUrl = actionCfg;
+                    updateTooltip = 'Force Reload';
+                } else {
+                    updateUrl = actionCfg.url;
+                    updateTooltip = actionCfg.tooltip || 'Force Reload';
+                }
+            }
+
             entries.push({
                 key: key,
                 label: formatKey(key),
@@ -217,7 +233,8 @@ window.EW = (function() {
                 isWarning: isWarning,
                 isTimer: isTimer,
                 freshnessKey: TIMER_KEYS[key] ? key : null,
-                updateAction: GEO_UPDATE_ACTIONS[key] || null
+                updateAction: updateUrl,
+                updateTooltip: updateTooltip
             });
         }
         return entries;
@@ -238,7 +255,7 @@ window.EW = (function() {
     return {
         SERVICE_APIS: SERVICE_APIS,
         TIMER_KEYS: TIMER_KEYS,
-        GEO_UPDATE_ACTIONS: GEO_UPDATE_ACTIONS,
+        UPDATE_ACTIONS: UPDATE_ACTIONS,
         formatUptimeStock: formatUptimeStock,
         formatKey: formatKey,
         formatBool: formatBool,

@@ -46,6 +46,7 @@
 - [ ] **Route check: IPs overflow в batch tech details** — в batch-режиме длинный список IPs вылезает за карточку. Нужен overflow containment на `.rc-result__details` (batch контекст) или `table-layout: fixed` с автоширой первой колонки. Может просто каждый ip с новой строки?
 - [x] добавить Upstream в status + webui (Ok когда доступен) ✅ — `check_upstream()` в status.sh: парсит listen.conf для IP, curl probe. JSON: `details.upstream` (addr) + `checks.upstream` ("ok"|"warn"). Карточка рендерит автоматически через `parseDetails`.
 - [x] **Модалы диагностики: увеличить размер** ✅ — max-height 95vh, шрифты 14px (batch table, summary) / 13px (details, examples, legend), Check All absolute-pinned top-right, flex-shrink:0 на history (fix наплывания при росте таблицы). Оба модала (Route Check + DNS Check) унифицированы.
+- [ ] **Version badge → GitHub releases ссылка** — сейчас ew-version-badge ведёт на forum.keenetic.ru. Когда появится GitHub репо, поменять URL в `app.js` (`setDetails()` isVersion block) на GitHub releases page.
 - [ ] **Service icons: SVG иконки в card headers + tabs** — визуальная дифференциация (route/globe для Geo-Split, DNS для SmartDNS, shield для DNS Redirect, monitor для WebUI). Inline SVG в `SERVICE_APIS`. (target-gui: #1, #3)
 - [ ] **System info: donut rings вместо thin bars** — SVG кольца 24×24 с заливкой по %, заменят текущие 48×4px полоски. Уникальная фича (stock dashboard не имеет system info). (target-gui: #2 Tech)
 - [ ] - таймер на лейбл , когда сервис stopped (disabled)?

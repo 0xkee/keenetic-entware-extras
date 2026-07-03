@@ -51,6 +51,34 @@ emit_error() {
   fi
 }
 
+# Build a JSON array string from a space-separated list.
+# Args: $1 - space-separated list
+# Echoes: '["a","b"]'
+json_arr_space() {
+  local list="$1" out="" item
+  for item in $list; do
+    out="${out:+${out},}\"$(json_escape_val "$item")\""
+  done
+  printf '[%s]' "$out"
+}
+
+# Build a JSON array string from a comma-separated list (e.g. UP_SERVERS).
+# Args: $1 - comma-separated list ("ip:port, ip:port")
+# Echoes: '["ip:port","ip:port"]'
+json_arr_csv() {
+  local list="$1" out="" old_ifs item
+  old_ifs="$IFS"
+  IFS=","
+  for item in $list; do
+    item=$(printf '%s' "$item" | sed 's/^ *//')
+    if [ -n "$item" ]; then
+      out="${out:+${out},}\"$(json_escape_val "$item")\""
+    fi
+  done
+  IFS="$old_ifs"
+  printf '[%s]' "$out"
+}
+
 # Match domain against zone-routing-rules.conf.
 # Sets: MATCH_CC, MATCH_RULE, MATCH_TYPE
 # Returns: 0 if matched, 1 if fallback to default
@@ -147,6 +175,7 @@ get_upstream_info() {
 
   UP_PROVIDERS=""
   UP_SERVERS=""
+  UP_HOSTNAMES=""
   UP_INTERFACE="direct"
 
   if [ "$group" = "zone" ]; then
@@ -191,6 +220,18 @@ get_upstream_info() {
     eval "ip1=\"\${${ip1_var}:-}\""
     eval "ip2=\"\${${ip2_var}:-}\""
     eval "proto=\"\${${proto_var}:-udp}\""
+
+    # Collect TLS hostname (for dot/doh providers)
+    local tls_host_var="${prefix}_TLS_HOST"
+    local doh_url_var="${prefix}_DOH_URL"
+    local tls_host="" doh_url="" hostname=""
+    eval "tls_host=\"\${${tls_host_var}:-}\""
+    eval "doh_url=\"\${${doh_url_var}:-}\""
+    case "$proto" in
+      dot) hostname="$tls_host" ;;
+      doh) hostname=$(printf '%s' "${doh_url:-$tls_host}" | sed 's|https\{0,1\}://\([^/]*\).*|\1|') ;;
+    esac
+    UP_HOSTNAMES="${UP_HOSTNAMES:+${UP_HOSTNAMES}, }${hostname}"
 
     UP_PROVIDERS="${UP_PROVIDERS:+${UP_PROVIDERS}, }${label}"
 
@@ -294,6 +335,22 @@ else
 fi
 
 # --- Upstream identification ---
+# Compute upstream info for BOTH groups ("zone" and "other") so the diagram
+# can always show all configured DNS paths, not just the one matched by
+# the current query (mirrors geo-split route-check's all_paths behavior).
+get_upstream_info "zone"
+ZG_PROVIDER_LIST="$ZONE_DNS_PROVIDER"
+ZG_SERVERS="$UP_SERVERS"
+ZG_HOSTNAMES="$UP_HOSTNAMES"
+ZG_INTERFACE="$UP_INTERFACE"
+
+get_upstream_info "other"
+OG_PROVIDER_LIST="$OTHER_DNS_PROVIDER"
+OG_SERVERS="$UP_SERVERS"
+OG_HOSTNAMES="$UP_HOSTNAMES"
+OG_INTERFACE="$UP_INTERFACE"
+
+# Restore matched group's info (used by legacy "upstream" field + text output)
 get_upstream_info "$ZONE_GROUP"
 
 # --- DNS resolution ---
@@ -330,59 +387,101 @@ if [ "$JSON_MODE" = "1" ]; then
     ips_json="${ips_json:+${ips_json},}\"$(json_escape_val "$ip")\""
   done
 
-  # Build upstream providers JSON array
-  providers_json=""
-  # Re-parse provider list for clean JSON
+  # Legacy "upstream" field — matched group's providers/servers (kept for
+  # backward compat with any consumer reading data.upstream directly).
   if [ "$ZONE_GROUP" = "zone" ]; then
     prov_list="$ZONE_DNS_PROVIDER"
   else
     prov_list="$OTHER_DNS_PROVIDER"
   fi
-  for prov in $prov_list; do
-    providers_json="${providers_json:+${providers_json},}\"$(json_escape_val "$prov")\""
-  done
+  providers_json=$(json_arr_space "$prov_list")
+  servers_json=$(json_arr_csv "$UP_SERVERS")
 
-  # Build servers JSON array
-  servers_json=""
-  # Split UP_SERVERS by ", " into individual items
-  old_ifs="$IFS"
-  IFS=","
-  for srv in $UP_SERVERS; do
-    srv=$(printf '%s' "$srv" | sed 's/^ *//')
-    if [ -n "$srv" ]; then
-      servers_json="${servers_json:+${servers_json},}\"$(json_escape_val "$srv")\""
-    fi
-  done
-  IFS="$old_ifs"
+  # "groups" array — BOTH DNS groups always present, regardless of which one
+  # matched the current query. Mirrors geo-split route-check's all_paths:
+  # the diagram always shows every configured path, highlighting the active one.
+  zg_providers_json=$(json_arr_space "$ZG_PROVIDER_LIST")
+  zg_servers_json=$(json_arr_csv "$ZG_SERVERS")
+  zg_hostnames_json=$(json_arr_csv "$ZG_HOSTNAMES")
+  og_providers_json=$(json_arr_space "$OG_PROVIDER_LIST")
+  og_servers_json=$(json_arr_csv "$OG_SERVERS")
+  og_hostnames_json=$(json_arr_csv "$OG_HOSTNAMES")
+  hostnames_json=$(json_arr_csv "$UP_HOSTNAMES")
+
+  # json_kv_bool convention: "0" => true, non-zero => false
+  zg_matched=1; og_matched=1
+  if [ "$ZONE_GROUP" = "zone" ]; then zg_matched=0; else og_matched=0; fi
+
+  groups_json=$(printf '{%s,%s,"providers":%s,"servers":%s,"hostnames":%s,%s,%s},{%s,%s,"providers":%s,"servers":%s,"hostnames":%s,%s,%s}' \
+    "$(json_kv "group" "zone")" \
+    "$(json_kv "label" "$DNS_ZONE")" \
+    "$zg_providers_json" "$zg_servers_json" "$zg_hostnames_json" \
+    "$(json_kv "interface" "$ZG_INTERFACE")" \
+    "$(json_kv_bool "matched" "$zg_matched")" \
+    "$(json_kv "group" "other")" \
+    "$(json_kv "label" "default")" \
+    "$og_providers_json" "$og_servers_json" "$og_hostnames_json" \
+    "$(json_kv "interface" "$OG_INTERFACE")" \
+    "$(json_kv_bool "matched" "$og_matched")")
 
   # Output JSON
-  printf '{%s,%s,"zone":{%s,%s,%s},"upstream":{%s,%s,%s},"result":{%s,%s,%s}}\n' \
+  printf '{%s,%s,"zone":{%s,%s,%s},"upstream":{%s,%s,"hostnames":%s,%s},"groups":[%s],"result":{%s,%s,%s}}\n' \
     "$(json_kv_bool "ok" 0)" \
     "$(json_kv "query" "$QUERY")" \
     "$(json_kv "group" "$GROUP_NAME")" \
     "$(json_kv "match_rule" "$MATCH_RULE")" \
     "$(json_kv "match_type" "$MATCH_TYPE")" \
-    "\"providers\":[$providers_json]" \
-    "\"servers\":[$servers_json]" \
+    "\"providers\":$providers_json" \
+    "\"servers\":$servers_json" \
+    "$hostnames_json" \
     "$(json_kv "interface" "$UP_INTERFACE")" \
+    "$groups_json" \
     "\"ips\":[$ips_json]" \
     "$(json_kv_num "ttl" "${dig_ttl:-0}")" \
     "$(json_kv_num "time_ms" "$dig_time_ms")"
 else
   # Human-readable text output
-  printf 'DNS Zone Check: %s\n' "$QUERY"
+  printf 'DNS Zone Check: %s\n\n' "$QUERY"
 
-  # Zone info
+  # Zone match info
   if [ -n "$MATCH_CC" ]; then
-    printf '  Zone:      %s (match: %s %s)\n' "$GROUP_NAME" "$MATCH_RULE" "$MATCH_TYPE"
+    printf '  Zone:       %s (match: %s, type: %s)\n' "$GROUP_NAME" "$MATCH_RULE" "$MATCH_TYPE"
   else
-    printf '  Zone:      default (no match)\n'
+    printf '  Zone:       default (no zone match)\n'
   fi
 
-  # Upstream
-  printf '  Upstream:  %s (%s)\n' "$UP_PROVIDERS" "$UP_INTERFACE"
-  printf '  Servers:   %s\n' "$UP_SERVERS"
+  # Show BOTH groups with active marker
+  printf '\n'
+  if [ "$ZONE_GROUP" = "zone" ]; then
+    printf '  \342\234\223 %s:  %s\n' "$DNS_ZONE" "$ZG_PROVIDER_LIST"
+    if [ -n "$ZG_HOSTNAMES" ]; then
+      printf '             %s\n' "$ZG_HOSTNAMES"
+    fi
+    printf '    %s:  %s\n' "default" "$OG_PROVIDER_LIST"
+  else
+    printf '    %s:  %s\n' "$DNS_ZONE" "$ZG_PROVIDER_LIST"
+    printf '  \342\234\223 %s:  %s\n' "default" "$OG_PROVIDER_LIST"
+    if [ -n "$OG_HOSTNAMES" ]; then
+      printf '             %s\n' "$OG_HOSTNAMES"
+    fi
+  fi
 
-  # Result
-  printf '  Result:    %s (TTL %s, %dms)\n' "$dig_ips" "${dig_ttl:-?}" "$dig_time_ms"
+  # Upstream detail (matched group)
+  printf '\n'
+  printf '  Upstream:   %s\n' "$UP_PROVIDERS"
+  if [ -n "$UP_HOSTNAMES" ]; then
+    printf '  Hostnames:  %s\n' "$UP_HOSTNAMES"
+  fi
+  printf '  Servers:    %s\n' "$UP_SERVERS"
+  printf '  Interface:  %s\n' "$UP_INTERFACE"
+
+  # Result with IP count
+  ip_count=0
+  for _ip in $dig_ips; do ip_count=$((ip_count + 1)); done
+  printf '\n'
+  if [ "$ip_count" -gt 1 ]; then
+    printf '  Result:     %s (%d IPs, TTL %s, %dms)\n' "$dig_ips" "$ip_count" "${dig_ttl:-?}" "$dig_time_ms"
+  else
+    printf '  Result:     %s (TTL %s, %dms)\n' "$dig_ips" "${dig_ttl:-?}" "$dig_time_ms"
+  fi
 fi

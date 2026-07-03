@@ -207,10 +207,19 @@ function _createDiagModal(title, buildBody) {
 /**
  * Determine verdict class for color-coded border.
  * @param {Object} data - API response
+ * @param {string} [type] - "route" (default) or "dns"
  * @returns {string} CSS modifier class
  */
-function _getVerdictClass(data) {
+function _getVerdictClass(data, type) {
     if (!data || data.ok === false) return 'rc-result--error';
+    if (type === 'dns') {
+        // DNS has no top-level verdict — color by matched zone group:
+        // a zone-specific override group is treated like a "matched rule"
+        // (green, same as route geo-split); plain "default" stays blue.
+        var zone = data.zone || {};
+        var groupLabel = zone.group || 'default';
+        return (groupLabel === 'default') ? 'rc-result--default' : 'rc-result--geosplit';
+    }
     if (data.verdict === 'mixed') return 'rc-result--mixed';
     if (data.verdict === 'geo-split') return 'rc-result--geosplit';
     if (data.verdict === 'tunnel') return 'rc-result--tunnel';
@@ -254,6 +263,8 @@ function _buildRouteSummary(data) {
 
 /**
  * Build one-line text summary for a DNS check result.
+ * Mirrors _buildRouteSummary style: arrow-joined stages instead of
+ * middot-separated key:value pairs.
  * @param {Object} data - API response from dns-check
  * @returns {string}
  */
@@ -262,20 +273,41 @@ function _buildDnsSummary(data) {
         return '\u2717 error \u00b7 ' + (data && data.error ? data.error : 'unknown');
     }
     var parts = [];
-    var zone = data.zone || {};
-    parts.push(zone.group ? 'zone: ' + zone.group : 'zone: default');
-    if (zone.match_rule) parts.push('rule: ' + zone.match_rule);
-
-    var upstream = data.upstream || {};
-    if (upstream.providers && upstream.providers.length) {
-        parts.push(upstream.providers.join(', '));
-    }
 
     var result = data.result || {};
-    if (result.ips && result.ips[0]) parts.push(result.ips[0]);
-    if (result.time_ms) parts.push(result.time_ms + 'ms');
+    var sIps = result.ips || [];
 
-    return parts.join(' \u00b7 ');
+    var zone = data.zone || {};
+    var groupLabel = zone.group || 'default';
+    // When nothing matched (match_type is "none"/empty), just show the plain
+    // group name ("default") instead of a noisy "none (default)" label.
+    var zoneInfo = (zone.match_type && zone.match_type !== 'none')
+        ? zone.match_type + ' (' + groupLabel + ')'
+        : groupLabel;
+    parts.push(zoneInfo);
+
+    var upstream = data.upstream || {};
+    var servers = upstream.servers || [];
+    var hostnames = upstream.hostnames || [];
+    if (upstream.providers && upstream.providers.length) {
+        var viaText = '';
+        if (hostnames[0]) {
+            // hostname (ip:port) format
+            viaText = hostnames[0] + (servers[0] ? ' (' + servers[0] + ')' : '');
+        } else if (servers[0]) {
+            viaText = servers[0];
+        }
+        parts.push(upstream.providers.join(', ') + (viaText ? ' via ' + viaText : ''));
+    }
+
+    // IP at the end; append count in parentheses when >1 address resolved
+    if (sIps.length > 1) {
+        parts.push(sIps[0] + ' (' + sIps.length + ' IPs)');
+    } else if (sIps.length === 1) {
+        parts.push(sIps[0]);
+    }
+
+    return parts.join(' \u2192 ');
 }
 
 /**
@@ -292,7 +324,7 @@ function _buildRouteDetails(data) {
         rows.push('<tr><th colspan="2">DNS</th></tr>');
         if (data.dns.resolver) rows.push('<tr><td>Resolver</td><td>' + _esc(data.dns.resolver) + '</td></tr>');
         if (data.dns.group) rows.push('<tr><td>Group</td><td>' + _esc(data.dns.group) + '</td></tr>');
-        if (data.dns.ips) rows.push('<tr><td>IPs</td><td>' + _esc(data.dns.ips.join(', ')) + '</td></tr>');
+        if (data.dns.ips) rows.push('<tr><td>IPs</td><td>' + _multiLine(data.dns.ips.map(_esc)) + '</td></tr>');
         if (data.dns.time_ms !== undefined) rows.push('<tr><td>Time</td><td>' + data.dns.time_ms + 'ms</td></tr>');
     }
 
@@ -338,14 +370,37 @@ function _buildDnsDetails(data) {
 
     if (data.upstream) {
         rows.push('<tr><th colspan="2">Upstream</th></tr>');
-        if (data.upstream.providers) rows.push('<tr><td>Providers</td><td>' + _esc(data.upstream.providers.join(', ')) + '</td></tr>');
-        if (data.upstream.servers) rows.push('<tr><td>Servers</td><td>' + _esc(data.upstream.servers.join(', ')) + '</td></tr>');
-        if (data.upstream.interface) rows.push('<tr><td>Interface</td><td>' + _esc(_ifaceLabel(data.upstream.interface)) + ' (' + _esc(data.upstream.interface) + ')</td></tr>');
+        if (data.upstream.providers) rows.push('<tr><td>Providers</td><td>' + _multiLine(data.upstream.providers.map(_esc)) + '</td></tr>');
+        if (data.upstream.servers) {
+            // Pair each server with its hostname (if available) on separate lines
+            var srvLines = [];
+            var hostnames = data.upstream.hostnames || [];
+            for (var si = 0; si < data.upstream.servers.length; si++) {
+                var srv = _esc(data.upstream.servers[si]);
+                var hn = hostnames[si] ? _esc(hostnames[si]) : '';
+                srvLines.push(hn ? hn + ' (' + srv + ')' : srv);
+            }
+            rows.push('<tr><td>Servers</td><td>' + _multiLine(srvLines) + '</td></tr>');
+        }
+        if (data.upstream.interface) {
+            // Interface may be space-separated list; split and label each
+            // Format: "Label (dev)" per interface, like Route Check details
+            var ifaces = data.upstream.interface.split(/\s+/).filter(function(s) { return s && s !== 'default'; });
+            if (ifaces.length) {
+                var ifParts = ifaces.map(function(iif) {
+                    var label = _ifaceLabel(iif);
+                    return (label !== iif) ? label + ' (' + iif + ')' : iif;
+                });
+                rows.push('<tr><td>Interface</td><td>' + _multiLine(ifParts.map(_esc)) + '</td></tr>');
+            } else if (data.upstream.interface.indexOf('direct') >= 0) {
+                rows.push('<tr><td>Interface</td><td>direct</td></tr>');
+            }
+        }
     }
 
     if (data.result) {
         rows.push('<tr><th colspan="2">Result</th></tr>');
-        if (data.result.ips) rows.push('<tr><td>IPs</td><td>' + _esc(data.result.ips.join(', ')) + '</td></tr>');
+        if (data.result.ips) rows.push('<tr><td>IPs</td><td>' + _multiLine(data.result.ips.map(_esc)) + '</td></tr>');
         if (data.result.ttl !== undefined) rows.push('<tr><td>TTL</td><td>' + data.result.ttl + '</td></tr>');
         if (data.result.time_ms !== undefined) rows.push('<tr><td>Time</td><td>' + data.result.time_ms + 'ms</td></tr>');
     }
@@ -360,6 +415,17 @@ function _esc(str) {
 }
 
 /**
+ * Wrap array of HTML strings into separator-lined divs.
+ * Single item → plain text (no wrapper). Multiple → div per item with thin borders.
+ * @param {Array<string>} items - pre-escaped HTML strings
+ * @returns {string} HTML
+ */
+function _multiLine(items) {
+    if (items.length <= 1) return items[0] || '';
+    return '<div class="rc-mline">' + items.join('</div><div class="rc-mline">') + '</div>';
+}
+
+/**
  * Render a single full result card (SVG + summary + details).
  * @param {HTMLElement} container - parent to append into
  * @param {Object} data - API response
@@ -367,21 +433,31 @@ function _esc(str) {
  */
 function _renderFullResult(container, data, type) {
     var wrapper = document.createElement('div');
-    wrapper.className = 'rc-result ' + _getVerdictClass(data);
+    wrapper.className = 'rc-result ' + _getVerdictClass(data, type);
 
-    // Legend label on border (query + icon + verdict)
+    // Legend label on border (query + icon + verdict/zone-group)
     var query = data && data.query;
     if (query) {
         var legend = document.createElement('span');
         legend.className = 'rc-result__legend';
-        var verdict = (data && data.verdict) ? data.verdict : '';
-        if (verdict) {
-            var isPolicy = verdict === 'default';
-            var displayVerdict = isPolicy ? 'policy' : verdict;
-            var lIcon = verdict === 'geo-split' ? '\u21c4' : (verdict === 'tunnel' ? '\u2299' : (verdict === 'mixed' ? '\u26a0' : (isPolicy ? '\u2299' : '\u21d2')));
-            legend.textContent = query + ' ' + lIcon + ' ' + displayVerdict;
+        if (type === 'dns') {
+            // DNS Check has no top-level verdict — use matched zone group instead,
+            // same visual pattern as Route Check's "query + icon + verdict".
+            var zone = data.zone || {};
+            var groupLabel = zone.group || 'default';
+            var isDefaultGroup = groupLabel === 'default';
+            var dIcon = isDefaultGroup ? '\u2192' : '\u21c4';
+            legend.textContent = query + ' ' + dIcon + ' ' + groupLabel;
         } else {
-            legend.textContent = query;
+            var verdict = (data && data.verdict) ? data.verdict : '';
+            if (verdict) {
+                var isPolicy = verdict === 'default';
+                var displayVerdict = isPolicy ? 'policy' : verdict;
+                var lIcon = verdict === 'geo-split' ? '\u21c4' : (verdict === 'tunnel' ? '\u2299' : (verdict === 'mixed' ? '\u26a0' : (isPolicy ? '\u2299' : '\u21d2')));
+                legend.textContent = query + ' ' + lIcon + ' ' + displayVerdict;
+            } else {
+                legend.textContent = query;
+            }
         }
         wrapper.appendChild(legend);
     }
@@ -440,14 +516,21 @@ function _renderFullResult(container, data, type) {
  * @param {string} type - "route" or "dns"
  */
 function _renderBatchTable(container, results, type) {
-    // Preserve expanded rows state before re-render
+    // Preserve expanded rows + tech details state before re-render
     var openDomains = {};
+    var openDetails = {};
     var prevRows = container.querySelectorAll('.rc-batch-row');
     for (var p = 0; p < prevRows.length; p++) {
         var nxt = prevRows[p].nextElementSibling;
         if (nxt && nxt.classList.contains('rc-batch-detail-row') && !nxt.classList.contains('rc-hidden')) {
             var domCell = prevRows[p].querySelector('.rc-batch-domain');
-            if (domCell) openDomains[domCell.textContent] = true;
+            if (domCell) {
+                openDomains[domCell.textContent] = true;
+                // Check if tech details inside were expanded
+                if (nxt.querySelector('.rc-result__summary--open')) {
+                    openDetails[domCell.textContent] = true;
+                }
+            }
         }
     }
 
@@ -527,7 +610,7 @@ function _renderBatchTable(container, results, type) {
                     '<td>' + _esc(verdictText) + '</td>' +
                     '<td><button class="rc-batch-expand" type="button">\u25b8</button></td>';
             } else {
-                var dIcon = '\u2713';
+                var dIcon = '\u21c4';
                 var dRowCls = 'rc-batch-row--geosplit';
                 var zoneText = '';
                 var upText = '';
@@ -542,10 +625,25 @@ function _renderBatchTable(container, results, type) {
                 } else {
                     var z = data.zone || {};
                     zoneText = z.group || 'default';
+                    // Icon + row color mirror the card border/legend: a
+                    // zone-specific override group is a "matched rule" (green,
+                    // \u21c4); the plain "default" group stays neutral blue (\u2192).
+                    if (zoneText === 'default') {
+                        dIcon = '\u2192';
+                        dRowCls = 'rc-batch-row--default';
+                    }
                     var u = data.upstream || {};
                     upText = (u.providers && u.providers.length) ? u.providers.join(', ') : '\u2014';
                     var res = data.result || {};
-                    ipText = (res.ips && res.ips[0]) ? res.ips[0] : '\u2014';
+                    var dIps = res.ips || [];
+                    if (dIps.length > 1) {
+                        // Show first IP + total count, e.g. "142.250.27.18 (3 IPs)"
+                        ipText = dIps[0] + ' (' + dIps.length + ' IPs)';
+                    } else if (dIps.length === 1) {
+                        ipText = dIps[0];
+                    } else {
+                        ipText = '\u2014';
+                    }
                 }
 
                 row.className += ' ' + dRowCls;
@@ -587,6 +685,13 @@ function _renderBatchTable(container, results, type) {
                 var restoreContent = detailRow.querySelector('.rc-batch-detail-content');
                 if (!restoreContent.hasChildNodes()) {
                     _renderFullResult(restoreContent, data, type);
+                }
+                // Restore tech details expansion
+                if (openDetails[item.domain]) {
+                    var techDetails = restoreContent.querySelector('.rc-result__details');
+                    var techSummary = restoreContent.querySelector('.rc-result__summary');
+                    if (techDetails) techDetails.classList.remove('rc-hidden');
+                    if (techSummary) techSummary.classList.add('rc-result__summary--open');
                 }
             }
 
@@ -696,24 +801,12 @@ function _loadInterfaces(wrapEl) {
         { value: 'br0', label: 'Home network (br0)' }
     ], 'br0');
 
-    var ifacesP = fetch('/api/system/interfaces').then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
+    var ifacesP = _ensureIfaceMap();
     var clientsP = fetch('/api/system/clients').then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
 
     Promise.all([ifacesP, clientsP]).then(function(results) {
         var ifData = results[0];
         var clData = results[1];
-
-        // Build global id→label map for diagram/details use
-        if (ifData && ifData.interfaces) {
-            var map = {};
-            for (var i = 0; i < ifData.interfaces.length; i++) {
-                var iface = ifData.interfaces[i];
-                var id = iface.id || iface.name || iface;
-                var label = iface.label || iface.description || id;
-                map[id] = label;
-            }
-            window._ewIfaceMap = map;
-        }
 
         // Build options: Nets (Router + LAN bridges), sorted alphabetically
         var netOptions = [{ value: 'local', label: 'Router' }];
@@ -1040,9 +1133,35 @@ function openRouteCheckModal() {
  * Open the DNS Check diagnostic modal.
  * Called from app.js button in smartdns card header.
  */
+/**
+ * Ensure the global interface label map is loaded (for _ifaceLabel in details).
+ * Idempotent — returns same promise if already in-flight or resolved.
+ * Used by both Route Check (_loadInterfaces) and DNS Check.
+ * @returns {Promise} - resolves with interface data or null
+ */
+var _ifaceMapPromise = null;
+function _ensureIfaceMap() {
+    if (_ifaceMapPromise) return _ifaceMapPromise;
+    _ifaceMapPromise = fetch('/api/system/interfaces')
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+            if (data && data.interfaces) {
+                var map = {};
+                for (var i = 0; i < data.interfaces.length; i++) {
+                    var ifc = data.interfaces[i];
+                    map[ifc.id || ifc.name || ifc] = ifc.label || ifc.description || ifc.id || ifc;
+                }
+                window._ewIfaceMap = map;
+            }
+            return data;
+        }).catch(function() { return null; });
+    return _ifaceMapPromise;
+}
+
 function openDnsCheckModal() {
     var batchHandle = null;
     var allResults = [];
+    _ensureIfaceMap();
 
     _createDiagModal('\ud83d\udd0d DNS Check', function(body) {
         // Input row
@@ -1121,6 +1240,10 @@ function openDnsCheckModal() {
                 })
                 .then(function(data) {
                     allResults.unshift({ domain: d, data: data });
+                    // Update history pill color: zone-specific → geo-split (green), default → default (gray)
+                    var dnsV = (data && data.zone && data.zone.group && data.zone.group !== 'default') ? 'geo-split' : 'default';
+                    saveToHistory(DNS_HISTORY_KEY, d, dnsV);
+                    refreshHistory();
                     _renderResults(resultsEl, allResults, 'dns');
                 })
                 .catch(function(err) {
@@ -1144,6 +1267,13 @@ function openDnsCheckModal() {
                 onDone: function(results) {
                     allResults = results;
                     batchHandle = null;
+                    // Update verdict colors in history pills from batch results
+                    for (var r = 0; r < results.length; r++) {
+                        var rd = results[r].data;
+                        var rv = (rd && rd.zone && rd.zone.group && rd.zone.group !== 'default') ? 'geo-split' : 'default';
+                        saveToHistory(DNS_HISTORY_KEY, results[r].domain, rv);
+                    }
+                    refreshHistory();
                 }
             });
         });

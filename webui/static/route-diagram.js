@@ -86,84 +86,52 @@ function _svgLine(x1, y1, x2, y2, cssClass) {
     });
 }
 
-// ── Icon renderers (simple geometric shapes) ─────────────────────────────────
+// ── Icon definitions (SVG <defs> + <use> for lightweight reuse) ───────────────
+// Icons are defined once at origin (0,0) in <defs>; _useIcon() places them
+// via <use> + translate(cx,cy).  This avoids recreating 3-8 SVG child nodes
+// per icon instance, cutting DOM node count by ~60% per diagram.
 
 /**
- * Client icon — monitor with stand.
- * @param {number} cx - center x
- * @param {number} cy - center y
- * @param {string} [extraClass] - additional CSS class
- * @returns {SVGGElement}
+ * Add reusable icon definitions to an SVG element.
+ * Each icon is drawn centered at (0,0); callers position via _useIcon().
+ * @param {SVGElement} svg - target SVG element
  */
-function _iconClient(cx, cy, extraClass) {
-    var g = _svgEl("g", { "class": "route-icon" + (extraClass ? " " + extraClass : "") });
-    // Monitor body
-    g.appendChild(_svgEl("rect", { x: cx - 12, y: cy - 10, width: 24, height: 16, rx: 2 }));
-    // Screen inner
-    g.appendChild(_svgEl("line", { x1: cx, y1: cy + 6, x2: cx, y2: cy + 10 }));
-    // Stand base
-    g.appendChild(_svgEl("line", { x1: cx - 6, y1: cy + 10, x2: cx + 6, y2: cy + 10 }));
-    return g;
-}
+function _addIconDefs(svg) {
+    var defs = _svgEl("defs", {});
+    var g, txt;
 
-/**
- * Router icon — box with antennas.
- * @param {number} cx - center x
- * @param {number} cy - center y
- * @param {string} [extraClass]
- * @returns {SVGGElement}
- */
-function _iconRouter(cx, cy, extraClass) {
-    var g = _svgEl("g", { "class": "route-icon" + (extraClass ? " " + extraClass : "") });
-    // Body
-    g.appendChild(_svgEl("rect", { x: cx - 14, y: cy - 4, width: 28, height: 14, rx: 3 }));
-    // Antennas
-    g.appendChild(_svgEl("line", { x1: cx - 7, y1: cy - 4, x2: cx - 9, y2: cy - 14 }));
-    g.appendChild(_svgEl("line", { x1: cx, y1: cy - 4, x2: cx, y2: cy - 16 }));
-    g.appendChild(_svgEl("line", { x1: cx + 7, y1: cy - 4, x2: cx + 9, y2: cy - 14 }));
-    // LED dots
-    g.appendChild(_svgEl("circle", { cx: cx - 5, cy: cy + 3, r: 1.5 }));
-    g.appendChild(_svgEl("circle", { cx: cx, cy: cy + 3, r: 1.5 }));
-    g.appendChild(_svgEl("circle", { cx: cx + 5, cy: cy + 3, r: 1.5 }));
-    return g;
-}
+    // Client — monitor with stand
+    g = _svgEl("g", { id: "ico-client" });
+    g.appendChild(_svgEl("rect", { x: -12, y: -10, width: 24, height: 16, rx: 2 }));
+    g.appendChild(_svgEl("line", { x1: 0, y1: 6, x2: 0, y2: 10 }));
+    g.appendChild(_svgEl("line", { x1: -6, y1: 10, x2: 6, y2: 10 }));
+    defs.appendChild(g);
 
-/**
- * Cloud icon (Internet).
- * @param {number} cx - center x
- * @param {number} cy - center y
- * @param {string} [extraClass]
- * @returns {SVGGElement}
- */
-function _iconCloud(cx, cy, extraClass) {
-    var g = _svgEl("g", { "class": "route-icon" + (extraClass ? " " + extraClass : "") });
-    // Classic cumulus cloud: 3 bumps on top, flat bottom, no rays
+    // Router — box with antennas + LED dots
+    g = _svgEl("g", { id: "ico-router" });
+    g.appendChild(_svgEl("rect", { x: -14, y: -4, width: 28, height: 14, rx: 3 }));
+    g.appendChild(_svgEl("line", { x1: -7, y1: -4, x2: -9, y2: -14 }));
+    g.appendChild(_svgEl("line", { x1: 0, y1: -4, x2: 0, y2: -16 }));
+    g.appendChild(_svgEl("line", { x1: 7, y1: -4, x2: 9, y2: -14 }));
+    g.appendChild(_svgEl("circle", { cx: -5, cy: 3, r: 1.5 }));
+    g.appendChild(_svgEl("circle", { cx: 0, cy: 3, r: 1.5 }));
+    g.appendChild(_svgEl("circle", { cx: 5, cy: 3, r: 1.5 }));
+    defs.appendChild(g);
+
+    // Cloud (Internet) — cumulus shape
+    g = _svgEl("g", { id: "ico-cloud" });
     g.appendChild(_svgEl("path", {
-        d: "M" + (cx - 12) + "," + (cy + 7) +
-           " L" + (cx + 12) + "," + (cy + 7) +
-           " C" + (cx + 16) + "," + (cy + 7) + " " + (cx + 18) + "," + (cy + 4) + " " + (cx + 18) + "," + (cy + 1) +
-           " C" + (cx + 18) + "," + (cy - 3) + " " + (cx + 15) + "," + (cy - 6) + " " + (cx + 11) + "," + (cy - 6) +
-           " C" + (cx + 10) + "," + (cy - 10) + " " + (cx + 6) + "," + (cy - 12) + " " + (cx + 2) + "," + (cy - 12) +
-           " C" + (cx - 3) + "," + (cy - 12) + " " + (cx - 7) + "," + (cy - 10) + " " + (cx - 9) + "," + (cy - 7) +
-           " C" + (cx - 13) + "," + (cy - 7) + " " + (cx - 17) + "," + (cy - 4) + " " + (cx - 17) + "," + cy +
-           " C" + (cx - 17) + "," + (cy + 4) + " " + (cx - 14) + "," + (cy + 7) + " " + (cx - 12) + "," + (cy + 7) +
-           " Z"
+        d: "M-12,7 L12,7 C16,7 18,4 18,1 C18,-3 15,-6 11,-6" +
+           " C10,-10 6,-12 2,-12 C-3,-12 -7,-10 -9,-7" +
+           " C-13,-7 -17,-4 -17,0 C-17,4 -14,7 -12,7 Z"
     }));
-    return g;
-}
+    defs.appendChild(g);
 
-/**
- * DNS icon — circle with "DNS" text.
- * @param {number} cx
- * @param {number} cy
- * @param {string} [extraClass]
- * @returns {SVGGElement}
- */
-function _iconDns(cx, cy, extraClass) {
-    var g = _svgEl("g", { "class": "route-icon" + (extraClass ? " " + extraClass : "") });
-    g.appendChild(_svgEl("circle", { cx: cx, cy: cy, r: 13 }));
-    var txt = _svgEl("text", {
-        x: cx, y: cy + 3.5,
+    // DNS — circle with "DNS" text
+    g = _svgEl("g", { id: "ico-dns" });
+    g.appendChild(_svgEl("circle", { cx: 0, cy: 0, r: 13 }));
+    txt = _svgEl("text", {
+        x: 0, y: 3.5,
         "text-anchor": "middle",
         "font-size": "7",
         "font-weight": "600",
@@ -172,162 +140,82 @@ function _iconDns(cx, cy, extraClass) {
     });
     txt.textContent = "DNS";
     g.appendChild(txt);
-    return g;
+    defs.appendChild(g);
+
+    // Query — magnifying glass
+    g = _svgEl("g", { id: "ico-query" });
+    g.appendChild(_svgEl("circle", { cx: -2, cy: -2, r: 9 }));
+    g.appendChild(_svgEl("line", { x1: 5, y1: 5, x2: 11, y2: 11 }));
+    defs.appendChild(g);
+
+    // Globe — circle with meridians (ISP/provider)
+    g = _svgEl("g", { id: "ico-globe" });
+    g.appendChild(_svgEl("circle", { cx: 0, cy: 0, r: 12 }));
+    g.appendChild(_svgEl("line", { x1: -12, y1: 0, x2: 12, y2: 0 }));
+    g.appendChild(_svgEl("ellipse", { cx: 0, cy: 0, rx: 5, ry: 12 }));
+    g.appendChild(_svgEl("line", { x1: -10, y1: -5, x2: 10, y2: -5 }));
+    g.appendChild(_svgEl("line", { x1: -10, y1: 5, x2: 10, y2: 5 }));
+    defs.appendChild(g);
+
+    // Shield — VPN/tunnel lock
+    g = _svgEl("g", { id: "ico-shield" });
+    g.appendChild(_svgEl("path", {
+        d: "M0,-12 L10,-7 L10,2 Q10,8 0,12 Q-10,8 -10,2 L-10,-7 Z"
+    }));
+    g.appendChild(_svgEl("circle", { cx: 0, cy: -2, r: 3 }));
+    g.appendChild(_svgEl("line", { x1: 0, y1: 1, x2: 0, y2: 5 }));
+    defs.appendChild(g);
+
+    // Signpost — policy routing (two directional arrows on a pole)
+    g = _svgEl("g", { id: "ico-signpost" });
+    g.appendChild(_svgEl("line", { x1: 0, y1: -12, x2: 0, y2: 12 }));
+    g.appendChild(_svgEl("path", { d: "M-8,-11 L5,-11 L9,-8 L5,-5 L-8,-5 Z" }));
+    g.appendChild(_svgEl("path", { d: "M8,1 L-5,1 L-9,4 L-5,7 L8,7 Z" }));
+    defs.appendChild(g);
+
+    // Zone — filter/funnel
+    g = _svgEl("g", { id: "ico-zone" });
+    g.appendChild(_svgEl("path", {
+        d: "M-10,-8 L10,-8 L4,2 L4,8 L-4,8 L-4,2 Z"
+    }));
+    defs.appendChild(g);
+
+    // Result — clipboard with lines
+    g = _svgEl("g", { id: "ico-result" });
+    g.appendChild(_svgEl("rect", { x: -9, y: -10, width: 18, height: 22, rx: 2 }));
+    g.appendChild(_svgEl("rect", { x: -4, y: -13, width: 8, height: 5, rx: 1 }));
+    g.appendChild(_svgEl("line", { x1: -5, y1: -3, x2: 5, y2: -3 }));
+    g.appendChild(_svgEl("line", { x1: -5, y1: 1, x2: 5, y2: 1 }));
+    g.appendChild(_svgEl("line", { x1: -5, y1: 5, x2: 3, y2: 5 }));
+    defs.appendChild(g);
+
+    // Server — rack with sections + LED dots
+    g = _svgEl("g", { id: "ico-server" });
+    g.appendChild(_svgEl("rect", { x: -10, y: -12, width: 20, height: 24, rx: 2 }));
+    g.appendChild(_svgEl("line", { x1: -10, y1: -4, x2: 10, y2: -4 }));
+    g.appendChild(_svgEl("line", { x1: -10, y1: 4, x2: 10, y2: 4 }));
+    g.appendChild(_svgEl("circle", { cx: -6, cy: -8, r: 1.5 }));
+    g.appendChild(_svgEl("circle", { cx: -6, cy: 0, r: 1.5 }));
+    g.appendChild(_svgEl("circle", { cx: -6, cy: 8, r: 1.5 }));
+    defs.appendChild(g);
+
+    svg.appendChild(defs);
 }
 
 /**
- * Interface/port icon — small rectangle with cable.
- * @param {number} cx
- * @param {number} cy
- * @param {string} [extraClass]
- * @returns {SVGGElement}
- */
-function _iconInterface(cx, cy, extraClass) {
-    var g = _svgEl("g", { "class": "route-icon" + (extraClass ? " " + extraClass : "") });
-    g.appendChild(_svgEl("rect", { x: cx - 8, y: cy - 6, width: 16, height: 12, rx: 2 }));
-    // Horizontal lines (port look)
-    g.appendChild(_svgEl("line", { x1: cx - 5, y1: cy - 2, x2: cx + 5, y2: cy - 2 }));
-    g.appendChild(_svgEl("line", { x1: cx - 5, y1: cy + 1, x2: cx + 5, y2: cy + 1 }));
-    g.appendChild(_svgEl("line", { x1: cx - 5, y1: cy + 4, x2: cx + 5, y2: cy + 4 }));
-    return g;
-}
-
-/**
- * Globe icon — circle with meridians and equator (provider/ISP).
+ * Place a pre-defined icon from <defs> via <use>.
+ * @param {string} id - icon def id (e.g. "ico-client")
  * @param {number} cx - center x
  * @param {number} cy - center y
- * @param {string} [extraClass]
+ * @param {string} [extraClass] - additional CSS class
  * @returns {SVGGElement}
  */
-function _iconGlobe(cx, cy, extraClass) {
-    var g = _svgEl("g", { "class": "route-icon" + (extraClass ? " " + extraClass : "") });
-    var r = 12;
-    // Outer circle (globe outline)
-    g.appendChild(_svgEl("circle", { cx: cx, cy: cy, r: r }));
-    // Equator (horizontal line through center)
-    g.appendChild(_svgEl("line", { x1: cx - r, y1: cy, x2: cx + r, y2: cy }));
-    // Central meridian (vertical ellipse)
-    g.appendChild(_svgEl("ellipse", { cx: cx, cy: cy, rx: 5, ry: r }));
-    // Latitude lines (upper and lower arcs via short lines within circle)
-    g.appendChild(_svgEl("line", { x1: cx - 10, y1: cy - 5, x2: cx + 10, y2: cy - 5 }));
-    g.appendChild(_svgEl("line", { x1: cx - 10, y1: cy + 5, x2: cx + 10, y2: cy + 5 }));
-    return g;
-}
-
-/**
- * Shield icon — VPN/tunnel path indicator.
- * @param {number} cx - center x
- * @param {number} cy - center y
- * @param {string} [extraClass]
- * @returns {SVGGElement}
- */
-function _iconShield(cx, cy, extraClass) {
-    var g = _svgEl("g", { "class": "route-icon" + (extraClass ? " " + extraClass : "") });
-    // Shield outline (pointed bottom)
-    g.appendChild(_svgEl("path", {
-        d: "M" + cx + "," + (cy - 12) +
-           " L" + (cx + 10) + "," + (cy - 7) +
-           " L" + (cx + 10) + "," + (cy + 2) +
-           " Q" + (cx + 10) + "," + (cy + 8) + " " + cx + "," + (cy + 12) +
-           " Q" + (cx - 10) + "," + (cy + 8) + " " + (cx - 10) + "," + (cy + 2) +
-           " L" + (cx - 10) + "," + (cy - 7) +
-           " Z"
-    }));
-    // Lock/keyhole mark inside
-    g.appendChild(_svgEl("circle", { cx: cx, cy: cy - 2, r: 3 }));
-    g.appendChild(_svgEl("line", { x1: cx, y1: cy + 1, x2: cx, y2: cy + 5 }));
-    return g;
-}
-
-/**
- * Signpost icon — policy/NDM routing (two directional arrows on a pole).
- * @param {number} cx - center x
- * @param {number} cy - center y
- * @param {string} [extraClass]
- * @returns {SVGGElement}
- */
-function _iconSignpost(cx, cy, extraClass) {
-    var g = _svgEl("g", { "class": "route-icon" + (extraClass ? " " + extraClass : "") });
-    // Vertical pole
-    g.appendChild(_svgEl("line", { x1: cx, y1: cy - 12, x2: cx, y2: cy + 12 }));
-    // Upper arrow sign (pointing right)
-    g.appendChild(_svgEl("path", {
-        d: "M" + (cx - 8) + "," + (cy - 11) +
-           " L" + (cx + 5) + "," + (cy - 11) +
-           " L" + (cx + 9) + "," + (cy - 8) +
-           " L" + (cx + 5) + "," + (cy - 5) +
-           " L" + (cx - 8) + "," + (cy - 5) + " Z"
-    }));
-    // Lower arrow sign (pointing left)
-    g.appendChild(_svgEl("path", {
-        d: "M" + (cx + 8) + "," + (cy + 1) +
-           " L" + (cx - 5) + "," + (cy + 1) +
-           " L" + (cx - 9) + "," + (cy + 4) +
-           " L" + (cx - 5) + "," + (cy + 7) +
-           " L" + (cx + 8) + "," + (cy + 7) + " Z"
-    }));
-    return g;
-}
-
-/**
- * Zone icon — filter/funnel shape.
- * @param {number} cx
- * @param {number} cy
- * @param {string} [extraClass]
- * @returns {SVGGElement}
- */
-function _iconZone(cx, cy, extraClass) {
-    var g = _svgEl("g", { "class": "route-icon" + (extraClass ? " " + extraClass : "") });
-    // Funnel shape
-    g.appendChild(_svgEl("path", {
-        d: "M" + (cx - 10) + "," + (cy - 8) +
-           " L" + (cx + 10) + "," + (cy - 8) +
-           " L" + (cx + 4) + "," + (cy + 2) +
-           " L" + (cx + 4) + "," + (cy + 8) +
-           " L" + (cx - 4) + "," + (cy + 8) +
-           " L" + (cx - 4) + "," + (cy + 2) +
-           " Z"
-    }));
-    return g;
-}
-
-/**
- * Result/list icon — clipboard shape.
- * @param {number} cx
- * @param {number} cy
- * @param {string} [extraClass]
- * @returns {SVGGElement}
- */
-function _iconResult(cx, cy, extraClass) {
-    var g = _svgEl("g", { "class": "route-icon" + (extraClass ? " " + extraClass : "") });
-    g.appendChild(_svgEl("rect", { x: cx - 9, y: cy - 10, width: 18, height: 22, rx: 2 }));
-    // Clipboard clip
-    g.appendChild(_svgEl("rect", { x: cx - 4, y: cy - 13, width: 8, height: 5, rx: 1 }));
-    // Lines
-    g.appendChild(_svgEl("line", { x1: cx - 5, y1: cy - 3, x2: cx + 5, y2: cy - 3 }));
-    g.appendChild(_svgEl("line", { x1: cx - 5, y1: cy + 1, x2: cx + 5, y2: cy + 1 }));
-    g.appendChild(_svgEl("line", { x1: cx - 5, y1: cy + 5, x2: cx + 3, y2: cy + 5 }));
-    return g;
-}
-
-/**
- * Server icon — rack server with sections and LED dots.
- * @param {number} cx - center x
- * @param {number} cy - center y
- * @param {string} [extraClass]
- * @returns {SVGGElement}
- */
-function _iconServer(cx, cy, extraClass) {
-    var g = _svgEl("g", { "class": "route-icon" + (extraClass ? " " + extraClass : "") });
-    // Server body
-    g.appendChild(_svgEl("rect", { x: cx - 10, y: cy - 12, width: 20, height: 24, rx: 2 }));
-    // Section dividers
-    g.appendChild(_svgEl("line", { x1: cx - 10, y1: cy - 4, x2: cx + 10, y2: cy - 4 }));
-    g.appendChild(_svgEl("line", { x1: cx - 10, y1: cy + 4, x2: cx + 10, y2: cy + 4 }));
-    // LED dots (one per section)
-    g.appendChild(_svgEl("circle", { cx: cx - 6, cy: cy - 8, r: 1.5 }));
-    g.appendChild(_svgEl("circle", { cx: cx - 6, cy: cy, r: 1.5 }));
-    g.appendChild(_svgEl("circle", { cx: cx - 6, cy: cy + 8, r: 1.5 }));
+function _useIcon(id, cx, cy, extraClass) {
+    var g = _svgEl("g", {
+        "class": "route-icon" + (extraClass ? " " + extraClass : ""),
+        transform: "translate(" + cx + "," + cy + ")"
+    });
+    g.appendChild(_svgEl("use", { href: "#" + id }));
     return g;
 }
 
@@ -343,42 +231,14 @@ function _renderError(container, data) {
     div.className = "route-diagram route-diagram--error";
     var title = document.createElement("div");
     title.className = "route-diagram__error-title";
-    title.textContent = "⚠ Ошибка диагностики";
+    title.textContent = "⚠ Diagnostic error";
     div.appendChild(title);
     var msg = document.createElement("div");
     msg.className = "route-diagram__error-msg";
-    msg.textContent = data.error || data.message || "Неизвестная ошибка";
+    msg.textContent = data.error || data.message || "Unknown error";
     div.appendChild(msg);
     container.innerHTML = "";
     container.appendChild(div);
-}
-
-// ── Verdict badge renderer ───────────────────────────────────────────────────
-
-/**
- * Render verdict badge in SVG.
- * @param {SVGElement} svg - parent SVG
- * @param {number} cx - center x
- * @param {number} cy - center y
- * @param {string} verdict - "geo-split", "default", or error text
- */
-function _renderVerdict(svg, cx, cy, verdict, hasPolicy) {
-    var isGeo = verdict === "geo-split";
-    var isTunnel = verdict === "tunnel";
-    var isMixed = verdict === "mixed";
-    var isDefault = verdict === "default";
-    var isPolicy = isDefault && hasPolicy;
-    var label = isMixed ? "⚠ mixed" : (isGeo ? "✓ geo-split" : (isTunnel ? "= tunnel" : (isPolicy ? "⊙ policy" : (isDefault ? "→ default" : "✗ " + verdict))));
-    var cls = isMixed ? "mixed" : (isGeo ? "geo" : (isTunnel ? "tunnel" : ((isPolicy || isDefault) ? "default" : "error")));
-
-    var bgW = label.length * 5.5 + 16;
-    svg.appendChild(_svgEl("rect", {
-        x: cx - bgW / 2, y: cy - 8,
-        width: bgW, height: 16,
-        "class": "route-verdict-bg route-verdict-bg--" + cls
-    }));
-    var txt = _svgText(label, cx, cy + 4, "route-verdict-text route-verdict-text--" + cls);
-    svg.appendChild(txt);
 }
 
 // ── Tool 1: Route Diagram (topology) ─────────────────────────────────────────
@@ -515,6 +375,7 @@ function renderRouteDiagram(container, data) {
     var H = Math.max(160, Math.min(340, 70 + pathCount * 55));
     var W = 780;
     var svg = _svgEl("svg", { viewBox: "0 0 " + W + " " + H, preserveAspectRatio: "xMidYMid meet" });
+    _addIconDefs(svg);
 
     // Fixed node positions (left-to-right)
     var midY = H / 2;
@@ -586,7 +447,7 @@ function renderRouteDiagram(container, data) {
 
     // Client — show client name (from --from MAC), "Router" when local, or generic "Client".
     // Truncate long names to fit SVG node width (~18 chars max).
-    svg.appendChild(_iconClient(clientX, clientY, ""));
+    svg.appendChild(_useIcon("ico-client", clientX, clientY, ""));
     var clientLabel = data.from_name || (data.source_iface ? "Client" : "Router");
     if (clientLabel.length > 18) clientLabel = clientLabel.substring(0, 16) + "\u2026";
     // Source sublabel: interface label when iif is set, empty when Router
@@ -600,7 +461,7 @@ function renderRouteDiagram(container, data) {
 
     // DNS
     var dnsIconClass = dnsSkipped ? " route-icon--skipped" : " route-icon--primary";
-    svg.appendChild(_iconDns(dnsX, dnsY, dnsIconClass));
+    svg.appendChild(_useIcon("ico-dns", dnsX, dnsY, dnsIconClass));
     if (dnsSkipped) {
         svg.appendChild(_svgText("skipped", dnsX, dnsY + 28, "route-node-sublabel"));
     } else {
@@ -617,7 +478,7 @@ function renderRouteDiagram(container, data) {
     }
 
     // Router
-    svg.appendChild(_iconRouter(routerX, routerY, ""));
+    svg.appendChild(_useIcon("ico-router", routerX, routerY, ""));
     svg.appendChild(_svgText("Router", routerX, routerY + 26, "route-node-label"));
 
     // Path nodes (globe for ISP, shield for tunnel, signpost for policy)
@@ -628,11 +489,11 @@ function renderRouteDiagram(container, data) {
         var iconClass = (p.type === "tunnel") ? " route-icon--tunnel" : "";
 
         if (p.type === "tunnel") {
-            svg.appendChild(_iconShield(pathNodeX, py2, iconClass));
+            svg.appendChild(_useIcon("ico-shield", pathNodeX, py2, iconClass));
         } else if (p.type === "policy") {
-            svg.appendChild(_iconSignpost(pathNodeX, py2, ""));
+            svg.appendChild(_useIcon("ico-signpost", pathNodeX, py2, ""));
         } else {
-            svg.appendChild(_iconGlobe(pathNodeX, py2, iconClass));
+            svg.appendChild(_useIcon("ico-globe", pathNodeX, py2, iconClass));
         }
         var pathLabel = (p.type === "policy") ? "Policy" : _ifaceLabel(p.dev);
         svg.appendChild(_svgText(pathLabel, pathNodeX, py2 + 27, "route-node-sublabel"));
@@ -642,14 +503,14 @@ function renderRouteDiagram(container, data) {
     }
 
     // Internet cloud
-    svg.appendChild(_iconCloud(internetX, internetY, ""));
+    svg.appendChild(_useIcon("ico-cloud", internetX, internetY, ""));
     svg.appendChild(_svgText("Internet", internetX, internetY + 22, "route-node-label"));
 
     // Internet → Server connection (always active — traffic reaches destination)
     svg.appendChild(_svgLine(internetX + 20, internetY, serverX - 12, serverY, "route-path--active"));
 
     // Server (destination)
-    svg.appendChild(_iconServer(serverX, serverY, ""));
+    svg.appendChild(_useIcon("ico-server", serverX, serverY, ""));
     var destLabel = data.query || "";
     svg.appendChild(_svgText(destLabel, serverX, serverY + 27, "route-node-label"));
 
@@ -658,11 +519,52 @@ function renderRouteDiagram(container, data) {
     container.appendChild(wrap);
 }
 
-// ── Tool 2: DNS Diagram (horizontal flow) ────────────────────────────────────
+// ── Tool 2: DNS Diagram (topology, mirrors Route Diagram layout) ─────────────
 
 /**
- * Render DNS check diagram (horizontal flow).
- * Layout: Domain → Zone Match → Upstream → Result
+ * Build the list of DNS group branches for the diagram.
+ * Uses data.groups if available (new backend) — ALWAYS both configured
+ * groups ("zone" and "default"), regardless of which one matched the
+ * current query. This mirrors Route Diagram's all_paths: every configured
+ * path is always shown, with the active one highlighted.
+ * Falls back to a single synthetic branch from legacy data.zone/data.upstream
+ * fields when the backend hasn't been updated yet.
+ * @param {Object} data - API response
+ * @returns {Array<Object>} [{ label, providers, matched }]
+ */
+function _buildDnsGroups(data) {
+    if (data.groups && data.groups.length > 0) {
+        var out = [];
+        for (var i = 0; i < data.groups.length; i++) {
+            var g = data.groups[i];
+            out.push({
+                label: g.label || g.group || "\u2014",
+                providers: g.providers || [],
+                hostnames: g.hostnames || [],
+                matched: !!g.matched
+            });
+        }
+        return out;
+    }
+    // Legacy fallback: single branch from the matched-only fields
+    var zone = data.zone || {};
+    var upstream = data.upstream || {};
+    return [{
+        label: zone.group || "default",
+        providers: upstream.providers || [],
+        hostnames: upstream.hostnames || [],
+        matched: true
+    }];
+}
+
+/**
+ * Render DNS check diagram (topology).
+ * Layout: Domain → Zone → [DNS group branches] → Result.
+ * Every configured DNS group (zone-specific + default) is always rendered
+ * as a branch, analogous to the WAN path branches in renderRouteDiagram().
+ * Path coloring mirrors Route Diagram: the segment leading into the branch
+ * point is always active (green); the matched group's branch stays green
+ * through the fan-out and fan-in, while non-matched groups render blue.
  *
  * @param {HTMLElement} container - DOM element to render into
  * @param {Object} data - JSON response from /api/smartdns/dns-check
@@ -676,76 +578,115 @@ function renderDnsDiagram(container, data) {
     var wrap = document.createElement("div");
     wrap.className = "route-diagram";
 
-    var W = 700, H = 140;
-    var svg = _svgEl("svg", { viewBox: "0 0 " + W + " " + H, preserveAspectRatio: "xMidYMid meet" });
-
-    // Node positions (evenly spaced)
-    var y = 55;
-    var domainX = 90;
-    var zoneX = 270;
-    var upstreamX = 450;
-    var resultX = 620;
-
-    // ── Draw connections (blue flow) ──
-    svg.appendChild(_svgLine(domainX + 16, y, zoneX - 16, y, "route-path--dns"));
-    svg.appendChild(_svgLine(zoneX + 16, y, upstreamX - 16, y, "route-path--dns"));
-    svg.appendChild(_svgLine(upstreamX + 16, y, resultX - 16, y, "route-path--dns"));
-
-    // ── Draw icons and labels ──
-
-    // Domain node
-    svg.appendChild(_iconDns(domainX, y, " route-icon--primary"));
-    svg.appendChild(_svgText("Domain", domainX, y + 26, "route-node-label"));
-    svg.appendChild(_svgText(data.query || "", domainX, y + 38, "route-node-sublabel"));
-
-    // Zone node
     var zone = data.zone || {};
-    svg.appendChild(_iconZone(zoneX, y, " route-icon--primary"));
-    svg.appendChild(_svgText("Zone", zoneX, y + 26, "route-node-label"));
-    svg.appendChild(_svgText(zone.group || "—", zoneX, y + 38, "route-node-sublabel"));
-    if (zone.match_rule) {
-        svg.appendChild(_svgText(zone.match_rule, zoneX, y + 50, "route-node-sublabel"));
-    }
-    if (zone.match_type) {
-        svg.appendChild(_svgText(zone.match_type, zoneX, y + 62, "route-node-sublabel"));
-    }
-
-    // Upstream node
-    var upstream = data.upstream || {};
-    svg.appendChild(_iconInterface(upstreamX, y, " route-icon--primary"));
-    svg.appendChild(_svgText("Upstream", upstreamX, y + 26, "route-node-label"));
-    var providers = (upstream.providers || []).join(", ");
-    svg.appendChild(_svgText(providers || "—", upstreamX, y + 38, "route-node-sublabel"));
-    var servers = (upstream.servers || []);
-    if (servers.length > 0) {
-        svg.appendChild(_svgText(servers[0], upstreamX, y + 50, "route-node-sublabel"));
-    }
-    if (upstream.interface) {
-        svg.appendChild(_svgText(_ifaceLabel(upstream.interface), upstreamX, y + 62, "route-node-sublabel"));
-    }
-
-    // Result node
     var result = data.result || {};
-    svg.appendChild(_iconResult(resultX, y, " route-icon--primary"));
-    svg.appendChild(_svgText("Result", resultX, y + 26, "route-node-label"));
+    var branches = _buildDnsGroups(data);
+    var branchCount = branches.length;
+
+    // Dynamic height: identical formula to renderRouteDiagram (min 160, capped at
+    // 340, 55px/branch) — full unification of the vertical fan-out spacing so
+    // multi-branch nodes get the same breathing room as Route Check's WAN paths
+    // and never overlap each other.
+    var H = Math.max(160, Math.min(340, 70 + branchCount * 55));
+    var W = 780;
+    var svg = _svgEl("svg", { viewBox: "0 0 " + W + " " + H, preserveAspectRatio: "xMidYMid meet" });
+    _addIconDefs(svg);
+
+    // Fixed node positions — reuse Route Diagram's X coordinates for visual parity
+    var midY = H / 2;
+    var domainX = 50, domainY = midY;
+    var zoneX = 290, zoneY = midY;
+    var branchX = 505;   // centered between zone and result (like Route Diagram)
+    var resultX = 720, resultY = midY;
+
+    // Branch Y positions (evenly distributed, centered around midY) — same
+    // spacing formula as renderRouteDiagram's pathYs.
+    var branchYs = [];
+    var branchSpacing = Math.min(55, (H - 70) / branchCount);
+    var branchBlockH = (branchCount - 1) * branchSpacing;
+    var branchStartY = midY - branchBlockH / 2;
+    for (var i = 0; i < branchCount; i++) {
+        branchYs.push(branchStartY + i * branchSpacing);
+    }
+
+    // ── Draw connections ──
+
+    // Domain → Zone — always the active/green lead-in segment, regardless
+    // of which group ends up matching (same as Route's Client→Router hops).
+    svg.appendChild(_svgLine(domainX + 16, domainY, zoneX - 18, zoneY, "route-path--active"));
+
+    // Zone → each branch → Result. Coloring mirrors Route Diagram verdicts:
+    // - matched zone-specific group → green (route-path--active), like geo-split
+    // - matched default group → blue (route-path--tunnel), like policy/tunnel
+    // - non-matched → gray (route-path--inactive)
+    for (var pi = 0; pi < branchCount; pi++) {
+        var py = branchYs[pi];
+        var isDefault = !branches[pi].label || branches[pi].label.toLowerCase() === "default";
+        var branchCls = branches[pi].matched
+            ? (isDefault ? "route-path--tunnel" : "route-path--active")
+            : "route-path--inactive";
+
+        var zoneExitY = zoneY + ((py - zoneY) * 0.15);
+        svg.appendChild(_svgPolyline([
+            [zoneX + 18, zoneExitY],
+            [zoneX + 50, py],
+            [branchX - 14, py]
+        ], branchCls));
+
+        var resultEntryY = resultY + ((py - resultY) * 0.3);
+        svg.appendChild(_svgPolyline([
+            [branchX + 14, py],
+            [resultX - 40, py],
+            [resultX - 18, resultEntryY]
+        ], branchCls));
+    }
+
+    // ── Draw icons ──
+
+    // Domain (query) node — magnifying glass, distinct from the DNS-server icon
+    // used below. Gray (neutral), same as Route Diagram's Client icon.
+    svg.appendChild(_useIcon("ico-query", domainX, domainY, ""));
+    svg.appendChild(_svgText("Domain", domainX, domainY + 26, "route-node-label"));
+    svg.appendChild(_svgText(data.query || "", domainX, domainY + 38, "route-node-sublabel"));
+
+    // Zone node — gray (neutral), same as Route Diagram's Router icon.
+    svg.appendChild(_useIcon("ico-zone", zoneX, zoneY, ""));
+    svg.appendChild(_svgText("Zone", zoneX, zoneY + 26, "route-node-label"));
+    svg.appendChild(_svgText(zone.group || "default", zoneX, zoneY + 38, "route-node-sublabel"));
+
+    // DNS group branch nodes — one node per configured group (zone/default),
+    // NOT one per individual provider. Providers are listed as text under the node.
+    // Icon color follows MATCH STATE: the matched (active) group gets a blue icon
+    // (route-icon--primary), non-matched groups stay neutral gray — mirroring
+    // Route Diagram where the active WAN path icon is highlighted.
+    for (var bi = 0; bi < branchCount; bi++) {
+        var by = branchYs[bi];
+        var b = branches[bi];
+        var branchIconCls = b.matched ? " route-icon--primary" : "";
+        svg.appendChild(_useIcon("ico-dns", branchX, by, branchIconCls));
+        svg.appendChild(_svgText(b.label, branchX, by + 27, "route-node-sublabel"));
+        var provText = b.providers.join(", ");
+        if (provText) {
+            svg.appendChild(_svgText(provText, branchX, by + 39, "route-node-sublabel"));
+        }
+    }
+
+    // Result node — gray (neutral), same as Route Diagram's Server icon.
+    svg.appendChild(_useIcon("ico-result", resultX, resultY, ""));
+    svg.appendChild(_svgText("Result", resultX, resultY + 26, "route-node-label"));
     var ips = (result.ips || []);
     if (ips.length > 0) {
-        svg.appendChild(_svgText(ips[0], resultX, y + 38, "route-node-sublabel"));
+        svg.appendChild(_svgText(ips[0], resultX, resultY + 38, "route-node-sublabel"));
         if (ips.length > 1) {
-            svg.appendChild(_svgText("+" + (ips.length - 1) + " more", resultX, y + 50, "route-node-sublabel"));
+            svg.appendChild(_svgText("+" + (ips.length - 1) + " more", resultX, resultY + 50, "route-node-sublabel"));
         }
     }
     var meta = [];
     if (result.ttl !== undefined) { meta.push("TTL " + result.ttl); }
     if (result.time_ms !== undefined) { meta.push(result.time_ms + "ms"); }
     if (meta.length > 0) {
-        var metaY = (ips.length > 1) ? y + 62 : y + 50;
+        var metaY = (ips.length > 1) ? resultY + 62 : resultY + 50;
         svg.appendChild(_svgText(meta.join(" | "), resultX, metaY, "route-node-sublabel"));
-    }
-
-    // ── Query title (top) ──
-    if (data.query) {
-        svg.appendChild(_svgText("DNS: " + data.query, W / 2, 16, "route-node-label"));
     }
 
     wrap.appendChild(svg);

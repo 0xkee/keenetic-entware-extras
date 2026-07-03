@@ -5,6 +5,99 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.30.1] — 2026-07-04
+
+### Changed
+- **WebUI Cache: show actual `lua_shared_dict` size in KB** instead of boolean ✓.
+  Size is injected by `api-router.lua` on every response (shell can't access
+  nginx internals). Flush button (⟳) kept, tooltip renamed to "Flush UI Cache".
+- **SmartDNS Cache: removed flush button** — `UPDATE_ACTIONS` now uses
+  service-scoped keys (`webui:cache` instead of `cache`). `parseDetails()`
+  accepts `opts.serviceId` for scoped action lookup with global fallback.
+- **CPU tooltip** — hover CPU bar shows load average (load1 / cores) and
+  explains the difference from stock UI real-time utilization.
+  Values may differ from stock UI — noted as normal and not a cause for concern.
+
+## [0.30.0] — 2026-07-03
+
+### Added
+- **WebUI card: Cache field with Flush button** — new `Cache` detail field
+  (between Http and Pid) showing internal `lua_shared_dict` status (always ✓).
+  Includes a refresh button (⟳) that flushes all status cache entries via
+  `POST /api/webui/flush-cache`, forcing fresh data on next poll cycle.
+- **Version badge → project page link** — version badges in custom dashboard
+  cards are now clickable links to the project forum page (keenetic.ru).
+
+### Changed
+- **Renamed `GEO_UPDATE_ACTIONS` → `UPDATE_ACTIONS`** in `shared.js` — now
+  supports per-action tooltip text via object values `{ url, tooltip }`.
+  String values (backward-compatible) default to "Force Reload" tooltip.
+
+## [0.29.2] — 2026-07-03
+
+### Changed
+- **Diagram CPU optimization: `steps(20)` animation** — marching-ants path
+  animations now use CSS `steps(20)` instead of `linear`, reducing browser
+  repaints from ~60fps to ~20fps per animated SVG element (~65% CPU reduction).
+- **Diagram SVG `<defs>` + `<use>` icons** — all 11 icon types (client, router,
+  cloud, DNS, query, globe, shield, signpost, zone, result, server) are now
+  defined once per SVG in `<defs>` and referenced via `<use>`, cutting DOM node
+  count by ~60% per diagram and reducing paint area on animation repaints.
+- **DNS diagram: removed match_rule from Zone icon** — the Zone node now shows
+  only the group name, not the domain-like match rule pattern. Technical details
+  remain in the collapsible section.
+- **Tech details: multi-value fields on separate lines** — Servers (with paired
+  hostname labels), IPs, Providers, and Interface lists now render one per line
+  instead of comma-separated, with thin horizontal dividers between groups and
+  label names aligned to the top. Applies to both Route Check and DNS Check.
+- **Default history pills now blue** — `rc-pill--default` changed from gray to
+  blue, matching the card border color and batch table styling for default/policy
+  verdicts in both Route Check and DNS Check.
+- **Batch mode: tech details state preserved** — expanded technical details
+  inside batch table rows no longer collapse when new results arrive during
+  Check All. Both diagram expansion and summary/details expansion are preserved.
+
+## [0.29.1] — 2026-07-02
+
+### Changed
+- **DNS Check card border colored by result** — zone-specific override groups get
+  a green border (matched rule), plain `default` stays blue; errors stay red.
+  Unifies border coloring with Route Check (`_getVerdictClass` now type-aware).
+- **DNS diagram: non-matched group path stays gray** (inactive), matching Route
+  Diagram's convention. Group TYPE distinguished by icon color only: zone-specific
+  overrides have a blue icon (`route-icon--primary`), default is neutral gray.
+- **DNS diagram: branch nodes centered** between Zone and Result icons, matching
+  Route Diagram's centered WAN-path node layout.
+- **DNS batch table: per-row icon and color by zone group** — `⇄` green for
+  zone-specific groups, `→` blue for `default` (was always `✓` green).
+- **DNS batch table: IP column shows total count** when a domain resolves to
+  more than one address, e.g. `142.250.27.18 (3)`.
+- **DNS Check: colored history pills** — pills now colored by zone group verdict
+  (green for zone-specific overrides, gray for default), matching Route Check's
+  colored pill behavior. Saved to localStorage on both single and batch results.
+- **DNS summary: IP count moved to end** — `N IPs` prefix replaced with
+  `ip (N)` suffix in the summary line for cleaner reading.
+
+## [0.29.0] — 2026-07-02
+
+### Changed
+- **DNS Check diagram redesigned to match Route Check style** — always shows both
+  DNS groups as permanent branches, one node per group. Requires
+  `smartdns-geo-conf` ≥ 0.10.7.
+- **Diagram coloring unified with Route Check** — matched branch green, non-matched
+  gray; Domain/Zone/Result icons neutral gray; DNS group icon blue only for
+  zone-specific overrides.
+- **Diagram spacing formula unified with Route Check** — fixes branch nodes
+  overlapping with 2+ DNS groups.
+- **Card legend and summary line unified with Route Check's format** — summary
+  shows plain `default` instead of `none (default)` for unmatched zones.
+- New magnifying-glass icon (`_iconQuery`) for the "Domain" node.
+- Removed duplicate "DNS: <domain>" title inside the SVG.
+
+### Removed
+- **Dead code**: `_renderVerdict()` and `_iconInterface()` removed from
+  `route-diagram.js`.
+
 ## [0.28.1] — 2026-07-01
 
 ### Fixed

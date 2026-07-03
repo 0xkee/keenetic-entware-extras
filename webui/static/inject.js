@@ -22,7 +22,7 @@
     ];
 
     var DASH_POLL_INTERVAL = (__cfg.pollInterval > 0) ? __cfg.pollInterval : 30000;
-    var DETAILS_SKIP_KEYS = { uptime: 1, version: 1, pid: 1, background: 1 };
+    var DETAILS_SKIP_KEYS = { uptime: 1, version: 1, pid: 1, background: 1, cache: 1 };
     var DASH_SKELETON_COUNTS = { 'geo-split': 16, 'smartdns': 9, 'smartdns-redirect': 8, 'webui': 8 };
 
     var injected = false;
@@ -704,9 +704,9 @@
      * @param {Object} [checks] - checks map from backend (ok/warn/fail per key)
      * @returns {string}
      */
-    function renderDetailsGrid(details, isRunning, checks, dnsServerChecks) {
+    function renderDetailsGrid(details, isRunning, checks, dnsServerChecks, svcId) {
         if (!details) return '';
-        var entries = EW.parseDetails(details, { skipKeys: DETAILS_SKIP_KEYS, isRunning: isRunning, checks: checks });
+        var entries = EW.parseDetails(details, { skipKeys: DETAILS_SKIP_KEYS, isRunning: isRunning, checks: checks, serviceId: svcId });
         var html = '';
         for (var i = 0; i < entries.length; i++) {
             var e = entries[i];
@@ -934,7 +934,7 @@
 
         // Update expandable details grid
         if (detailsEl) {
-            var detailsHtml = renderDetailsGrid(data.details, data.running, data.checks, data.dns_server_checks);
+            var detailsHtml = renderDetailsGrid(data.details, data.running, data.checks, data.dns_server_checks, svc.id);
             // Insert DNS test results before cache (concise: ✓/✗ domain)
             if (data.dns_tests && data.dns_tests.length) {
                 var dnsLines = [];

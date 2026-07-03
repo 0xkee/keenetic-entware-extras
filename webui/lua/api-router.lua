@@ -860,6 +860,27 @@ if route_cfg then
     return
 end
 
+-- Cache flush: POST-only, pure Lua (no shell), flushes all status cache entries
+if uri == "/api/webui/flush-cache" then
+    if ngx.req.get_method() ~= "POST" then
+        ngx.status = 405
+        ngx.header["Allow"] = "POST"
+        ngx.say('{"ok":false,"error":"method not allowed"}')
+        return
+    end
+    local status_keys = {
+        "/api/geo-split/status", "/api/smartdns/status",
+        "/api/smartdns-redirect/status", "/api/webui/status",
+    }
+    for _, key in ipairs(status_keys) do
+        cache:delete(key)
+        cache:delete(key .. "::stale")
+        cache:delete(key .. "::lock")
+    end
+    ngx.say('{"ok":true}')
+    return
+end
+
 -- Config endpoints: GET = read, POST = write + restart
 local config_match = uri:match("^/api/([%w%-]+)/config$")
 if config_match then
@@ -905,6 +926,11 @@ end
 local json_cmd = json_routes[uri]
 if json_cmd then
     local output = cached_run(uri, json_cmd)
+    -- Inject lua_shared_dict usage into webui cache field (shell can't access nginx internals)
+    if uri == "/api/webui/status" then
+        local used_kb = math.floor((cache:capacity() - cache:free_space()) / 1024 + 0.5)
+        output = output:gsub('"cache":true', '"cache":"' .. used_kb .. ' KB"')
+    end
     if output:sub(1, 1) == "{" or output:sub(1, 1) == "[" then
         ngx.say(output)
     else

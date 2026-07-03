@@ -145,7 +145,7 @@ function setDetails(id, data) {
     if (!el) return;
     if (!data.details) { el.innerHTML = ""; return; }
 
-    var entries = EW.parseDetails(data.details, { isRunning: data.running });
+    var entries = EW.parseDetails(data.details, { isRunning: data.running, serviceId: id });
     var html = "";
     var summaryKeys = SUMMARY_KEYS[id] || [];
     for (var i = 0; i < entries.length; i++) {
@@ -187,13 +187,15 @@ function setDetails(id, data) {
         }
         var isVersion = (e.label.toLowerCase() === 'version');
         if (isVersion) {
-            valHtml = '<span class="ew-version-badge">' + escapeHtml(e.value) + '</span>';
+            // TODO: replace forum link with GitHub releases URL when available
+            valHtml = '<a class="ew-version-badge" href="https://forum.keenetic.ru/topic/28369-geo-split-routing-%D0%B4%D0%BB%D1%8F-keenetic-%D1%81-entware-geoip-%D0%B4%D0%BE%D0%BC%D0%B5%D0%BD%D1%8B-ipk-%D0%BF%D0%B0%D0%BA%D0%B5%D1%82%D1%8B/" target="_blank" rel="noopener" data-tooltip="Open project page">' + escapeHtml(e.value) + '</a>';
         }
         var isNumericOnly = /^\d[\d,.]*[KMG]?[Bb]?$/.test(e.value.trim());
         var numClass = isNumericOnly ? ' ew-detail-value--numeric' : '';
         var updateBtn = '';
         if (e.updateAction) {
-            updateBtn = ' <button class="ew-update-btn" data-action="' + e.updateAction + '" data-tooltip="Force Reload">' +
+            var btnTooltip = e.updateTooltip || 'Force Reload';
+            updateBtn = ' <button class="ew-update-btn" data-action="' + e.updateAction + '" data-tooltip="' + escapeHtml(btnTooltip) + '">' +
                 '<svg class="ndw-svg-icon svg-restart-dims" style="width:14px;height:14px;fill:currentColor"><use href="/assets/sprite/sprite.svg#restart"></use></svg></button>';
         }
         var dataAttr = e.freshnessKey ? ' data-freshness-key="' + e.freshnessKey + '"' : '';
@@ -563,7 +565,11 @@ function fetchSystemInfo() {
                     '<span class="ew-sysinfo__label">up</span>' +
                     '<span class="ew-sysinfo__value">' + escapeHtml(data.uptime || "?") + '</span>' +
                 '</span>' +
-                '<span class="ew-sysinfo__item">' +
+                '<span class="ew-sysinfo__item" data-tooltip="' +
+                    'Load: ' + cpuLoad1.toFixed(2) + ' / ' + cpuCores + ' cores\n' +
+                    'Based on 1-minute load average, not instantaneous CPU usage.\n' +
+                    'Stock UI shows real-time utilization — this shows sustained load over time.\n' +
+                    'Values may differ from stock UI — this is normal and not a cause for concern.' + '" data-tooltip-pos="below">' +
                     '<span class="ew-sysinfo__icon">' + SYSINFO_ICONS.cpu + '</span>' +
                     '<span class="ew-sysinfo__label">CPU</span>' +
                     '<span class="ew-sysinfo__value">' + cpuPct + '%</span>' +
@@ -1846,7 +1852,7 @@ document.addEventListener("DOMContentLoaded", function() {
             saveConfig(saveSvcId);
             return;
         }
-        // Geo-split force-reload button
+        // Force-reload / flush-cache button (geo-split zones or webui cache)
         var btn = e.target.closest('.ew-update-btn');
         if (!btn || btn.disabled) return;
         var actionUrl = btn.getAttribute('data-action');
@@ -1855,7 +1861,13 @@ document.addEventListener("DOMContentLoaded", function() {
         fetch(actionUrl, { method: 'POST' })
             .then(function(r) { return r.json(); })
             .then(function() {
-                geoPoller.start();
+                if (actionUrl.indexOf('geo-split') !== -1) {
+                    geoPoller.start();
+                } else {
+                    btn.classList.remove('ew-update-btn--spinning');
+                    btn.disabled = false;
+                    refreshAll();
+                }
             })
             .catch(function() {
                 btn.classList.remove('ew-update-btn--spinning');

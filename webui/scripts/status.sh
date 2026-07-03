@@ -213,6 +213,7 @@ json_output() {
   status_detail "upstream" "$_ck_upstream_addr"
   status_detail "lua_module" "$lua_module_ok_val" "bool"
   status_detail "http" "$http_ok_val" "bool"
+  status_detail "cache" "0" "bool"
   status_detail "pid" "$_st_pid"
   status_detail "memory" "$mem_formatted"
   status_detail "logrotate" "$logrotate_ok_val" "bool"

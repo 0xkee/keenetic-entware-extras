@@ -5,6 +5,18 @@ All notable changes to `smartdns-geo-conf` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.10.7] — 2026-07-02
+
+### Added
+- `dns-check.sh --json`: new `"groups"` array in JSON output — always lists
+  BOTH DNS groups ("zone" and "other"/default) with their configured
+  providers/servers/interface and a `matched` flag, regardless of which
+  group actually resolved the queried domain. Enables the WebUI DNS Check
+  diagram to always show all configured DNS paths (mirrors geo-split
+  route-check's `all_paths` behavior). Legacy `zone`/`upstream` fields
+  (matched-group-only) are unchanged for backward compatibility. Text
+  (non-`--json`) CLI output is unchanged — stays concise, matched group only.
+
 ## [0.10.6] — 2026-06-29
 
 ### Added

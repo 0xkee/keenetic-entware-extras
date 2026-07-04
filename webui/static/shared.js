@@ -24,6 +24,180 @@ window.EW = (function() {
         'webui:cache':    { url: '/api/webui/flush-cache', tooltip: 'Flush UI Cache' }
     };
 
+    /** Detail keys whose string values contain Linux device names.
+     *  Used by parseDetails to humanize interface names for UI display.
+     *  Types: 'space-list' = space-separated devs,
+     *         'single-suffix' = "dev (auto)" or "dev",
+     *         'prefixed-lines' = multiline "dev: description",
+     *         'gateway' = "via IP" | "scope link" | "none". */
+    var IFACE_DETAIL_KEYS = {
+        route_in: 'space-list',
+        route_out: 'single-suffix',
+        other_interfaces: 'space-list',
+        interfaces: 'space-list',
+        gateway: 'gateway'
+    };
+
+    /** Special config keywords that look like device names but aren't.
+     *  Mapped to human labels for UI display. */
+    var IFACE_SPECIAL = { 'auto': 'Auto (ISP detect)', 'default': 'Default route', 'direct': 'Direct (ISP)', '*': 'All VPNs (*)' };
+
+    /**
+     * Eagerly load interface label map from backend.
+     * Populates window._ewIfaceMap (dev → human label).
+     * Safe to call multiple times — returns cached promise.
+     * @returns {Promise}
+     */
+    var _ifaceMapPromise = null;
+    function loadIfaceMap() {
+        if (_ifaceMapPromise) return _ifaceMapPromise;
+        _ifaceMapPromise = fetch('/api/system/interfaces')
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(data) {
+                if (data && data.interfaces) {
+                    var map = {};
+                    for (var i = 0; i < data.interfaces.length; i++) {
+                        var ifc = data.interfaces[i];
+                        map[ifc.id || ifc.name || ifc] = ifc.label || ifc.description || ifc.id || ifc;
+                    }
+                    window._ewIfaceMap = map;
+                }
+                return data;
+            }).catch(function() { return null; });
+        return _ifaceMapPromise;
+    }
+
+    /**
+     * Format device name for UI: "Human Label (dev)" when label is known,
+     * or just "dev" when no label available. Handles special keywords.
+     * @param {string} dev - Linux device name (e.g. "br0", "nwg0")
+     * @returns {string}
+     */
+    function ifaceLabelFull(dev) {
+        if (!dev) return '';
+        if (IFACE_SPECIAL[dev]) return IFACE_SPECIAL[dev];
+        var map = window._ewIfaceMap;
+        var label = (map && map[dev]) ? map[dev] : null;
+        return label ? label + ' (' + dev + ')' : dev;
+    }
+
+    /**
+     * Format device name for stock dashboard: human label only, no (dev).
+     * @param {string} dev - Linux device name
+     * @returns {string}
+     */
+    function _ifaceLabelShort(dev) {
+        if (!dev) return '';
+        if (IFACE_SPECIAL[dev]) return IFACE_SPECIAL[dev];
+        var map = window._ewIfaceMap;
+        return (map && map[dev]) ? map[dev] : dev;
+    }
+
+    /**
+     * Humanize a space-separated list of device names.
+     * Each device on its own line with label.
+     * @param {string} val - e.g. "br0 br1"
+     * @param {boolean} showDev - include (dev) in output
+     * @returns {string} - e.g. "Home network (br0)\nGuest (br1)"
+     */
+    function _humanizeIfaceList(val, showDev) {
+        var fn = showDev ? ifaceLabelFull : _ifaceLabelShort;
+        var devs = val.split(/\s+/).filter(function(s) { return s; });
+        return devs.map(fn).join('\n');
+    }
+
+    /**
+     * Humanize route_out value.
+     * Custom (showDev=true):  "lte_br1 (auto)" → "Beeline 4G (lte_br1, auto)"
+     * Stock  (showDev=false): "lte_br1 (auto)" → "Beeline 4G"
+     * @param {string} val - e.g. "lte_br1 (auto)" or "lte_br1" or "detached"
+     * @param {boolean} showDev - include (dev) in output
+     * @returns {string}
+     */
+    function _humanizeRouteOut(val, showDev) {
+        var suffix = '';
+        var core = val;
+        var m = val.match(/^(.*?)\s*\(([^)]+)\)$/);
+        if (m) {
+            core = m[1].trim();
+            suffix = m[2].trim();
+        }
+        if (!core || core === 'detached' || core === '\u2014') return val;
+        var fn = showDev ? ifaceLabelFull : _ifaceLabelShort;
+        var devs = core.split(/\s+/).filter(Boolean);
+        var labeled = devs.map(fn);
+        // Single dev with suffix: integrate into brackets or hide
+        if (suffix && labeled.length === 1) {
+            var lbl = labeled[0];
+            if (!showDev) return lbl;
+            // Custom: "Beeline 4G (lte_br1, auto)" or "lte_br1 (auto)"
+            if (lbl.charAt(lbl.length - 1) === ')') {
+                return lbl.slice(0, -1) + ', ' + suffix + ')';
+            }
+            return lbl + ' (' + suffix + ')';
+        }
+        // Multiple devs: each on own line, suffix as separate line
+        if (suffix && showDev) labeled.push(suffix);
+        return labeled.join('\n');
+    }
+
+    /**
+     * Humanize multiline rules: "br0: #1000 domains" → "Home network (br0): #1000 domains".
+     * Preserves leading "!" prefix for error lines.
+     * @param {string} val - multiline rules string
+     * @param {boolean} showDev - include (dev) in output
+     * @returns {string}
+     */
+    function _humanizeRulesLines(val, showDev) {
+        var fn = showDev ? ifaceLabelFull : _ifaceLabelShort;
+        return val.split('\n').map(function(line) {
+            var prefix = '';
+            var rest = line;
+            if (rest.charAt(0) === '!') {
+                prefix = '!';
+                rest = rest.substring(1);
+            }
+            var colonIdx = rest.indexOf(':');
+            if (colonIdx === -1) return line;
+            var dev = rest.substring(0, colonIdx).trim();
+            var desc = rest.substring(colonIdx);
+            return prefix + fn(dev) + desc;
+        }).join('\n');
+    }
+
+    /**
+     * Humanize gateway value.
+     * "scope link" → "Direct", "none" → "—".
+     * @param {string} val
+     * @returns {string}
+     */
+    function _humanizeGateway(val) {
+        if (val === 'scope link') return 'Direct';
+        if (val === 'none') return '\u2014';
+        return val;
+    }
+
+    /**
+     * Apply interface label humanization to a detail value if its key
+     * is in IFACE_DETAIL_KEYS and the iface map is loaded.
+     * @param {string} key - detail key
+     * @param {*} val - detail value (string expected)
+     * @param {boolean} showDev - include (dev) in output (default: true)
+     * @returns {*} - humanized value or original
+     */
+    function _humanizeIfaceDetail(key, val, showDev) {
+        var type = IFACE_DETAIL_KEYS[key];
+        if (!type || typeof val !== 'string') return val;
+        if (type === 'gateway') return _humanizeGateway(val);
+        if (!window._ewIfaceMap) return val;
+        switch (type) {
+            case 'space-list': return _humanizeIfaceList(val, showDev);
+            case 'single-suffix': return _humanizeRouteOut(val, showDev);
+            case 'prefixed-lines': return _humanizeRulesLines(val, showDev);
+            default: return val;
+        }
+    }
+
     /**
      * Format seconds as stock Keenetic uptime: "N DAYS HH:MM:SS" or "HH:MM:SS".
      * @param {number} totalSeconds
@@ -144,6 +318,7 @@ window.EW = (function() {
      * @param {Object} [opts]
      * @param {Object} [opts.skipKeys] - keys to skip entirely (default: {uptime:1})
      * @param {boolean} [opts.isRunning] - affects red error highlighting (default: true)
+     * @param {boolean} [opts.showDev] - include (dev) in humanized interface labels (default: true)
      * @param {Object} [opts.checks] - checks map from backend (ok/warn/fail per key)
      * @returns {Array<{isSpacer?:boolean, key:string, label:string, value:string,
      *   lines?:Array<{text:string, isError:boolean}>, isError:boolean, isWarning:boolean,
@@ -153,6 +328,7 @@ window.EW = (function() {
         opts = opts || {};
         var skipKeys = opts.skipKeys || { uptime: 1 };
         var isRunning = opts.isRunning !== false;
+        var showDev = opts.showDev !== false;
         var checks = opts.checks || null;
         var entries = [];
         var keys = Object.keys(details);
@@ -179,6 +355,10 @@ window.EW = (function() {
                 // Timer key with 0 value and explicit fail → show dash
                 val = '\u2014';
             }
+
+            // Humanize interface device names for UI display (e.g. "br0" → "Home network (br0)")
+            var rawVal = val;
+            val = _humanizeIfaceDetail(key, val, showDev);
 
             // Determine color: checks takes priority over type-based fallback
             if (check && isRunning) {
@@ -224,10 +404,18 @@ window.EW = (function() {
                 }
             }
 
+            // Short value for summary mode: human label without (dev), newlines → ", "
+            var shortValue = null;
+            if (showDev && IFACE_DETAIL_KEYS[key] && typeof rawVal === 'string') {
+                var sv = _humanizeIfaceDetail(key, rawVal, false);
+                if (sv !== rawVal) shortValue = String(sv).replace(/\n/g, ', ');
+            }
+
             entries.push({
                 key: key,
                 label: formatKey(key),
                 value: strVal,
+                shortValue: shortValue,
                 lines: lines,
                 isError: isError,
                 isWarning: isWarning,
@@ -256,6 +444,8 @@ window.EW = (function() {
         SERVICE_APIS: SERVICE_APIS,
         TIMER_KEYS: TIMER_KEYS,
         UPDATE_ACTIONS: UPDATE_ACTIONS,
+        loadIfaceMap: loadIfaceMap,
+        ifaceLabelFull: ifaceLabelFull,
         formatUptimeStock: formatUptimeStock,
         formatKey: formatKey,
         formatBool: formatBool,

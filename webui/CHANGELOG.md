@@ -5,6 +5,43 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.31.0] — 2026-07-04
+
+### Added
+- **Interface humanization system** (`shared.js`) — Linux device names (e.g. `br0`,
+  `nwg0`) are now displayed as human-readable labels fetched from
+  `/api/system/interfaces` (e.g. "Home network (br0)"). New module:
+  `IFACE_DETAIL_KEYS` mapping, `loadIfaceMap()` eager loader,
+  `ifaceLabelFull(dev)` / `_ifaceLabelShort(dev)` formatters,
+  type-specific humanizers for space-lists, single-suffix routes,
+  prefixed-lines, and gateway values.
+- **Dual-render summary/detail values** (`app.js` + `layout.css`) — detail items
+  with `shortValue` now render both `.ew-val-short` (condensed, no device suffix)
+  and `.ew-val-full` (full, with device suffix). CSS toggle via `.ew-summary-mode`
+  shows short in summary, full in detail view.
+- **`cli-ui-naming.md`** — new documentation: CLI→UI naming conventions for
+  interface labels, gateway values, and route display.
+
+### Changed
+- **`parseDetails()` gains `showDev` option** (`shared.js`) — when `true` (default),
+  labels include `(dev)` suffix; when `false`, only human labels are shown.
+  Returns `shortValue` property for summary mode rendering.
+- **Stock dashboard: short interface labels** (`inject.js`) — `renderDetailsGrid()`
+  passes `showDev: false` for stock Keenetic dashboard cards (no dev suffix).
+- **SUMMARY_KEYS for geo-split** (`app.js`) — replaced `gateway` with `route_in`
+  in summary key list for more relevant condensed view.
+- **Modal form: human interface labels** (`app.js`) — interface multi-select trigger
+  text and reset handler now use `EW.ifaceLabelFull()` instead of raw device names
+  (3 call sites in `renderModalForm` and `handleResetField`).
+- **Eager `loadIfaceMap()` call** on both custom dashboard init (`app.js`) and
+  stock dashboard injection (`inject.js`).
+
+### Fixed
+- **`var priority` hoisting bug** (`app.js:setDetails`) — declaration moved before
+  `shortValue` usage, fixing potential undefined reference in `setDetails()`.
+- **Gateway display** (`shared.js:_humanizeGateway`) — "scope link" → "Direct",
+  "none" → "—".
+
 ## [0.30.1] — 2026-07-04
 
 ### Changed

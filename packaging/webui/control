@@ -1,5 +1,5 @@
 Package: webui
-Version: 0.30.1
+Version: 0.31.0
 Architecture: all
 Maintainer: 0xkee
 Depends: keenetic-entware-extras, nginx, nginx-mod-lua, logrotate

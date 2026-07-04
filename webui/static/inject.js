@@ -199,6 +199,7 @@
             // Ensure dashboard polling is started
             if (!dashboardInjected && window.location.pathname === '/dashboard') {
                 dashboardInjected = true;
+                EW.loadIfaceMap();
                 fetchDashboardStatuses();
                 if (!dashboardTimer) {
                     dashboardTimer = setInterval(fetchDashboardStatuses, DASH_POLL_INTERVAL);
@@ -706,7 +707,7 @@
      */
     function renderDetailsGrid(details, isRunning, checks, dnsServerChecks, svcId) {
         if (!details) return '';
-        var entries = EW.parseDetails(details, { skipKeys: DETAILS_SKIP_KEYS, isRunning: isRunning, checks: checks, serviceId: svcId });
+        var entries = EW.parseDetails(details, { skipKeys: DETAILS_SKIP_KEYS, isRunning: isRunning, showDev: false, checks: checks, serviceId: svcId });
         var html = '';
         for (var i = 0; i < entries.length; i++) {
             var e = entries[i];

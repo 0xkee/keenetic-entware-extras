@@ -309,6 +309,10 @@ body {
 .ew-summary-mode .ew-diag-btn { display: none !important; }
 /* Hide low-priority details in summary mode */
 .ew-summary-mode .ew-detail-item[data-priority="low"] { display: none; }
+/* Summary/detail value toggle: short labels (no dev) vs full (with dev) */
+.ew-val-short { display: none; }
+.ew-summary-mode .ew-val-short { display: inline; }
+.ew-summary-mode .ew-val-full { display: none; }
 /* Summary cards are narrow (~300px) — use smaller grid min for 2-col layout */
 .ew-summary-mode .ew-details-grid {
     grid-template-columns: repeat(auto-fit, minmax(7rem, auto));

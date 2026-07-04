@@ -10,7 +10,7 @@ var FETCH_TIMEOUT = 15000;    // 15 seconds (allows for queued io.popen in nginx
 
 /** Key detail labels shown in Summary mode per service. Others are hidden via CSS. */
 var SUMMARY_KEYS = {
-    'geo-split':         ['geo_zone', 'active_zones', 'subnets', 'domains', 'route_out', 'gateway'],
+    'geo-split':         ['geo_zone', 'active_zones', 'subnets', 'domains', 'route_in', 'route_out'],
     'smartdns':          ['dns_zone', 'active_zones', 'zone_dns_provider', 'other_dns_provider', 'ports', 'rules'],
     'smartdns-redirect': ['interfaces', 'upstream'],
     'webui':             ['ports', 'http']
@@ -185,6 +185,13 @@ function setDetails(id, data) {
         } else {
             valHtml = escapeHtml(e.value);
         }
+        // Determine priority for summary condensed mode
+        var priority = (summaryKeys.indexOf(e.key) !== -1) ? 'high' : 'low';
+        // Summary mode: short labels (no dev), detail mode: full labels (with dev)
+        if (priority === 'high' && e.shortValue) {
+            valHtml = '<span class="ew-val-short">' + escapeHtml(e.shortValue) + '</span>' +
+                '<span class="ew-val-full">' + valHtml + '</span>';
+        }
         var isVersion = (e.label.toLowerCase() === 'version');
         if (isVersion) {
             // TODO: replace forum link with GitHub releases URL when available
@@ -199,8 +206,6 @@ function setDetails(id, data) {
                 '<svg class="ndw-svg-icon svg-restart-dims" style="width:14px;height:14px;fill:currentColor"><use href="/assets/sprite/sprite.svg#restart"></use></svg></button>';
         }
         var dataAttr = e.freshnessKey ? ' data-freshness-key="' + e.freshnessKey + '"' : '';
-        // Determine priority for summary condensed mode
-        var priority = (summaryKeys.indexOf(e.key) !== -1) ? 'high' : 'low';
         html += '<div class="ew-detail-item" data-priority="' + priority + '">' +
             '<div class="ew-detail-label">' + escapeHtml(e.label) + '</div>' +
             '<div class="ew-detail-value' + numClass + '"' + valStyle + dataAttr + '>' + valHtml + updateBtn + '</div></div>';
@@ -1309,7 +1314,9 @@ function renderModalForm(body, svcId, schema, config, defaults, interfaces, zone
                 return (a.name || '').localeCompare(b.name || '');
             });
             var selectedIfs = String(val).split(/\s+/).filter(function(s) { return s; });
-            var ifDisplayText = selectedIfs.length ? selectedIfs.join(', ') : (field.preItems ? field.preItems[0].label : 'Default');
+            var _preMap = {};
+            if (field.preItems) { for (var pi = 0; pi < field.preItems.length; pi++) _preMap[field.preItems[pi].value] = field.preItems[pi].label; }
+            var ifDisplayText = selectedIfs.length ? selectedIfs.map(function(n) { return _preMap[n] || EW.ifaceLabelFull(n); }).join(', ') : (field.preItems ? field.preItems[0].label : 'Default');
             var ifaceOpts = [];
             for (var si = 0; si < sortedIfaces.length; si++) {
                 ifaceOpts.push({ value: sortedIfaces[si].name, label: sortedIfaces[si].label || sortedIfaces[si].name });
@@ -1599,7 +1606,7 @@ function handleResetField(btn) {
             }
             el.dataset.selectionOrder = defIfs.join(' ');
             var trigger2 = el.querySelector('.ew-modal__iface-select-text');
-            if (trigger2) trigger2.textContent = defIfs.length ? defIfs.join(', ') : 'Default';
+            if (trigger2) trigger2.textContent = defIfs.length ? defIfs.map(function(n) { return EW.ifaceLabelFull(n); }).join(', ') : 'Default';
         }
     } else {
         el.value = defVal;
@@ -1729,7 +1736,7 @@ document.addEventListener("DOMContentLoaded", function() {
             }
             wrap.dataset.selectionOrder = currentOrder.join(' ');
             var textEl2 = wrap.querySelector('.ew-modal__iface-select-text');
-            if (textEl2) textEl2.textContent = currentOrder.length ? currentOrder.join(', ') : 'Default';
+            if (textEl2) textEl2.textContent = currentOrder.length ? currentOrder.map(function(n) { return EW.ifaceLabelFull(n); }).join(', ') : 'Default';
         }
     });
 
@@ -1776,6 +1783,9 @@ document.addEventListener("DOMContentLoaded", function() {
     // radio_text: clicking on disabled IP input passes through (CSS pointer-events:none)
     // to the <label>, which natively checks the __custom__ radio.
     // The 'change' handler above then enables + focuses the text input.
+
+    // Eagerly load interface label map (shared by status cards, diagrams, config editor)
+    EW.loadIfaceMap();
 
     // Discover correct stock CSS URL (styles-*.css may change after firmware update)
     discoverStockCSS();

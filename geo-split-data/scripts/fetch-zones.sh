@@ -55,14 +55,14 @@ MAX_AGE=$((30 * 86400))
 mkdir -p "$GEOIP_DIR"
 
 for cc in "${COUNTRIES[@]}"; do
-    zone_file="$GEOIP_DIR/${cc}.zone"
+    zone_file="$GEOIP_DIR/${cc}.zone.gz"
     force="${1:-}"
 
     # Skip if fresh (unless --force)
     if [ "$force" != "--force" ] && [ -f "$zone_file" ]; then
         age=$(( $(date +%s) - $(stat -c %Y "$zone_file") ))
         if [ "$age" -lt "$MAX_AGE" ]; then
-            echo "Skip ${cc}.zone: fresh (age ${age}s < ${MAX_AGE}s)"
+            echo "Skip ${cc}.zone.gz: fresh (age ${age}s < ${MAX_AGE}s)"
             continue
         fi
     fi
@@ -89,7 +89,8 @@ for cc in "${COUNTRIES[@]}"; do
     list_aggregate_cidrs < "$tmp_file" > "$agg_file"
     agg_count=$(wc -l < "$agg_file")
 
-    mv "$agg_file" "$zone_file"
-    rm -f "$tmp_file"
-    echo "Saved ${cc}.zone: ${raw_count} -> ${agg_count} CIDRs (aggregated)"
+    # Store as .zone.gz to save ~60-70% flash space on routers
+    gzip -9 -c "$agg_file" > "$zone_file"
+    rm -f "$agg_file" "$tmp_file"
+    echo "Saved ${cc}.zone.gz: ${raw_count} -> ${agg_count} CIDRs (aggregated, gzipped)"
 done

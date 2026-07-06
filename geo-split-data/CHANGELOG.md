@@ -7,6 +7,13 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-06
+
+### Changed
+- **Zone files stored as .gz**: all `lists/geoip/*.zone` files are now gzip-compressed
+  (`.zone.gz`). Saves ~60-70% flash space on routers (232 zones: ~3.5MB → ~1.2MB).
+  `fetch-zones.sh` compresses with `gzip -9` at build time.
+
 ## [0.5.0] - 2026-06-07
 
 ### Added

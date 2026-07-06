@@ -5,6 +5,14 @@ All notable changes to `geo-split` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.16.1] - 2026-07-06
+
+### Changed
+- **Support .gz zone files**: `update-subnets.sh` reads `.zone.gz` (gzip-compressed)
+  zone files from geo-split-data with transparent `gzip -dc` decompression in pipe.
+  Falls back to plain `.zone` for backward compatibility with geo-split-data <0.6.0.
+- Runtime-downloaded zones saved as `.zone.gz` (default gzip level, low CPU on router)
+
 ## [0.16.0] - 2026-06-30
 
 ### Added

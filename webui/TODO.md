@@ -36,6 +36,18 @@
 - [x] **Sidebar broken after custom page visit** — Root cause: `removeIframe()` не восстанавливала `display` скрытых Angular-элементов. Fix: восстановление `dataset.entwareHidden` при удалении iframe.
 - [x] **Browser back/forward не работает** — Root cause: `showInContent()` не делала `pushState`, `switchTab()` использовала `replaceState`. Fix: pushState в обоих + popstate listeners.
 
+## 🔴 WebUI DRY Refactoring R1-R9 — ✅ ВЫПОЛНЕНО (v0.31.1)
+
+- [x] **R-1**: Details rendering dedup — `EW.renderDetailValue()`, `EW.renderUpdateBtn()`, `EW.detailValueStyle()` в shared.js
+- [x] **R-2**: Toggle polling dedup — `EW.createTogglePoller()` factory в shared.js
+- [x] **R-3**: Удалён `_ensureIfaceMap()` из route-check.js → `EW.loadIfaceMap()`
+- [x] **R-4**: Экспорт `EW.ifaceLabelShort()`; удалены `_ifaceLabel()` из route-diagram.js и route-check.js
+- [x] **R-5**: `EW.escapeHtml()` в shared.js; удалены дубли из app.js и route-check.js
+- [x] **R-6**: `EW.getService(id)` helper; заменены lookup loops в app.js и inject.js
+- [x] **R-7**: Config Editor (~790 строк) вынесен из app.js в config-editor.js (app.js: 1898→1034)
+- [x] **R-8**: Унификация Route Check / DNS Check модалей через `_openCheckModal()` factory
+- [x] **R-9**: `EW.hasFailField()` в shared.js; удалён из inject.js и inline из app.js
+
 ## � Важные
 
 - [x] **Route check из WebUI** ✅ — проверка выбора маршрута для конкретного хоста/домена прямо из интерфейса (диагностика: через какой интерфейс/таблицу пойдёт трафик).

@@ -30,17 +30,25 @@
 
 ```
 NDM_TYPE_TO_PREFIX = {
-    Bridge    → "br"       (Bridge0 → br0)
-    Wireguard → "nwg"      (Wireguard0 → nwg0)
-    AmneziaWG → "awg"      (AmneziaWG0 → awg0)
-    UsbLte    → "lte_br"   (UsbLte0 → lte_br0)
-    OpenVPN   → "ovpn_br"
+    Bridge      → "br"       (Bridge0 → br0)
+    Wireguard   → "nwg"      (Wireguard0 → nwg0)
+    AmneziaWG   → "awg"      (AmneziaWG0 → awg0)
+    UsbLte      → "lte_br"   (UsbLte0 → lte_br0)
+    OpenVPN     → "ovpn_br"
     PPPoE/PPTP/L2TP → "ppp"
+    WifiStation → "wwan"     (WifiMaster0/WifiStation0 → wwan0, WISP)
 }
 ```
 
-**`GET /api/system/interfaces`** — отдаёт `{id, name, label, description, up}` для каждого интерфейса.
+**`GET /api/system/interfaces`** — отдаёт `{name, up, label?}` для каждого интерфейса.
 Frontend кеширует это в `window._ewIfaceMap` (dev → human label).
+
+**Составные NDM id** (e.g. `WifiMaster0/WifiStation0`): стандартный regex `^(%a+)(%d+)$`
+не матчит — используется поле `type:` из NDM output для определения типа. Индекс Linux
+device берётся из первой части id: `WifiMaster0` → `0` → `wwan0`.
+
+**Фильтрация неактивных WISP**: WifiStation с `link: down` не получает label →
+`wwan*` без label исключается в `system_interfaces()` (аналогично `eth*`, `usb*`).
 
 ### Слой 3: UI (JavaScript)
 

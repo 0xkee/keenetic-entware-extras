@@ -16,7 +16,7 @@ dist/*.ipk
 dist/archive/
 geo-split-data/lists/ru-subnets.txt
 geo-split-data/lists/domains-resolved.txt
-geo-split-data/lists/geoip/*.zone
+geo-split-data/lists/geoip/*.zone.gz
 
 # === Private content (symlinks to ../kee-private/) ===
 # These are symlinks transparent to IDE/Roo but invisible to git

@@ -102,11 +102,12 @@ try_download_url() {
 }
 
 # Download a single zone file with multi-interface failover.
-# Args: $1 - country code, $2 - output file path
+# Downloads plain text from ipdeny.com, then gzip-compresses to output path.
+# Args: $1 - country code, $2 - output file path (.zone.gz)
 # Returns: 0 on success, 1 on failure
 download_zone() {
   local cc="$1" out_file="$2"
-  local url
+  local url dl_tmp="/opt/tmp/geo-zone-dl.tmp"
 
   url=$(echo "$SUBNET_URL_PATTERN" | sed "s/{cc}/$cc/g")
 
@@ -140,8 +141,11 @@ download_zone() {
 
   local iface
   for iface in $interfaces; do
-    if try_download_url "$loader" "$iface" "$url" "$out_file"; then
+    if try_download_url "$loader" "$iface" "$url" "$dl_tmp"; then
       echo "$iface" > "$LAST_IFACE_CACHE"
+      # Compress downloaded plain-text zone to .gz (default -6: low CPU on router)
+      gzip -c "$dl_tmp" > "$out_file"
+      rm -f "$dl_tmp"
       return 0
     fi
   done
@@ -206,8 +210,31 @@ download_legacy() {
   return 1
 }
 
+# Read a zone file (plain or gzipped) to stdout.
+# Args: $1 - file path (.zone or .zone.gz)
+_read_zone() {
+  case "$1" in
+    *.gz) gzip -dc "$1" ;;
+    *)    cat "$1" ;;
+  esac
+}
+
+# Find zone file for a country code.
+# Prefers .zone.gz (smaller), falls back to plain .zone (pre-0.6.0 compat).
+# Args: $1 - country code
+# stdout: file path or empty
+_find_zone_file() {
+  local cc="$1"
+  if [ -f "${GEOIP_DIR}/${cc}.zone.gz" ] && [ -s "${GEOIP_DIR}/${cc}.zone.gz" ]; then
+    echo "${GEOIP_DIR}/${cc}.zone.gz"
+  elif [ -f "${GEOIP_DIR}/${cc}.zone" ] && [ -s "${GEOIP_DIR}/${cc}.zone" ]; then
+    echo "${GEOIP_DIR}/${cc}.zone"
+  fi
+}
+
 # Merge zone files for all active countries into SUBNET_LIST_FILE.
-# Uses pre-packaged geoip files; downloads missing ones.
+# Uses pre-packaged geoip files (.zone.gz preferred, .zone fallback);
+# downloads missing ones.
 merge_zones() {
   local zones
   zones="$(resolve_geo_zone "$GEO_ZONE")"
@@ -219,9 +246,9 @@ merge_zones() {
   : > "$tmp_merged"
 
   for cc in $zones; do
-    zone_file="${GEOIP_DIR}/${cc}.zone"
-    if [ -f "$zone_file" ] && [ -s "$zone_file" ]; then
-      cat "$zone_file" >> "$tmp_merged"
+    zone_file="$(_find_zone_file "$cc")"
+    if [ -n "$zone_file" ]; then
+      _read_zone "$zone_file" >> "$tmp_merged"
       found=$((found + 1))
     else
       missing="$missing $cc"
@@ -232,9 +259,8 @@ merge_zones() {
   if [ -n "$missing" ]; then
     log "Missing local zones:$missing — downloading"
     for cc in $missing; do
-      zone_file="${GEOIP_DIR}/${cc}.zone"
-      if download_zone "$cc" "$zone_file"; then
-        cat "$zone_file" >> "$tmp_merged"
+      if download_zone "$cc" "${GEOIP_DIR}/${cc}.zone.gz"; then
+        _read_zone "${GEOIP_DIR}/${cc}.zone.gz" >> "$tmp_merged"
         found=$((found + 1))
       else
         log_error "Failed to get zone $cc, skipping"

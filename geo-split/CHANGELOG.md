@@ -5,6 +5,15 @@ All notable changes to `geo-split` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.17.0] - 2026-07-07
+
+### Added
+- **CIDR support in route-check**: `route-check.sh` accepts CIDR notation (e.g. `5.0.0.0/8`)
+  in addition to domains and IPs. Hybrid analysis: samples 1-3 IPs for kernel route verdict
+  + coverage analysis from geo-split routing tables (overlap detection). JSON output includes
+  `input_type`, `coverage` (total_ips, overlaps, geo_split_pct) fields.
+- `lib/ip.sh`: new functions `is_cidr()`, `cidr_sample_ips()`, `cidr_total_ips()`
+
 ## [0.16.1] - 2026-07-06
 
 ### Changed

@@ -43,7 +43,7 @@ function _fetchWithRetry(url, retries) {
     });
 }
 
-var ROUTE_EXAMPLES = ['ozon.ru', 'github.com', 'kaspi.kz', '8.8.8.8'];
+var ROUTE_EXAMPLES = ['ozon.ru', 'github.com', 'kaspi.kz', '8.8.8.8', '5.0.0.0/8'];
 var DNS_EXAMPLES = ['ozon.ru', 'github.com', 'kaspi.kz', 'bbc.co.uk'];
 
 // ── localStorage History ─────────────────────────────────────────────────────
@@ -120,6 +120,11 @@ function renderHistoryPills(container, key, onCheck) {
         return;
     }
     container.style.display = '';
+
+    // Re-attach Check All button if stored on container (survives innerHTML clear)
+    if (container._checkAllBtn && history.length > 0) {
+        container.appendChild(container._checkAllBtn);
+    }
 
     var label = document.createElement('span');
     label.className = 'rc-history__label';
@@ -237,9 +242,14 @@ function _buildRouteSummary(data) {
     }
     var parts = [];
 
-    var ipCount = (data.dns && data.dns.ips) ? data.dns.ips.length : 0;
-    if (ipCount > 1) {
-        parts.push(ipCount + ' IPs');
+    // CIDR: show coverage instead of IP count
+    if (data.input_type === 'cidr' && data.coverage) {
+        parts.push(data.coverage.geo_split_pct + '% geo-split');
+    } else {
+        var ipCount = (data.dns && data.dns.ips) ? data.dns.ips.length : 0;
+        if (ipCount > 1) {
+            parts.push(ipCount + ' IPs');
+        }
     }
 
     if (data.verdict === 'mixed' && data.verdict_devs && data.verdict_devs.length > 0) {
@@ -328,9 +338,36 @@ function _buildRouteDetails(data) {
         if (data.dns.time_ms !== undefined) rows.push('<tr><td>Time</td><td>' + data.dns.time_ms + 'ms</td></tr>');
     }
 
+    // CIDR Coverage section (only for CIDR input)
+    if (data.input_type === 'cidr' && data.coverage) {
+        var cov = data.coverage;
+        var pct = cov.geo_split_pct || 0;
+        var barColor = pct === 100 ? '#4caf50' : (pct > 0 ? '#ff9800' : '#666');
+        rows.push('<tr><th colspan="2">CIDR Coverage (' + pct + '% geo-split)</th></tr>');
+        rows.push('<tr><td colspan="2"><div style="background:#333;border-radius:3px;height:8px;overflow:hidden;margin:2px 0">' +
+            '<div style="width:' + pct + '%;height:100%;background:' + barColor + '"></div></div>' +
+            '<span style="font-size:11px;color:#aaa">' +
+            (cov.geo_split_ips || 0).toLocaleString() + ' / ' + (cov.total_ips || 0).toLocaleString() + ' IPs</span></td></tr>');
+        // Show top overlapping subnets (max 8, sorted by IP count desc)
+        if (cov.overlaps && cov.overlaps.length > 0) {
+            var sorted = cov.overlaps.slice().sort(function(a, b) { return (b.ips || 0) - (a.ips || 0); });
+            var show = Math.min(sorted.length, 8);
+            for (var ci = 0; ci < show; ci++) {
+                var ov = sorted[ci];
+                var devL = ov.dev ? EW.ifaceLabelShort(ov.dev) : '?';
+                rows.push('<tr><td>' + EW.escapeHtml(ov.prefix) + '</td><td>' + EW.escapeHtml(devL) +
+                    ' <span style="color:#888">' + ov.table_name + ', ' + (ov.ips || 0).toLocaleString() + ' IPs</span></td></tr>');
+            }
+            if (sorted.length > show) {
+                rows.push('<tr><td colspan="2" style="color:#888;font-size:11px">+' + (sorted.length - show) + ' more subnets</td></tr>');
+            }
+        }
+    }
+
     // All routes per IP (expanded table)
     if (data.routes && data.routes.length > 0) {
-        rows.push('<tr><th colspan="2">Routes per IP (' + data.routes.length + ')</th></tr>');
+        var routeLabel = (data.input_type === 'cidr') ? 'Sampled Routes' : 'Routes per IP';
+        rows.push('<tr><th colspan="2">' + routeLabel + ' (' + data.routes.length + ')</th></tr>');
         for (var i = 0; i < data.routes.length; i++) {
             var r = data.routes[i];
             var verdictBadge = r.verdict ? ' <span class="rc-verdict-badge rc-verdict-badge--' + EW.escapeHtml(r.verdict) + '">' + EW.escapeHtml(r.verdict) + '</span>' : '';
@@ -1026,15 +1063,13 @@ function _openCheckModal(opts) {
         checkAllBtn.type = 'button';
         checkAllBtn.textContent = '\u25b6\u00a0 Check All';
 
+        historyRow._checkAllBtn = checkAllBtn;
+
         function refreshHistory() {
             renderHistoryPills(historyRow, opts.historyKey, function(domain) {
                 input.value = domain;
                 doCheck(domain);
             });
-            var history = getHistory(opts.historyKey);
-            if (history.length > 0) {
-                historyRow.appendChild(checkAllBtn);
-            }
         }
         refreshHistory();
 
@@ -1138,7 +1173,7 @@ function openRouteCheckModal() {
     _openCheckModal({
         title: '\ud83d\udd0d Route Check',
         type: 'route',
-        placeholder: 'Enter domain or IP (e.g. github.com, 8.8.8.8)',
+        placeholder: 'Enter domain, IP or CIDR (e.g. github.com, 8.8.8.8, 5.0.0.0/8)',
         examples: ROUTE_EXAMPLES,
         historyKey: ROUTE_HISTORY_KEY,
         hasIface: true,

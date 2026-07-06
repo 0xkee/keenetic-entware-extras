@@ -5,6 +5,12 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.32.2] — 2026-07-07
+
+### Added
+- Route Check: CIDR notation support in input (e.g. `5.0.0.0/8`). API `validate_cidr()`
+  allows `/` in host parameter for CIDR format. Updated placeholder and examples.
+
 ## [0.32.1] — 2026-07-06
 
 ### Fixed

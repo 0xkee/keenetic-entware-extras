@@ -109,6 +109,36 @@ get_match_prefix() {
   fi
 }
 
+# Find routes in a routing table that overlap with the given CIDR.
+# Phase 1 of CIDR analysis: table-based coverage lookup.
+# Args: $1 - input CIDR, $2 - table number
+# stdout: lines "prefix route_ips dev overlap_ips" for each overlapping route
+_cidr_overlap_routes() {
+  local input_cidr="$1" table="$2"
+  ip route show table "$table" 2>/dev/null | awk -v input="$input_cidr" '
+    BEGIN {
+      n = split(input, p, "/"); in_pfx = int(p[2])
+      split(p[1], o, "."); in_ip = o[1]*16777216 + o[2]*65536 + o[3]*256 + o[4]
+      in_sz = 1; for (i=0; i<32-in_pfx; i++) in_sz *= 2
+      in_net = in_ip - (in_ip % in_sz); in_end = in_net + in_sz - 1
+    }
+    /^[0-9]/ {
+      n = split($1, p, "/")
+      if (n == 1) { pfx = 32 } else { pfx = int(p[2]) }
+      split(p[1], o, ".")
+      rip = o[1]*16777216 + o[2]*65536 + o[3]*256 + o[4]
+      rsz = 1; for (i=0; i<32-pfx; i++) rsz *= 2
+      rn = rip - (rip % rsz); re = rn + rsz - 1
+      os = (rn > in_net) ? rn : in_net
+      oe = (re < in_end) ? re : in_end
+      if (os <= oe) {
+        dev = ""
+        for (i=1; i<=NF; i++) if ($i == "dev") { dev = $(i+1); break }
+        print $1, rsz, dev, oe - os + 1
+      }
+    }'
+}
+
 # --- Argument parsing ---
 JSON_MODE=0
 QUERY=""
@@ -216,17 +246,81 @@ else
 fi
 
 # Validate input format
-if ! is_ipv4 "$QUERY" && ! is_domain "$QUERY"; then
-  emit_error "invalid_input" "$QUERY" "Not a valid domain or IPv4 address"
+INPUT_TYPE="domain"
+if is_cidr "$QUERY"; then
+  INPUT_TYPE="cidr"
+elif is_ipv4 "$QUERY"; then
+  INPUT_TYPE="ip"
+elif is_domain "$QUERY"; then
+  INPUT_TYPE="domain"
+else
+  emit_error "invalid_input" "$QUERY" "Not a valid domain, IPv4 address, or CIDR"
 fi
 
 # --- DNS resolution ---
 DNS_JSON="null"
 RESOLVED_IPS=""
 dns_time_ms=0
+COVERAGE_JSON=""
+COVERAGE_TEXT=""
+CIDR_TOTAL=0
 
-if is_ipv4 "$QUERY"; then
-  # Skip DNS, use IP directly
+if [ "$INPUT_TYPE" = "cidr" ]; then
+  # CIDR: skip DNS, sample representative IPs for route probes
+  RESOLVED_IPS=$(cidr_sample_ips "$QUERY")
+  CIDR_TOTAL=$(cidr_total_ips "$QUERY")
+
+  # --- Coverage analysis: find overlapping routes in geo-split tables ---
+  overlap_json=""
+  geo_ips=0
+  for _tbl in "$DOMAIN_ROUTE_TABLE" "$SUBNET_ROUTE_TABLE"; do
+    _tbl_name=$(table_name_for "$_tbl")
+    _overlap=$(_cidr_overlap_routes "$QUERY" "$_tbl")
+    if [ -n "$_overlap" ]; then
+      echo "$_overlap" | while IFS=' ' read -r _prefix _rsz _dev _oips; do
+        printf '%s %s %s %s %s\n' "$_tbl" "$_tbl_name" "$_prefix" "$_dev" "$_oips"
+      done
+    fi
+  done | {
+    while IFS=' ' read -r _tbl _tbl_name _prefix _dev _oips; do
+      overlap_json="${overlap_json:+${overlap_json},}{\"table\":\"${_tbl}\",\"table_name\":\"${_tbl_name}\",\"prefix\":\"${_prefix}\",\"dev\":\"${_dev}\",\"ips\":${_oips}}"
+      geo_ips=$((geo_ips + _oips))
+    done
+    # Compute geo_split_pct (integer, avoid awk fork for simple cases)
+    if [ "$CIDR_TOTAL" -gt 0 ] && [ "$geo_ips" -gt 0 ]; then
+      geo_pct=$(awk "BEGIN{printf \"%d\", ${geo_ips}*100/${CIDR_TOTAL}}")
+    else
+      geo_pct=0
+    fi
+    # Export coverage results via temp file (subshell can't set parent vars)
+    _cov_tmp="/tmp/.rc_coverage.$$"
+    printf '%s\n%s\n%s\n' "$overlap_json" "$geo_ips" "$geo_pct" > "$_cov_tmp"
+  }
+  # Read back coverage results from subshell
+  _cov_tmp="/tmp/.rc_coverage.$$"
+  if [ -f "$_cov_tmp" ]; then
+    _cov_line=0
+    while IFS= read -r _line; do
+      _cov_line=$((_cov_line + 1))
+      case $_cov_line in
+        1) overlap_json="$_line" ;;
+        2) geo_ips="$_line" ;;
+        3) geo_pct="$_line" ;;
+      esac
+    done < "$_cov_tmp"
+    rm -f "$_cov_tmp"
+  else
+    overlap_json=""
+    geo_ips=0
+    geo_pct=0
+  fi
+  COVERAGE_JSON=$(printf '"coverage":{"total_ips":%d,"overlaps":[%s],"geo_split_ips":%d,"geo_split_pct":%d}' \
+    "$CIDR_TOTAL" "${overlap_json:-}" "${geo_ips:-0}" "${geo_pct:-0}")
+  COVERAGE_TEXT=$(printf '  Coverage:     %d/%d IPs (%d%%) in geo-split tables' \
+    "${geo_ips:-0}" "$CIDR_TOTAL" "${geo_pct:-0}")
+
+elif [ "$INPUT_TYPE" = "ip" ]; then
+  # Direct IP: skip DNS
   RESOLVED_IPS="$QUERY"
 else
   # Resolve domain via SmartDNS
@@ -397,6 +491,11 @@ fi
 # --- Output ---
 if [ "$JSON_MODE" = "1" ]; then
   # JSON output (inline, no subshell forks)
+  input_type_json=",\"input_type\":\"${INPUT_TYPE}\""
+  coverage_json_field=""
+  if [ -n "$COVERAGE_JSON" ]; then
+    coverage_json_field=",${COVERAGE_JSON}"
+  fi
   fwmark_json=""
   if [ -n "$FWMARK" ]; then
     fwmark_json=",\"fwmark\":\"${FWMARK}\""
@@ -425,8 +524,8 @@ if [ "$JSON_MODE" = "1" ]; then
     dd_json="${dd_json:+${dd_json},}\"${dd_item}\""
     case "$dd_tmp" in *,*) dd_tmp="${dd_tmp#*,}" ;; *) dd_tmp="" ;; esac
   done
-  printf '{"ok":true,"query":"%s","source_iface":"%s"%s%s,"dns":%s,"routes":[%s],"default_route":{"dev":"%s","via":"%s"}%s,"verdict":"%s","verdict_details":[%s],"verdict_devs":[%s]}\n' \
-    "$QUERY" "$IIF" "$fwmark_json" "$from_json" "$DNS_JSON" "$ROUTES_JSON" "$dr_dev" "$dr_via" "$tunnel_json" "$OVERALL_VERDICT" "$vd_json" "$dd_json"
+  printf '{"ok":true,"query":"%s"%s,"source_iface":"%s"%s%s%s,"dns":%s,"routes":[%s],"default_route":{"dev":"%s","via":"%s"}%s,"verdict":"%s","verdict_details":[%s],"verdict_devs":[%s]}\n' \
+    "$QUERY" "$input_type_json" "$IIF" "$fwmark_json" "$from_json" "$coverage_json_field" "$DNS_JSON" "$ROUTES_JSON" "$dr_dev" "$dr_via" "$tunnel_json" "$OVERALL_VERDICT" "$vd_json" "$dd_json"
 else
   # Human-readable text output
   printf 'Route Check: %s\n' "$QUERY"
@@ -436,8 +535,14 @@ else
     printf '  Source iface: %s\n' "$IIF"
   fi
 
-  # DNS section
-  if is_ipv4 "$QUERY"; then
+  # DNS / CIDR section
+  if [ "$INPUT_TYPE" = "cidr" ]; then
+    printf '  DNS:          skipped (CIDR subnet, %d IPs)\n' "$CIDR_TOTAL"
+    printf '  Sampled IPs:  %s\n' "$RESOLVED_IPS"
+    if [ -n "$COVERAGE_TEXT" ]; then
+      printf '%s\n' "$COVERAGE_TEXT"
+    fi
+  elif [ "$INPUT_TYPE" = "ip" ]; then
     printf '  DNS:          skipped (direct IP)\n'
   else
     printf '  DNS:          %s:%s → %s (%d ms)\n' \

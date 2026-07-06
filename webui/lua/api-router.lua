@@ -991,6 +991,22 @@ local function validate_host(s)
     return nil
 end
 
+--- Validate CIDR notation: A.B.C.D/N where N is 0-32, max 18 chars.
+-- @param s string|nil
+-- @return string|nil — sanitized CIDR or nil if invalid
+local function validate_cidr(s)
+    if not s or s == "" then return nil end
+    if #s > 18 then return nil end
+    local ip, prefix = s:match("^(%d+%.%d+%.%d+%.%d+)/(%d+)$")
+    if ip and prefix then
+        local n = tonumber(prefix)
+        if n and n >= 0 and n <= 32 then
+            return s
+        end
+    end
+    return nil
+end
+
 --- Validate interface parameter: only [a-z0-9_] allowed, max 15 chars.
 -- @param s string|nil
 -- @return string|nil — sanitized iif or nil if invalid
@@ -1018,9 +1034,9 @@ end
 -- MAC resolution to fwmark is done inside route-check.sh via --from flag.
 if uri == "/api/geo-split/route-check" then
     local args = ngx.req.get_uri_args()
-    local host = validate_host(args.host)
+    local host = validate_host(args.host) or validate_cidr(args.host)
     if not host then
-        ngx.say('{"ok":false,"error":"invalid_input","message":"host parameter required: only [a-zA-Z0-9._-] allowed"}')
+        ngx.say('{"ok":false,"error":"invalid_input","message":"host parameter required: domain, IPv4, or CIDR notation"}')
         return
     end
     local from_arg = ""

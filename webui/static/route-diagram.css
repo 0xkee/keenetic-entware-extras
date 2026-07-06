@@ -289,17 +289,33 @@
     background: rgba(125, 206, 112, 0.12);
     border-color: rgba(125, 206, 112, 0.4);
 }
+.rc-pill--geo-split:hover {
+    background: rgba(125, 206, 112, 0.22);
+    border-color: rgba(125, 206, 112, 0.7);
+}
 .rc-pill--tunnel {
     background: rgba(0, 134, 203, 0.12);
     border-color: rgba(0, 134, 203, 0.4);
+}
+.rc-pill--tunnel:hover {
+    background: rgba(0, 134, 203, 0.22);
+    border-color: rgba(0, 134, 203, 0.7);
 }
 .rc-pill--mixed {
     background: rgba(255, 167, 38, 0.12);
     border-color: rgba(255, 167, 38, 0.4);
 }
+.rc-pill--mixed:hover {
+    background: rgba(255, 167, 38, 0.22);
+    border-color: rgba(255, 167, 38, 0.7);
+}
 .rc-pill--default {
     background: rgba(0, 134, 203, 0.1);
     border-color: rgba(0, 134, 203, 0.25);
+}
+.rc-pill--default:hover {
+    background: rgba(0, 134, 203, 0.18);
+    border-color: rgba(0, 134, 203, 0.5);
 }
 
 /* ── Check All button (pinned top-right of history row) ───────────── */

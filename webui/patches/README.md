@@ -20,8 +20,10 @@ bundle hashes via `hash-map.conf`.
 
 ```
 webui/patches/
-├── hash-map.conf   # JS_HASH → patch set version mapping
-├── v1.sh           # Patch set v1 (current: all known hashes)
+├── hash-map.conf   # Firmware version → patch set mapping
+├── v1.sh           # Patch set v1 (KeeneticOS 5.0.x)
+├── v2.sh           # Patch set v2 (KeeneticOS 5.1 Beta)
+├── v3.sh           # Patch set v3 (KeeneticOS 5.1.0+)
 └── README.md
 ```
 
@@ -61,6 +63,8 @@ ssh root@router /opt/etc/init.d/S80nginx-webui restart
 | `4QPHZXFY` | `D5VNMMPD` | KeeneticOS 5.0.8 | mipsel | v1 |
 | `TXLLNFBH` | `DKYWR66I` | KeeneticOS 5.0.10 | mipsel | v1 |
 | `JELMZ7TJ` | `DKYWR66I` | KeeneticOS 5.0.11 | mipsel | v1 |
+| `3FF05DF` | `3FF05DF` | KeeneticOS 5.1 Beta 3 | mipsel | v2 |
+| `8787931` | `8787931` | KeeneticOS 5.1.0 | mipsel | v3 |
 
 ## Patch set contract
 

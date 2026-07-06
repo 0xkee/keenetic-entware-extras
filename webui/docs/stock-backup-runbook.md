@@ -72,3 +72,5 @@ echo "Added ${JS_HASH} → v1"
 | 5.0.8 | mipsel | KN-1011 | `4QPHZXFY` | `D5VNMMPD` | `stock-backup-5.0.8-mipsel/` |
 | 5.0.10 | mipsel | KN-2310 | `TXLLNFBH` | `DKYWR66I` | `stock-backup-5.0.10-mipsel/` |
 | 5.0.11 | mipsel | KN-1011 | `JELMZ7TJ` | `DKYWR66I` | `stock-backup-5.0.11-mipsel/` |
+| 5.1 Beta 3 | mipsel | KN-2310 | `3FF05DF` | `3FF05DF` | `stock-backup-5.1-beta3-mipsel/` |
+| 5.1.0 | mipsel | KN-2310 | `8787931` | `8787931` | `stock-backup-5.1.0-mipsel/` |

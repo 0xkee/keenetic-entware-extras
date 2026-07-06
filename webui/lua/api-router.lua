@@ -223,6 +223,7 @@ local NDM_TYPE_TO_PREFIX = {
     PPTP        = "ppp",
     L2TP        = "ppp",
     Ip6in4      = "ppp",
+    WifiStation = "wwan",   -- WifiMaster0/WifiStation0 → wwan0 (WISP)
 }
 
 --- Get interface labels from ndmc.
@@ -238,7 +239,7 @@ local function get_iface_labels()
     -- Fallback: Linux IP→iface map (only built if needed)
     local ip_to_linux = nil  -- lazy-init
 
-    local cur_name, cur_id, cur_desc, cur_addr = nil, nil, nil, nil
+    local cur_name, cur_id, cur_desc, cur_addr, cur_type, cur_link = nil, nil, nil, nil, nil, nil
     for line in ndm_out:gmatch("[^\n]+") do
         local iname = line:match('^Interface, name = "([^"]+)"')
         if iname then
@@ -249,6 +250,15 @@ local function get_iface_labels()
                 if ntype and NDM_TYPE_TO_PREFIX[ntype] then
                     -- Primary: deterministic id → linux name
                     labels[NDM_TYPE_TO_PREFIX[ntype] .. idx] = lbl
+                elseif cur_type and NDM_TYPE_TO_PREFIX[cur_type] then
+                    -- Compound id (e.g. WifiMaster0/WifiStation0): use type field
+                    -- Only active interfaces (link: up) — inactive WISP hidden from UI
+                    if cur_link == "up" then
+                        local parent_idx = cur_id:match("^%a+(%d+)/")
+                        if parent_idx then
+                            labels[NDM_TYPE_TO_PREFIX[cur_type] .. parent_idx] = lbl
+                        end
+                    end
                 elseif cur_addr then
                     -- Fallback: IP-based matching for unknown types
                     if not ip_to_linux then
@@ -267,6 +277,7 @@ local function get_iface_labels()
                 end
             end
             cur_name = iname; cur_id = nil; cur_desc = nil; cur_addr = nil
+            cur_type = nil; cur_link = nil
         end
         if not cur_id then
             local id = line:match("^%s+id:%s+(%S+)")
@@ -274,6 +285,10 @@ local function get_iface_labels()
         end
         local desc = line:match("^%s+description:%s+(.+)$")
         if desc then cur_desc = desc:gsub("%s+$", "") end
+        local tp = line:match("^%s+type:%s+(%S+)")
+        if tp then cur_type = tp end
+        local lk = line:match("^%s+link:%s+(%S+)")
+        if lk then cur_link = lk end
         local addr = line:match("^%s+address:%s+([%d%.]+)")
         if addr then cur_addr = addr end
     end
@@ -283,6 +298,13 @@ local function get_iface_labels()
         local lbl = cur_desc and cur_desc ~= "" and cur_desc or cur_name
         if ntype and NDM_TYPE_TO_PREFIX[ntype] then
             labels[NDM_TYPE_TO_PREFIX[ntype] .. idx] = lbl
+        elseif cur_type and NDM_TYPE_TO_PREFIX[cur_type] then
+            if cur_link == "up" then
+                local parent_idx = cur_id:match("^%a+(%d+)/")
+                if parent_idx then
+                    labels[NDM_TYPE_TO_PREFIX[cur_type] .. parent_idx] = lbl
+                end
+            end
         elseif cur_addr then
             if not ip_to_linux then
                 ip_to_linux = {}
@@ -326,8 +348,13 @@ local function system_interfaces()
                 name:match("^ra%d") or name:match("^apcli") or
                 name:match("%.%d+$")          -- VLAN sub-interfaces (eth2.1, ra7.1)
             )
-            -- eth* ports: include only if NDM resolved a label (IPoE WAN with IP)
-            if not excluded and name:match("^eth%d+$") and not labels[name] then
+            -- Physical/radio ifaces: include only if NDM resolved a label
+            -- (eth*=IPoE WAN, usb*=tethering, wwan*=WISP)
+            if not excluded and not labels[name] and (
+                name:match("^eth%d+$") or
+                name:match("^usb%d") or
+                name:match("^wwan%d")
+            ) then
                 excluded = true
             end
             if not excluded then

@@ -5,6 +5,53 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.32.1] — 2026-07-06
+
+### Fixed
+- WISP interfaces (wwan) now display NDM description instead of raw "wwan0"
+- Inactive WISP interfaces (link: down) hidden from dropdown — only active shown
+- Compound NDM id support (WifiMasterN/WifiStationM) via `type:` field parsing
+- Consolidated label-required filters for eth*/usb*/wwan* in `system_interfaces()`
+
+## [0.32.0] — 2026-07-05
+
+### Added
+- **Patch set v3** for KeeneticOS 5.1.0 — Angular moved to signal-based architecture:
+  enum renamed `Vo` → `Mo`, `set order()` setter replaced by writable signal `order=V([])`,
+  `templateMap` is now a computed signal (`templateMap()`). New `#2+3` combined patch hooks
+  `getTemplate()` for `__ewLastOrder` side-effect (was in setter). Default card layout split
+  into desktop/mobile sub-arrays (both patched with `#QS-desktop` / `#QS-mobile`).
+  9/9 patches verified against `main-8787931.js`.
+- `hash-map.conf`: `DEFAULT:5.1.0 v3` (exact match); `DEFAULT:5.1 v2` retained for betas
+- Stock backup: `stock-backup-5.1.0-mipsel/`
+
+## [0.31.2] — 2026-07-05
+
+### Fixed
+- Config modal: `ROUTE_OUT` (Outgoing Interface) and `ZONE_DNS_INTERFACE` (Zone VPN Interface) now render as single-select (radio) instead of multi-select (checkbox) — `multi: false` in schema
+- Unified display text "Default" → "Default route" across all iface_select triggers (initial render, reset, checkbox change handler)
+- Radio change handler: use last `<span>` for trigger text (dot indicator spans no longer cause `[object Object]`)
+- `loadIfaceMap()`: fixed fallback chain producing `[object Object]` for interfaces without label
+- API `/api/system/interfaces`: exclude unlabeled `usb*` interfaces (USB tethering) from list
+
+### Changed
+- `renderDropdown()` preItems now support both single (radio) and multi (checkbox) modes
+- `renderDropdown()` single-select options now show up/down dot indicators (same as multi)
+- `saveConfig()` reads `radio:checked` for single iface_select, `selectionOrder` for multi
+
+## [0.31.1] — 2026-07-05
+
+### Changed
+- **R-1**: Details rendering dedup — extracted `EW.renderDetailValue()`, `EW.renderUpdateBtn()`, `EW.detailValueStyle()` to shared.js; unified rendering in inject.js and app.js
+- **R-2**: Toggle polling dedup — extracted `EW.createTogglePoller()` factory to shared.js; unified in inject.js and app.js
+- **R-3**: Removed `_ensureIfaceMap()` from route-check.js, uses `EW.loadIfaceMap()`
+- **R-4**: Exported `EW.ifaceLabelShort()`; removed `_ifaceLabel()` from route-diagram.js and route-check.js
+- **R-5**: Extracted `EW.escapeHtml()` to shared.js; removed duplicates from app.js (`escapeHtml`) and route-check.js (`_esc`)
+- **R-6**: Added `EW.getService(id)` helper; replaced lookup loops in app.js and inject.js
+- **R-7**: Extracted Config Editor (~790 lines) from app.js to config-editor.js; app.js reduced from 1898 to ~1034 lines
+- **R-8**: Unified Route Check and DNS Check modals via `_openCheckModal()` factory in route-check.js
+- **R-9**: Extracted `EW.hasFailField()` to shared.js; removed from inject.js and inline from app.js
+
 ## [0.31.0] — 2026-07-04
 
 ### Added

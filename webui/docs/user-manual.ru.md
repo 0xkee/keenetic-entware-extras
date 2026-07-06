@@ -232,7 +232,7 @@ opkg install webui_<версия>_all.ipk
 |--------|------------------------|
 | **Geo-Split** | GEO_ZONE, ROUTE_OUT, ROUTE_IN, ROUTE_GW, таблицы маршрутизации, DNS-порт, интервалы обновления |
 | **SmartDNS** | ZONE_DNS_PROVIDER, OTHER_DNS_PROVIDER и другие |
-| **SmartDNS Redirect** | DNS_PORT, LAN_INTERFACES |
+| **SmartDNS Redirect** | UPSTREAM_PORT, INTERFACES |
 | **WebUI** | LISTEN_PORT, INJECT_SIDEBAR, DASH_POLL_INTERVAL |
 
 #### Как работает

@@ -429,7 +429,7 @@ geo-split status: ✓ Alive
     DNS:         localhost:6153 (SmartDNS no-speed-check)
     Background:  idle
     Loader:      cidr-plain
-    Version:     0.13.0
+    Version:     0.16.1
 ```
 
 Пример вывода (сервис отключён):

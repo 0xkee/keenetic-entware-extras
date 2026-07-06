@@ -1,69 +1,69 @@
 # Keenetic Entware Extras
 
-> 📖 **[Руководство пользователя](docs/user-manual.ru.md)** — установка, kee-status, bug-report.
+> 📖 **[User Manual (RU)](user-manual.ru.md)** — installation, kee-status, bug-report.
 
-Shell-скрипты и `.ipk` пакеты для Keenetic-роутеров с Entware.
-Включает подпроекты: **geo-split** (split routing по GeoIP/доменам), **smartdns-geo-conf** (DNS split), **smartdns-redirect** (DNAT LAN :53 → local DNS), **webui** (дашборд).
+Shell scripts and `.ipk` packages for Keenetic routers with Entware.
+Includes subprojects: **geo-split** (GeoIP/domain split routing), **smartdns-geo-conf** (DNS split), **smartdns-redirect** (DNAT LAN :53 → local DNS), **webui** (dashboard).
 
-## Пакеты
+## Packages
 
-| Пакет | Описание |
-|-------|----------|
-| `keenetic-entware-extras` | Базовый пакет — shared libraries (`lib/common.sh`, `lib/ip.sh`, `lib/lists.sh`, `lib/status.sh`) + CLI `kee-status` |
-| `geo-split` | Split routing по GeoIP + доменам. Зависит от `keenetic-entware-extras` |
-| `geo-split-data` | Данные: списки доменов, GeoIP-зоны, whitelist. Conffiles — сохраняются при upgrade |
-| `smartdns-geo-conf` | Split DNS: .ru/.рф → российские DNS, остальное → Google/Cloudflare DoH |
-| `smartdns-redirect` | Universal DNS DNAT: перехват LAN `:53` → local DNS |
-| `webui` | Custom dashboard для Keenetic/Entware services на :8080 |
+| Package | Description |
+|---------|-------------|
+| `keenetic-entware-extras` | Base package — shared libraries (`lib/common.sh`, `lib/ip.sh`, `lib/lists.sh`, `lib/status.sh`, `lib/geo.sh`, `lib/zones.sh`) + CLI `kee-status` |
+| `geo-split` | GeoIP + domain split routing. Depends on `keenetic-entware-extras` |
+| `geo-split-data` | Data: domain lists, GeoIP zones, whitelist. Conffiles — preserved on upgrade |
+| `smartdns-geo-conf` | Split DNS: .ru/.рф → Russian DNS, everything else → Google/Cloudflare DoH |
+| `smartdns-redirect` | Universal DNS DNAT: intercept LAN `:53` → local DNS |
+| `webui` | Custom dashboard for Keenetic/Entware services on :8080 + Config Editor, Route Check, DNS Check, stock WebUI integration |
 
-## Установка через opkg
+## Installation via opkg
 
-Основной способ установки для пользователей.
+Primary installation method for users.
 
 ```sh
-# Скопировать .ipk файлы на роутер
+# Copy .ipk files to router
 scp *.ipk root@<router-ip>:/tmp/
 
-# Установить (порядок важен — сначала base, потом data, потом geo-split)
+# Install (order matters — base first, then data, then geo-split)
 opkg install /tmp/keenetic-entware-extras_<ver>_all.ipk
 opkg install /tmp/geo-split-data_<ver>_all.ipk
 opkg install /tmp/geo-split_<ver>_all.ipk
 ```
 
-Зависимости (`ip-full`, `curl`, `bind-dig`, `aggregate`) устанавливаются автоматически через opkg.
+Dependencies (`ip-full`, `curl`, `bind-dig`, `aggregate`) are installed automatically via opkg.
 
-## Диагностика
+## Diagnostics
 
-После установки пакета `keenetic-entware-extras` доступна команда
-[`kee-status`](scripts/kee-status.sh:1) — агрегированный статус всех
-подпакетов. Запускает `scripts/status.sh` каждого установленного пакета
-(без стриминга), показывает одну строку на пакет (`Alive` / `FAIL`), а
-под упавшими — только строки с `✗`, сгруппированные по подсекциям
-(`Service:`, `Rules:`, `DNS Tests:` и т.д.).
+After installing the `keenetic-entware-extras` package, the
+[`kee-status`](scripts/kee-status.sh:1) command is available — aggregated
+status of all subpackages. Runs `scripts/status.sh` of each installed package
+(no streaming), displays one line per package (`Alive` / `FAIL`), and
+under failed ones — only lines with `✗`, grouped by subsections
+(`Service:`, `Rules:`, `DNS Tests:`, etc.).
 
 ```sh
-kee-status                # цветной вывод в TTY
-kee-status --no-color     # plain text для логов / ndmc
-NO_COLOR=1 kee-status     # то же через env
+kee-status                # colored output in TTY
+kee-status --no-color     # plain text for logs / ndmc
+NO_COLOR=1 kee-status     # same via env
 ```
 
-Exit code: `0` если все `Alive`, `1` если есть `FAIL`.
+Exit code: `0` if all `Alive`, `1` if any `FAIL`.
 
-## Подпроекты
+## Subprojects
 
 ### [geo-split](geo-split/README.md)
 
-Split routing для Keenetic: маршрутизация трафика по GeoIP-подсетям и спискам доменов через разные сетевые интерфейсы (ISP/VPN). Поддерживает режимы bypass, vpn, auto.
+Split routing for Keenetic: route traffic by GeoIP subnets and domain lists through different network interfaces (ISP/VPN). Supports bypass, vpn, auto modes.
 
 ### [smartdns-geo-conf](smartdns-geo-conf/README.md)
 
-Split DNS для российского интернета: `.ru`/`.рф`/`.su` → Yandex/AdGuard DoT, всё остальное → Google/Cloudflare DoH.
+Split DNS for Russian internet: `.ru`/`.рф`/`.su` → Yandex/AdGuard DoT, everything else → Google/Cloudflare DoH.
 
 ### [smartdns-redirect](smartdns-redirect/README.md)
 
-Universal DNS DNAT: `iptables PREROUTING REDIRECT` для LAN-клиентов (`br0`) — обход Keenetic ndnproxy, прямое резолвление через локальный DNS (SmartDNS/AdGuard Home/Unbound/dnsmasq). Persistence через NDM `netfilter.d` hook, watchdog по cron. Измеренный выигрыш latency: `~130ms → <80ms`.
+Universal DNS DNAT: `iptables PREROUTING REDIRECT` for LAN clients (`br0`) — bypass Keenetic ndnproxy, direct resolution through local DNS (SmartDNS/AdGuard Home/Unbound/dnsmasq). Persistence via NDM `netfilter.d` hook, watchdog via cron. Measured latency improvement: `~130ms → <80ms`.
 
-## Структура проекта
+## Project structure
 
 ```
 keenetic-entware-extras/
@@ -71,66 +71,71 @@ keenetic-entware-extras/
 │   ├── common.sh         # logging, error handling, JSON helpers
 │   ├── ip.sh             # IP/interface utilities
 │   ├── lists.sh          # list processing (@include, dedup)
-│   └── status.sh         # status check/show helpers for diagnostics
-├── geo-split/            # split routing подпроект
+│   ├── status.sh         # status check/show helpers for diagnostics
+│   ├── geo.sh            # geo-zone unions (40+ alliances, 294 lines)
+│   └── zones.sh          # zone labels (249 zones, 255 lines)
+├── geo-split/            # split routing subproject
 │   ├── scripts/          # attach, detach, update, status, ndm-hook
-│   ├── config/           # config.conf
-│   ├── loaders/          # CIDR загрузчики (plain, RIPE JSON)
-│   ├── rootfs/           # init.d/S99geo-split
-│   └── docs/             # архитектура, сравнения
-├── geo-split-data/       # данные (списки, GeoIP-зоны)
+│   ├── config/           # defaults.conf (defaults) + config.conf (user overrides)
+│   ├── loaders/          # CIDR loaders (plain, RIPE JSON)
+│   ├── init.d/           # S99geo-split
+│   └── docs/             # architecture, comparisons
+├── geo-split-data/       # data (lists, GeoIP zones)
 │   ├── lists/            # domains.txt, ru-whitelist.txt
 │   └── scripts/          # fetch-zones.sh
-├── smartdns-geo-conf/          # DNS split
+├── smartdns-geo-conf/    # DNS split
 │   ├── config/           # smartdns.conf
 │   ├── scripts/          # status.sh, toggle.sh
-├── smartdns-redirect/    # DNS DNAT для LAN
-│   ├── config/           # smartdns-redirect.conf (conffile)
+│   ├── init.d/           # S37smartdns-conf
+│   └── docs/             # user-manual.ru.md
+├── smartdns-redirect/    # DNS DNAT for LAN
+│   ├── config/           # defaults.conf (defaults) + config.conf (user overrides)
 │   ├── scripts/          # dns-redirect, watchdog, status, netfilter-hook
-│   └── rootfs/           # init.d/S39smartdns-redirect
+│   ├── init.d/           # S39smartdns-redirect
+│   └── docs/             # user-manual.ru.md
 ├── webui/                # custom dashboard (nginx + lua)
 │   ├── config/           # nginx.conf, logrotate.conf
 │   ├── scripts/          # status.sh, patch-stock-ui.sh
 │   ├── lua/              # api-router, serve-index
-│   └── rootfs/           # init.d/S80nginx-webui
-├── packaging/            # .ipk метаданные
+│   └── init.d/           # S80nginx-webui
+├── packaging/            # .ipk metadata
 │   ├── keenetic-entware-extras/
 │   ├── geo-split/
 │   ├── geo-split-data/
 │   ├── smartdns-geo-conf/
-│   └── smartdns-redirect/
+│   ├── smartdns-redirect/
+│   └── webui/
 ├── scripts/              # build-ipk.sh, kee-status.sh (aggregated status CLI)
-├── docs/                 # документация
 └── LICENSE               # MIT
 ```
 
-## Требования
+## Requirements
 
-- Keenetic с установленным Entware
-- Зависимости устанавливаются автоматически через opkg:
-  - `ip-full` — iproute2 для policy routing
-  - `curl` — загрузка GeoIP-данных
-  - `bind-dig` — DNS-резолвинг доменов
-  - `aggregate` — агрегация CIDR-подсетей
+- Keenetic with Entware installed
+- Dependencies are installed automatically via opkg:
+  - `ip-full` — iproute2 for policy routing
+  - `curl` — GeoIP data download
+  - `bind-dig` — DNS resolution of domains
+  - `aggregate` — CIDR subnet aggregation
 
-## Разработка
+## Development
 
-Для контрибьюторов и разработчиков.
+For contributors and developers.
 
-**Полная процедура деплоя** (spike/full режимы, state control, rollback, troubleshooting): [`.project/deploy-workflow.md`](.project/deploy-workflow.md).
+**Full deploy procedure** (spike/full modes, state control, rollback, troubleshooting): [`.project/deploy-workflow.md`](.project/deploy-workflow.md).
 
 ```sh
-# Линтинг
+# Linting
 shellcheck -x -s sh scripts/*.sh
 shellcheck -x -s sh geo-split/scripts/*.sh
 
-# Spike deploy (быстрая итерация, роутеры без sftp-server)
+# Spike deploy (fast iteration, routers without sftp-server)
 scp -O -r lib/ geo-split/ root@<router-ip>:/opt/keenetic-entware-extras/
 
-# Full deploy: сборка всех .ipk пакетов
+# Full deploy: build all .ipk packages
 ./scripts/build-ipk.sh all
 ```
 
-## Лицензия
+## License
 
 [MIT](LICENSE)

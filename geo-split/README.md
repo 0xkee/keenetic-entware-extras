@@ -1,331 +1,333 @@
 # geo-split
 
-> 📖 **[Руководство пользователя](docs/user-manual.ru.md)** — пошаговая установка, настройка, troubleshooting.
+> 📖 **[User Manual (RU)](docs/user-manual.ru.md)** — step-by-step installation, configuration, troubleshooting.
 
-Split routing для Keenetic/Entware — маршрутизация трафика по GeoIP-подсетям и спискам доменов через разные сетевые интерфейсы.
+Split routing for Keenetic/Entware — route traffic by GeoIP subnets and domain lists through different network interfaces.
 
-Типичные сценарии:
-- 🇷🇺 **ЕАЭС → ISP:** подсети ЕАЭС (RU+BY+KZ+AM+KG) идут через провайдера, остальное — через VPN
-- 🔒 **Selected → VPN:** определённые подсети/домены маршрутизируются в VPN-туннель
-- 🌍 **Multi-zone:** любая комбинация стран или союзов (СНГ, BRICS, EU и др.) — 232 зоны, 40+ объединений
+Typical use cases:
+- 🇷🇺 **EAEU → ISP:** EAEU subnets (RU+BY+KZ+AM+KG) go through ISP, everything else — through VPN
+- 🔒 **Selected → VPN:** specific subnets/domains routed into a VPN tunnel
+- 🌍 **Multi-zone:** any combination of countries or alliances (CIS, BRICS, EU, etc.) — 232 zones, 40+ unions
 
-## Установка
+## Installation
 
-Основной способ — через opkg:
+Primary method — via opkg:
 
 ```sh
 opkg install geo-split_<ver>_all.ipk
 ```
 
-Зависимости (`keenetic-entware-extras`, `geo-split-data`, `ip-full`, `curl`, `bind-dig`, `aggregate`) устанавливаются автоматически.
+Dependencies (`keenetic-entware-extras`, `geo-split-data`, `ip-full`, `curl`, `bind-dig`, `aggregate`) are installed automatically.
 
-> `config/config.conf` — conffile: при `opkg upgrade` пользовательский конфиг сохраняется.
+> `config/config.conf` — conffile: preserved during `opkg upgrade`.
 
-После установки:
+After installation:
 
 ```sh
-# 1. Отредактировать конфигурацию
+# 1. Edit configuration
 vi /opt/keenetic-entware-extras/geo-split/config/config.conf
 
-# 2. Запустить
+# 2. Start
 /opt/etc/init.d/S99geo-split start
 ```
 
-## Удаление
+## Removal
 
 ```sh
 opkg remove geo-split
 ```
 
-Автоматически выполняется: останов сервиса, удаление cron-задания, NDM hook, batch-файлов.
+Automatically performs: service stop, cron job removal, NDM hook cleanup, batch file deletion.
 
-## Маршрутизация (ROUTE_OUT / ROUTE_IN)
+## Routing (ROUTE_OUT / ROUTE_IN)
 
-Два ключевых параметра управляют маршрутизацией:
+Two key parameters control routing:
 
-| Параметр | Описание | По умолчанию |
-|----------|----------|--------------|
-| `ROUTE_OUT` | Куда направлять GEO-трафик (выходной интерфейс) | `"auto"` |
-| `ROUTE_IN` | Откуда берётся трафик (LAN-интерфейсы для `ip rule iif`) | `"br0"` |
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `ROUTE_OUT` | Where to send GEO traffic (outgoing interface) | `"auto"` |
+| `ROUTE_IN` | Traffic source (LAN interfaces for `ip rule iif`) | `"br0"` |
 
-**Семантика `ROUTE_OUT`:**
-- `"auto"` или пустая строка → автоопределение ISP через `ip route show default`
-- Явное имя интерфейса (`"lte_br1"`, `"nwg0"`, `"ppp0"`) → использовать напрямую
+**`ROUTE_OUT` semantics:**
+- `"auto"` or empty → auto-detect ISP via `ip route show default`
+- Explicit interface name (`"lte_br1"`, `"nwg0"`, `"ppp0"`) → use directly
 
-## Архитектура
+## Architecture
 
-### Принцип: async-данные + мгновенные правила
+### Principle: async data + instant rules
 
-Загрузка данных (CIDR-подсети, DNS-резолвинг доменов) выполняется **асинхронно** через cron. Подключение маршрутных правил — **мгновенно** из кэша (~1 сек для 13K+ маршрутов через `ip-full -batch`). Это разделение обеспечивает быстрый старт и надёжную работу при перезагрузках и переключении интерфейсов.
+Data loading (CIDR subnets, DNS domain resolution) runs **asynchronously** via cron. Routing rule attachment is **instant** from cache (~1 sec for 13K+ routes via `ip-full -batch`). This separation ensures fast startup and reliable operation during reboots and interface switches.
 
-### Подход: route-based (без iptables)
+### Approach: route-based (no iptables)
 
-Вместо `iptables mangle MARK` (который конфликтует с Keenetic NDM per-device routing) используется **route-based** подход:
+Instead of `iptables mangle MARK` (which conflicts with Keenetic NDM per-device routing), a **route-based** approach is used:
 
 1. `ip rule add iif br0 table 1000 priority 50` — domain routes (/32 host routes)
 2. `ip rule add iif br0 table 1001 priority 51` — subnet routes (GeoIP CIDRs)
-3. Загрузчики заполняют таблицы: domains → table 1000, subnets → table 1001
-4. Трафик, не попавший ни в один маршрут, проходит по обычному маршруту
+3. Loaders populate the tables: domains → table 1000, subnets → table 1001
+4. Traffic not matching any route passes through the normal routing path
 
-Domain table (prio 50) проверяется первой — позволяет точечно маршрутизировать отдельные домены поверх подсетей.
+Domain table (prio 50) is checked first — allows pinpoint routing of individual domains over subnets.
 
-Подробнее о несовместимости fwmark: [keenetic-fwmark-analysis.md](../docs/knowledge/keenetic-fwmark-analysis.md)
+The project intentionally avoids iptables mangle/MARK as they conflict with per-device routing in Keenetic NDM.
 
 ## Flows
 
 ### Boot flow (`S99geo-split start`)
 
-Последовательное выполнение (cold start: sequential во избежание конфликтов temp-файлов на роутерах с малым объёмом RAM):
+Sequential execution (cold start: sequential to avoid temp-file conflicts on routers with limited RAM):
 
 ```
-1. update-subnets.sh  — проверяет кэш, скачивает если stale, заполняет subnet table
-2. update-domains.sh  — проверяет кэш, резолвит если stale, заполняет domain table
-3. attach-rules.sh    — подключает ip rules для всех iface из ROUTE_IN
+1. update-subnets.sh  — checks cache, downloads if stale, populates subnet table
+2. update-domains.sh  — checks cache, resolves if stale, populates domain table
+3. attach-rules.sh    — attaches ip rules for all ifaces from ROUTE_IN
 ```
 
-### Cron flow (`S99geo-split refresh`, каждые 15 мин)
+### Cron flow (`S99geo-split refresh`, every 15 min)
 
 ```
-update-subnets.sh & update-domains.sh  (параллельно)
+update-subnets.sh & update-domains.sh  (parallel)
 ```
 
-Оба скрипта проверяют свежесть кэша (`MAX_CACHE_AGE`, `DOMAINS_UPDATE_INTERVAL`) — реальная загрузка происходит только если кэш устарел. Routing tables перезаполняются при необходимости. Команда `refresh` не затрагивает ip rules.
+Both scripts check cache freshness (`MAX_CACHE_AGE`, `DOMAINS_UPDATE_INTERVAL`) — actual downloading only happens if cache is stale. Routing tables are repopulated as needed. The `refresh` command does not touch ip rules.
 
-### NDM hook flow (интерфейс up/down)
+### NDM hook flow (interface up/down)
 
 ```
 Interface UP:
   sleep 2 (debounce)
-  → update-subnets.sh --refill & update-domains.sh --refill  (параллельно)
-  → attach-rules.sh                                          (фоново)
+  → update-subnets.sh --refill & update-domains.sh --refill  (parallel)
+  → attach-rules.sh                                          (background)
 
 Interface DOWN:
   → detach-rules.sh
 ```
 
-Hook слушает интерфейс в зависимости от `ROUTE_OUT`:
-- `"auto"` → интерфейс с default route
-- Явное имя → только указанный интерфейс
+Hook listens to interface depending on `ROUTE_OUT`:
+- `"auto"` → interface with default route
+- Explicit name → only the specified interface
 
-## Команды управления
+## Management commands
 
 ```sh
-/opt/etc/init.d/S99geo-split <команда>
+/opt/etc/init.d/S99geo-split <command>
 ```
 
-| Команда | Что делает | Режим |
-|---------|-----------|-------|
-| `start` | `update-subnets.sh` → `update-domains.sh` → `attach-rules.sh` | Последовательно |
-| `stop` | `detach-rules.sh` — удаляет ip rules + flush route tables | Синхронно |
-| `restart` | `stop` → `sleep 1` → `start` | Синхронно |
-| `status` | `status.sh` — диагностика | Синхронно |
-| `refresh` | `update-subnets.sh` & `update-domains.sh` (проверяют свежесть) | Параллельно |
-| `update` | `update-subnets.sh --force` & `update-domains.sh --force` | Параллельно |
-| `update-subnets` | `update-subnets.sh --force` | Синхронно |
-| `update-domains` | `update-domains.sh --force` | Синхронно |
+| Command | Action | Mode |
+|---------|--------|------|
+| `start` | `update-subnets.sh` → `update-domains.sh` → `attach-rules.sh` | Sequential |
+| `stop` | `detach-rules.sh` — removes ip rules + flushes route tables | Synchronous |
+| `restart` | `stop` → `sleep 1` → `start` | Synchronous |
+| `status` | `status.sh` — diagnostics | Synchronous |
+| `refresh` | `update-subnets.sh` & `update-domains.sh` (check freshness) | Parallel |
+| `update` | `update-subnets.sh --force` & `update-domains.sh --force` | Parallel |
+| `update-subnets` | `update-subnets.sh --force` | Synchronous |
+| `update-domains` | `update-domains.sh --force` | Synchronous |
 
-### Диагностика маршрутов
+### Route diagnostics
 
 ```sh
-# Проверить через какой интерфейс пойдёт трафик
+# Check which interface traffic will use
 geo-split/scripts/route-check.sh ozon.ru
 
-# Проверить от лица конкретного клиента (MAC)
+# Check from a specific client's perspective (MAC)
 geo-split/scripts/route-check.sh github.com --from AA:BB:CC:DD:EE:FF
 
-# JSON для автоматизации / WebUI
+# JSON for automation / WebUI
 geo-split/scripts/route-check.sh --json ozon.ru
 ```
 
-Вердикты: `⇒` geo-split | `⊙` tunnel | `⚠` mixed (CDN) | `→` default
+Verdicts: `⇒` geo-split | `⊙` tunnel | `⚠` mixed (CDN) | `→` default
 
-## Настройка
+## Configuration
 
-Конфигурация: `config/config.conf`
+Config file: `config/config.conf`
 
-### Полная таблица параметров
+### Full parameter table
 
-| Параметр | По умолчанию | Описание |
-|----------|-------------|----------|
-| `GEO_ZONE` | `"eas"` | Гео-зона: ISO 3166-1 код (ru, cn) или союз (eas, cis, brics). См. `lib/geo.sh` |
-| `ROUTE_OUT` | `"auto"` | Целевой исходящий интерфейс. `auto` = ISP из default route |
-| `ROUTE_GW` | `"auto"` | Шлюз: `auto` = detect, `none` = dev-only, или явный IP |
-| `ROUTE_IN` | `"br0"` | Входные LAN-интерфейсы (через пробел) |
-| `DOMAIN_ROUTE_TABLE` | `"1000"` | Routing table для доменов (/32 host routes) |
-| `DOMAIN_RULE_PRIORITY` | `"50"` | Priority ip rule для domain table |
-| `SUBNET_ROUTE_TABLE` | `"1001"` | Routing table для GeoIP подсетей (CIDR) |
-| `SUBNET_RULE_PRIORITY` | `"51"` | Priority ip rule для subnet table |
-| `SUBNET_URL_PATTERN` | `ipdeny.com/…/{cc}.zone` | URL-шаблон для скачивания подсетей (`{cc}` = код страны) |
-| `SUBNET_URL` | `""` | Переопределение URL (legacy): игнорирует GEO_ZONE |
-| `SUBNET_LOADER` | `"cidr-plain"` | Загрузчик из каталога `loaders/` |
-| `SUBNET_AGGREGATE` | `1` | Агрегация CIDR (1 = включена, требует `aggregate`) |
-| `MAX_CACHE_AGE` | `604800` | Макс. возраст кэша подсетей, секунды (7 дней) |
-| `DOWNLOAD_RETRIES` | `2` | Попытки скачивания на каждый интерфейс |
-| `DOWNLOAD_RETRY_DELAY` | `3` | Задержка между попытками (секунды) |
-| `DOWNLOAD_INTERFACES` | `"default nwg* ovpn* l2tp* pptp* sstp* ipsec*"` | Интерфейсы для скачивания (glob-паттерны), failover по списку |
-| `DNS_FULL_RESOLVER_PORT` | `""` | Порт DNS-резолвера (пусто = автоопределение: SmartDNS 6153 → 6053 → system) |
-| `DOMAINS_LIST_FILE` | `geo-split-data/lists/domains.txt` | Файл списка доменов (поддержка `@include`) |
-| `DOMAINS_UPDATE_INTERVAL` | `3600` | Интервал обновления доменов, секунды (1 час; `0` = отключить) |
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `GEO_ZONE` | `"eas"` | Geo-zone: ISO 3166-1 code (ru, cn) or alliance (eas, cis, brics). See `lib/geo.sh` |
+| `ROUTE_OUT` | `"auto"` | Target outgoing interface. `auto` = ISP from default route |
+| `ROUTE_GW` | `"auto"` | Gateway: `auto` = detect, `none` = dev-only, or explicit IP |
+| `ROUTE_IN` | `"br0"` | Inbound LAN interfaces (space-separated) |
+| `DOMAIN_ROUTE_TABLE` | `"1000"` | Routing table for domains (/32 host routes) |
+| `DOMAIN_RULE_PRIORITY` | `"50"` | ip rule priority for domain table |
+| `SUBNET_ROUTE_TABLE` | `"1001"` | Routing table for GeoIP subnets (CIDR) |
+| `SUBNET_RULE_PRIORITY` | `"51"` | ip rule priority for subnet table |
+| `SUBNET_URL_PATTERN` | `ipdeny.com/…/{cc}.zone` | URL pattern for subnet download (`{cc}` = country code) |
+| `SUBNET_URL` | `""` | URL override (legacy): ignores GEO_ZONE |
+| `SUBNET_LOADER` | `"cidr-plain"` | Loader from `loaders/` directory |
+| `SUBNET_AGGREGATE` | `1` | CIDR aggregation (1 = enabled, requires `aggregate`) |
+| `MAX_CACHE_AGE` | `604800` | Max subnet cache age, seconds (7 days) |
+| `DOWNLOAD_RETRIES` | `2` | Download attempts per interface |
+| `DOWNLOAD_RETRY_DELAY` | `3` | Delay between attempts (seconds) |
+| `DOWNLOAD_INTERFACES` | `"default *"` | Download interfaces (glob patterns), failover by list |
+| `DNS_FULL_RESOLVER_PORT` | `""` | DNS resolver port (empty = auto-detect: SmartDNS 6153 → 6053 → system) |
+| `DOMAINS_LIST_FILE` | `geo-split-data/lists/domains.txt` | Domain list file (`@include` supported) |
+| `DOMAINS_UPDATE_INTERVAL` | `3600` | Domain update interval, seconds (1 hour; `0` = disable) |
 
-### Примеры конфигурации
+### Configuration examples
 
-**ЕАЭС → ISP (по умолчанию, конфиг не нужен):**
+**EAEU → ISP (default, no config needed):**
 ```sh
 GEO_ZONE="eas"
 ROUTE_OUT="auto"
 ```
 
-**Только Россия:**
+**Russia only:**
 ```sh
 GEO_ZONE="ru"
 ```
 
-**СНГ через VPN (доступ к RU-сервисам из-за рубежа):**
+**CIS via VPN (access to RU services from abroad):**
 ```sh
 GEO_ZONE="cis"
 ROUTE_OUT="nwg0"
 ```
 
-**GEO-трафик через конкретный ISP-интерфейс:**
+**GEO traffic through a specific ISP interface:**
 ```sh
 ROUTE_OUT="lte_br0"
 ```
 
-**Несколько LAN-интерфейсов (домашняя + гостевая сеть):**
+**Multiple LAN interfaces (home + guest network):**
 ```sh
 ROUTE_IN="br0 br1"
 ```
 
-**Отключить резолвинг доменов:**
+**Disable domain resolution:**
 ```sh
 DOMAINS_UPDATE_INTERVAL=0
 ```
 
-## Файлы
+## Files
 
-| Файл | Назначение |
-|------|-----------|
-| `scripts/attach-rules.sh` | Подключить ip rules для всех iface из `ROUTE_IN` (domain prio 50, subnet prio 51) |
-| `scripts/detach-rules.sh` | Отключить ip rules + flush route tables |
-| `scripts/update-subnets.sh` | Скачать GeoIP подсети через loader + заполнить subnet table |
-| `scripts/update-domains.sh` | DNS-резолвинг доменов (dig → /32 host routes в domain table) |
-| `scripts/ndm-hook.sh` | NDM hook: реакция на interface up/down |
-| `scripts/status.sh` | Диагностика: режим, правила, таблицы, кэши |
-| `loaders/cidr-plain.sh` | Загрузчик: plain CIDR (по умолчанию) |
-| `loaders/ripe-json.sh` | Загрузчик: RIPE JSON API (требует `jq`) |
-| `config/config.conf` | Конфигурация (режим, интерфейсы, URL, интервалы) |
-| `rootfs/opt/etc/init.d/S99geo-split` | Init-скрипт (start/stop/restart/status/refresh/update) |
+| File | Purpose |
+|------|---------|
+| `scripts/attach-rules.sh` | Attach ip rules for all ifaces from `ROUTE_IN` (domain prio 50, subnet prio 51) |
+| `scripts/detach-rules.sh` | Detach ip rules + flush route tables |
+| `scripts/update-subnets.sh` | Download GeoIP subnets via loader + populate subnet table |
+| `scripts/update-domains.sh` | DNS resolution of domains (dig → /32 host routes in domain table) |
+| `scripts/ndm-hook.sh` | NDM hook: react to interface up/down |
+| `scripts/status.sh` | Diagnostics: mode, rules, tables, caches |
+| `loaders/cidr-plain.sh` | Loader: plain CIDR (default) |
+| `loaders/ripe-json.sh` | Loader: RIPE JSON API (requires `jq`) |
+| `config/config.conf` | Configuration (mode, interfaces, URL, intervals) |
+| `init.d/S99geo-split` | Init script (start/stop/restart/status/refresh/update) |
 
-Данные (домен-листы, geoip-зоны) вынесены в отдельный пакет [`geo-split-data`](../geo-split-data/).
+Data (domain lists, GeoIP zones) are in a separate package [`geo-split-data`](../geo-split-data/).
 
-## Загрузчики
+## Loaders
 
-Загрузчики — скрипты в каталоге `loaders/`, которые скачивают CIDR-подсети из внешнего источника и выдают их в stdout (одна подсеть на строку).
+Loaders are scripts in the `loaders/` directory that download CIDR subnets from external sources and output them to stdout (one subnet per line).
 
-| Загрузчик | Описание | Зависимости |
-|-----------|----------|-------------|
-| `cidr-plain` | Plain-текст CIDR, фильтрация IPv6. По умолчанию | `curl` |
+| Loader | Description | Dependencies |
+|--------|-------------|--------------|
+| `cidr-plain` | Plain-text CIDR, IPv6 filtering. Default | `curl` |
 | `ripe-json` | RIPE Stat JSON API | `curl`, `jq` |
 
-Выбор загрузчика в `config/config.conf`:
+Loader selection in `config/config.conf`:
 
 ```sh
 SUBNET_LOADER="cidr-plain"
 SUBNET_URL="https://raw.githubusercontent.com/herrbischoff/country-ip-blocks/master/ipv4/ru.cidr"
 ```
 
-## Диагностика (status.sh)
+## Diagnostics (status.sh)
 
 ```sh
 /opt/etc/init.d/S99geo-split status
 ```
 
-Пример вывода:
+Example output:
 
 ```
-geo-split status:
+geo-split status: ✓ Alive
   Mode:
+    Geo zone:    eas → [ru by kz am kg]
     Route in:    br0
     Route out:   auto (detect ISP)
-    Active out:  ppp0 (tables 1000,1001)
+    Active out:  apcli0 (tables 1000,1001)
+    Gateway:     192.168.1.1
 
   IP rules:
     iif br0 → table 1000 (domains) ✓
     iif br0 → table 1001 (subnets) ✓
 
   Routes:
-    Domains:     175 routes in table 1000 ✓
-    Subnets:     8768 routes in table 1001 ✓
+    Domains:     183 routes in table 1000, filled 32m 56s ago ✓
+    Subnets:     9274 routes in table 1001, filled 33m 31s ago ✓
 
   Caches:
-    Subnets:     cache 8m old (max 7d 0h) ✓
-    Domains:     180 in cache, 8m old (max 1h 0m) ✓
+    Subnets:     cache 2d 6h 51m old (max 7d 0h 0m) ✓
+    Domains:     183 in cache, 33m 11s old (max 1h 0m 0s) ✓
 
-  Domain sources: 1 domain(s) configured
+  Domain sources: 103 domain(s) configured
 
   System:
     Uptime:      2d 5h ✓
-    Cron:        1 job(s) ✓
+    Cron:        1 job(s) (shift 7m) ✓
     NDM hook:    /opt/etc/ndm/ifstatechanged.d/geo-split-hook ✓
     DL iface:    default (cached)
     DNS:         localhost:6153 (SmartDNS no-speed-check)
     Background:  idle
     Loader:      cidr-plain
-    Version:     x.y.z
+    Version:     0.16.1
 ```
 
-**Exit code:** `0` — всё в порядке, `1` — есть проблемы (✗ в выводе).
+**Exit code:** `0` — all OK, `1` — issues detected (✗ in output).
 
-## Компоненты KeeneticOS (прошивка)
+## KeeneticOS components (firmware)
 
-Для работы `geo-split` нужно, чтобы в самой прошивке Keenetic были включены базовые компоненты. Это компоненты **самой прошивки** (не Entware-пакеты) — их включают через веб-интерфейс роутера или CLI Keenetic.
+For `geo-split` to work, certain base components must be enabled in the Keenetic firmware. These are **firmware components** (not Entware packages) — enable them through the router's web UI or Keenetic CLI.
 
-### Обязательно
+### Required
 
-| Компонент | Назначение |
-|-----------|-----------|
-| **OPKG** (установка пакетов из репозитория Entware) | Без него нет `/opt`, Entware, init-скриптов `/opt/etc/init.d/`, NDM-хуков `/opt/etc/ndm/ifstatechanged.d/`. Это базовое условие запуска всего проекта. |
-| **Драйверы файловой системы** (Ext4 / ExFAT — соответственно USB-носителю) | Нужен чтобы подключить накопитель с Entware. |
+| Component | Purpose |
+|-----------|---------|
+| **OPKG** (package installation from Entware repository) | Without it there's no `/opt`, Entware, init scripts `/opt/etc/init.d/`, NDM hooks `/opt/etc/ndm/ifstatechanged.d/`. This is the basic prerequisite for the entire project. |
+| **Filesystem drivers** (Ext4 / ExFAT — matching the USB drive) | Required to mount the drive with Entware. |
 
-### НЕ требуется
+### NOT required
 
-Проект использует только policy routing (`ip rule` + отдельные таблицы маршрутизации). Поэтому **не нужно** включать:
+The project uses only policy routing (`ip rule` + separate routing tables). Therefore the following are **not needed**:
 
-- ❌ «Модули ядра подсистемы Netfilter» (iptables MARK / mangle) — архитектурное решение, подробнее см. [`docs/knowledge/keenetic-fwmark-analysis.md`](../docs/knowledge/keenetic-fwmark-analysis.md).
-- ❌ `ipset`, `nftables` — не используются.
-- ❌ «DNS-Override» / модули подмены DNS — этим занимается отдельный подпроект [`smartdns-geo-conf/`](../smartdns-geo-conf/README.md), если нужен.
+- ❌ "Netfilter subsystem kernel modules" (iptables MARK / mangle) — architectural decision: project uses a route-based approach without fwmark.
+- ❌ `ipset`, `nftables` — not used.
+- ❌ "DNS-Override" / DNS substitution modules — handled by the separate [`smartdns-geo-conf/`](../smartdns-geo-conf/README.md) subproject if needed.
 
-### Как включить компоненты
+### How to enable components
 
-**Через веб-интерфейс:**
-1. Открыть *Общие настройки → Изменить набор компонентов* (в разных версиях прошивки может называться *Управление → Параметры системы → Обновление компонентов*).
-2. В разделе *«Системные»* / *«Прочие»* включить **OPKG** (часто называется «Поддержка пакетов OPKG»).
-3. Убедиться, что включён драйвер ФС того типа, что у USB-накопителя (Ext4 или ExFAT).
-4. Применить изменения → роутер обновит прошивку и перезагрузится.
+**Via web interface:**
+1. Open *General Settings → Modify component set* (in different firmware versions may be called *Management → System Parameters → Component Update*).
+2. In the *"System"* / *"Other"* section enable **OPKG** (often called "OPKG package support").
+3. Ensure the filesystem driver matching your USB drive type (Ext4 or ExFAT) is enabled.
+4. Apply changes → router will update firmware and reboot.
 
-**Через CLI Keenetic** (telnet/ssh на сам роутер, не в Entware):
+**Via Keenetic CLI** (telnet/ssh to the router itself, not Entware):
 ```
 (config)> components install opkg
 (config)> system configuration save
 ```
 
-После этого подключите USB-накопитель с Ext4 и установите Entware по [официальной инструкции Keenetic](https://help.keenetic.com/hc/ru/articles/360021214160).
+After that, connect a USB drive with Ext4 and install Entware following the [official Keenetic instructions](https://help.keenetic.com/hc/ru/articles/360021214160).
 
-## Зависимости
+## Dependencies
 
-| Пакет | Тип | Назначение |
-|-------|-----|-----------|
-| `keenetic-entware-extras` | Depends | Базовый пакет (общие библиотеки) |
-| `geo-split-data` | Depends | Списки доменов и GeoIP-зоны |
+| Package | Type | Purpose |
+|---------|------|---------|
+| `keenetic-entware-extras` | Depends | Base package (shared libraries) |
+| `geo-split-data` | Depends | Domain lists and GeoIP zones |
 | `ip-full` | Depends | `ip rule`, `ip route`, `ip -batch` |
-| `curl` | Depends | Скачивание подсетей |
-| `bind-dig` | Depends | DNS-резолвинг доменов |
-| `aggregate` | Depends | Агрегация CIDR-подсетей |
-| `jq` | Recommends | Для загрузчика `ripe-json` |
+| `curl` | Depends | Subnet download |
+| `bind-dig` | Depends | DNS resolution of domains |
+| `aggregate` | Depends | CIDR subnet aggregation |
+| `jq` | Recommends | For `ripe-json` loader |
 
-## Для разработчиков
+## For developers
 
-Деплой на роутер (без .ipk):
+Deploy to router (without .ipk):
 
 ```sh
 scp -O -r geo-split/ root@<router>:/opt/keenetic-entware-extras/geo-split/

@@ -1,124 +1,125 @@
 # smartdns-geo-conf
 
-> 📖 **[Руководство пользователя](docs/user-manual.ru.md)** — пошаговая установка, настройка, troubleshooting.
+> 📖 **[User Manual (RU)](docs/user-manual.ru.md)** — step-by-step installation, configuration, troubleshooting.
 
-SmartDNS split-DNS конфигурация с настраиваемыми гео-зонами на Keenetic/Entware.
+SmartDNS split-DNS configuration with configurable geo-zones on Keenetic/Entware.
 
-## Что это
+## What is this
 
-Split DNS: разделение DNS-запросов по гео-зонам.
+Split DNS: routing DNS queries by geo-zones.
 
-- **Зоны** (настраиваемые: RU, ЕАЭС, СНГ, BRICS, EU…) → региональные DNS (Yandex DoT, AdGuard DoT)
-- **Всё остальное** → зарубежные DNS (Google DoH, Cloudflare DoH)
-- **VPN-bypass** — опциональная привязка DNS-запросов к VPN-интерфейсам для обхода MITM
+- **Zones** (configurable: RU, EAEU, CIS, BRICS, EU…) → regional DNS (Yandex DoT, AdGuard DoT)
+- **Everything else** → international DNS (Google DoH, Cloudflare DoH)
+- **VPN-bypass** — optional binding of DNS queries to VPN interfaces to bypass MITM
 
-**Зачем:**
-- Скорость для доменов в зоне — ближайшие CDN-узлы через региональные DNS
-- Обход DNS-манипуляций для зарубежных доменов — DoH через HTTPS/443
-- Гибкость — любая комбинация стран или гео-союзов
+**Why:**
+- Speed for in-zone domains — nearest CDN nodes via regional DNS
+- Bypass DNS manipulation for foreign domains — DoH via HTTPS/443
+- Flexibility — any combination of countries or geo-alliances
 
-## Требования
+## Requirements
 
-- Keenetic с Entware
-- `opkg install smartdns` (устанавливается автоматически как зависимость)
-- `opkg install ca-certificates` (устанавливается автоматически как зависимость)
+- Keenetic with Entware
+- `opkg install smartdns` (installed automatically as dependency)
+- `opkg install ca-certificates` (installed automatically as dependency)
 
-## Установка
+## Installation
 
-### Через .ipk (рекомендуется)
+### Via .ipk (recommended)
 
 ```sh
-# Скопировать на роутер
+# Copy to router
 scp -O smartdns-geo-conf_<ver>_all.ipk root@<router-ip>:/tmp/
 
-# Установить
+# Install
 opkg install /tmp/smartdns-geo-conf_<ver>_all.ipk
 ```
 
-### Из репозитория (для разработчиков)
+### From repository (for developers)
 
 ```sh
 ./scripts/build-ipk.sh smartdns-geo-conf
-# Результат: dist/smartdns-geo-conf_<ver>_all.ipk
+# Result: dist/smartdns-geo-conf_<ver>_all.ipk
 ```
 
-## Направить DNS-трафик на SmartDNS
+## Direct DNS traffic to SmartDNS
 
-После установки нужно направить DNS-запросы клиентов на SmartDNS. Два варианта:
+After installation, DNS queries from clients need to be directed to SmartDNS. Two options:
 
-### Вариант A: smartdns-redirect (рекомендуется)
+### Option A: smartdns-redirect (recommended)
 
-Установить пакет [`smartdns-redirect`](../smartdns-redirect/) — он автоматически перехватывает DNS-запросы с LAN через iptables DNAT. Изменение настроек Keenetic (DNS, DoT/DoH) **не требуется**.
+Install the [`smartdns-redirect`](../smartdns-redirect/) package — it automatically intercepts DNS queries from LAN via iptables DNAT. Changes to Keenetic settings (DNS, DoT/DoH) are **not required**.
 
 ```sh
 opkg install /tmp/smartdns-redirect_<ver>_all.ipk
 ```
 
-### Вариант B: ручная настройка Keenetic DNS
+### Option B: manual Keenetic DNS setup
 
-Если не хотите DNAT-перехват:
+If you don't want DNAT interception:
 
-> ⚠️ **Важно:** Если в Keenetic настроены DoT/DoH серверы (dns-proxy tls/https) — ndnproxy будет использовать их и **игнорировать** plain DNS, включая SmartDNS. Сначала удалите все DoT/DoH.
+> ⚠️ **Important:** If Keenetic has DoT/DoH servers configured (dns-proxy tls/https) — ndnproxy will use them and **ignore** plain DNS, including SmartDNS. Remove all DoT/DoH first.
 
 ```sh
-# 1. Удалить все DoT/DoH серверы (обязательно при варианте B!)
+# 1. Remove all DoT/DoH servers (required for option B!)
 ndmc -c 'no dns-proxy tls upstream 1.1.1.1'
 ndmc -c 'no dns-proxy https upstream https://1.1.1.1/dns-query'
-# ... (удалить все свои DoT/DoH записи)
+# ... (remove all your DoT/DoH entries)
 
-# 2. Добавить SmartDNS как DNS-сервер
-ndmc -c 'ip name-server <IP роутера>:6053'
+# 2. Add SmartDNS as DNS server
+ndmc -c 'ip name-server <router-IP>:6053'
 
-# 3. Сохранить
+# 3. Save
 ndmc -c 'system configuration save'
 ```
 
-**Или через веб-интерфейс:** *Интернет-фильтры → DNS* → убрать все DoT/DoH серверы, добавить `<IP роутера>:6053`.
+**Or via web interface:** *Internet Filters → DNS* → remove all DoT/DoH servers, add `<router-IP>:6053`.
 
-## Конфигурация зон
+## Zone configuration
 
-Файл: `config/config.conf`
+File: `config/config.conf`
 
 ```sh
-# Зона — одна страна или гео-союз
+# Zone — single country or geo-alliance
 DNS_ZONE="eas"
 
-# International DNS провайдеры (space-separated)
+# International DNS providers (space-separated)
 OTHER_DNS_PROVIDER="google cloudflare"
 
-# Zone DNS провайдеры (space-separated)
+# Zone DNS providers (space-separated)
+# Default: "yandex alidns system" (see defaults.conf)
 ZONE_DNS_PROVIDER="yandex adguard"
 
-# VPN-интерфейсы для зарубежного DNS (обход MITM)
+# VPN interfaces for international DNS (MITM bypass)
 OTHER_DNS_INTERFACES=""
 
-# VPN-интерфейс для DNS зоны (обычно не нужен)
+# VPN interface for zone DNS (usually not needed)
 ZONE_DNS_INTERFACE=""
 ```
 
-### Доступные зоны
+### Available zones
 
-| Значение | Описание | Страны |
-|----------|----------|--------|
-| `ru` | Россия | .ru, .рф, .su |
-| `by` | Беларусь | .by |
-| `kz` | Казахстан | .kz |
-| `am` | Армения | .am |
-| `kg` | Кыргызстан | .kg |
-| `eas` | ЕАЭС | ru+by+kz+am+kg |
-| `cis` | СНГ | ru+by+kz+am+kg+uz+tj+md+az |
+| Value | Description | Countries |
+|-------|-------------|-----------|
+| `ru` | Russia | .ru, .рф, .su |
+| `by` | Belarus | .by |
+| `kz` | Kazakhstan | .kz |
+| `am` | Armenia | .am |
+| `kg` | Kyrgyzstan | .kg |
+| `eas` | EAEU | ru+by+kz+am+kg |
+| `cis` | CIS | ru+by+kz+am+kg+uz+tj+md+az |
 | `brics` | BRICS+ | ru+br+in+cn+za+eg+et+ae+sa+ir |
-| `sco` | ШОС | ru+cn+in+kz+kg+pk+tj+uz+ir+by |
-| ... | [Полный список →](../lib/geo.sh) | 40+ союзов |
+| `sco` | SCO | ru+cn+in+kz+kg+pk+tj+uz+ir+by |
+| ... | [Full list →](../lib/geo.sh) | 40+ alliances |
 
-### DNS-провайдеры
+### DNS providers
 
-Провайдеры настраиваются через `OTHER_DNS_PROVIDER` (international) и `ZONE_DNS_PROVIDER` (zone/regional).
+Providers are configured via `OTHER_DNS_PROVIDER` (international) and `ZONE_DNS_PROVIDER` (zone/regional).
 
 **International** (`OTHER_DNS_PROVIDER`):
 
-| Значение | Провайдер | Протокол |
-|----------|-----------|----------|
+| Value | Provider | Protocol |
+|-------|----------|----------|
 | `system` | System (Keenetic) | UDP |
 | `google` | Google Public DNS | DoH |
 | `cloudflare` | Cloudflare | DoH |
@@ -131,8 +132,8 @@ ZONE_DNS_INTERFACE=""
 
 **Zone/Regional** (`ZONE_DNS_PROVIDER`):
 
-| Значение | Провайдер | Протокол | Регион |
-|----------|-----------|----------|--------|
+| Value | Provider | Protocol | Region |
+|-------|----------|----------|--------|
 | `system` | System (Keenetic) | UDP | — |
 | `yandex` | Yandex DNS | DoT+UDP | RU/CIS |
 | `yandex_safe` | Yandex Safe | DoT+UDP | RU/CIS |
@@ -142,10 +143,10 @@ ZONE_DNS_INTERFACE=""
 | `alidns` | AliDNS | DoT+UDP | China |
 | `tencent` | Tencent DNSPod | DoT+UDP | China |
 
-### Свои DNS-серверы
+### Custom DNS servers
 
-Файл `config/dns-providers-custom.conf` позволяет добавить произвольные DNS-серверы.
-Не перезаписывается при обновлении пакета. Формат аналогичен `dns-providers.conf`:
+The file `config/dns-providers-custom.conf` allows adding custom DNS servers.
+Not overwritten during package update. Format is the same as `dns-providers.conf`:
 
 ```sh
 # Plain UDP
@@ -154,97 +155,97 @@ OTHER_mydns_PROTO="udp"
 OTHER_mydns_IP1="1.2.3.4"
 OTHER_mydns_IP2=""
 
-# Затем в config.conf:
+# Then in config.conf:
 OTHER_DNS_PROVIDER="google mydns"
 ```
 
-Поддерживаются протоколы: `udp`, `dot` (DoT), `doh` (DoH). Подробнее — в [user-manual.ru.md](docs/user-manual.ru.md).
+Supported protocols: `udp`, `dot` (DoT), `doh` (DoH). More details — in [user-manual.ru.md](docs/user-manual.ru.md).
 
-> Список провайдеров кешируется WebUI на 1 час. Для немедленного обновления:
+> Provider list is cached by WebUI for 1 hour. For immediate refresh:
 > `/opt/etc/init.d/S80nginx-webui restart`
 
-### Применение изменений
+### Applying changes
 
 ```sh
 /opt/etc/init.d/S37smartdns-conf restart
 ```
 
-### Примеры конфигурации
+### Configuration examples
 
-**ЕАЭС (по умолчанию):**
+**EAEU (default):**
 ```sh
 DNS_ZONE="eas"
 OTHER_DNS_PROVIDER="google cloudflare"
 ZONE_DNS_PROVIDER="yandex adguard"
 ```
 
-**Только Россия + Quad9:**
+**Russia only + Quad9:**
 ```sh
 DNS_ZONE="ru"
 OTHER_DNS_PROVIDER="quad9"
 ZONE_DNS_PROVIDER="yandex"
 ```
 
-**Китай (AliDNS + Tencent):**
+**China (AliDNS + Tencent):**
 ```sh
 DNS_ZONE="cn"
 ZONE_DNS_PROVIDER="alidns tencent"
 ```
 
-**International DNS через VPN (обход MITM):**
+**International DNS via VPN (MITM bypass):**
 ```sh
 OTHER_DNS_INTERFACES="nwg3 nwg4"
 ```
 
-## Управление
+## Management
 
 ```sh
-# Включить split-DNS
+# Enable split-DNS
 /opt/etc/init.d/S37smartdns-conf enable
 
-# Выключить (все запросы → Google/Cloudflare)
+# Disable (all queries → Google/Cloudflare)
 /opt/etc/init.d/S37smartdns-conf disable
 
-# Статус
+# Status
 /opt/etc/init.d/S37smartdns-conf status
 
-# Перегенерировать конфиги + перезапустить SmartDNS
+# Regenerate configs + restart SmartDNS
 /opt/etc/init.d/S37smartdns-conf restart
 
-# Диагностика
+# Diagnostics
 /opt/keenetic-entware-extras/smartdns-geo-conf/scripts/status.sh
 ```
 
-## Порты
+## Ports
 
-| Порт | Назначение |
-|------|-----------|
-| 6053 | Основной DNS (все запросы) |
-| 6153 | geo-split (все IP без speed-check) |
+| Port | Purpose |
+|------|---------|
+| 6053 | Primary DNS (all queries) |
+| 6153 | geo-split (all IPs, no speed-check) |
 
-## Структура
+## Structure
 
 ```
 smartdns-geo-conf/
 ├── config/
-│   ├── config.conf            # 🔧 пользовательская настройка
-│   ├── defaults.conf          # значения по умолчанию
-│   ├── dns-providers.conf     # каталог DNS-провайдеров (15 шт)
-│   ├── zone-routing-rules.conf # IDN TLDs + extra CDN-домены (80+ стран)
-│   ├── test-domains.conf      # тестовые домены для status.sh
-│   ├── smartdns.conf          # шаблон split-DNS режима
-│   └── smartdns-default.conf  # шаблон default режима
+│   ├── config.conf            # 🔧 user configuration
+│   ├── defaults.conf          # default values
+│   ├── dns-providers.conf     # DNS provider catalog (15 providers)
+│   ├── zone-routing-rules.conf # IDN TLDs + extra CDN domains (80+ countries)
+│   ├── test-domains.conf      # test domains for status.sh
+│   ├── smartdns.conf          # split-DNS mode template
+│   └── smartdns-default.conf  # default mode template
 ├── init.d/
-│   └── S37smartdns-conf       # init-скрипт (enable/disable/restart)
+│   └── S37smartdns-conf       # init script (enable/disable/restart)
 ├── scripts/
-│   ├── generate-conf.sh       # генератор динамических конфигов
-│   ├── status.sh              # диагностика
-│   └── toggle.sh              # deprecated → S37
+│   ├── generate-conf.sh       # dynamic config generator
+│   ├── status.sh              # diagnostics
+│   └── toggle.sh              # enable/disable helper (legacy, used by API)
 └── docs/
     └── user-manual.ru.md
 ```
 
-## Добавление домена в зону
+## Adding a domain to a zone
 
 To add extra domains to a zone's DNS routing (e.g. for CDN optimization):
 

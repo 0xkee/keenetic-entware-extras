@@ -243,18 +243,18 @@ function _buildRouteSummary(data) {
     }
 
     if (data.verdict === 'mixed' && data.verdict_devs && data.verdict_devs.length > 0) {
-        parts.push(data.verdict_devs.map(function(d) { return _ifaceLabel(d); }).join(', '));
+        parts.push(data.verdict_devs.map(function(d) { return EW.ifaceLabelShort(d); }).join(', '));
     } else {
         var route = (data.routes && data.routes[0]) ? data.routes[0] : null;
         if (route) {
             var routePrefix = (data.verdict === 'geo-split') ? 'geo ' : ((data.verdict === 'tunnel') ? 'system ' : '');
             var tableInfo = route.match_type ? routePrefix + route.match_type + ' (table ' + (route.table || 'main') + ')' : 'table ' + (route.table || 'main');
             parts.push(tableInfo);
-            parts.push(_ifaceLabel(route.dev || '?') + (route.via ? ' via ' + route.via : ''));
+            parts.push(EW.ifaceLabelShort(route.dev || '?') + (route.via ? ' via ' + route.via : ''));
         } else {
             var def = data.default_route || {};
             parts.push('main table');
-            parts.push(_ifaceLabel(def.dev || '?') + (def.via ? ' via ' + def.via : ''));
+            parts.push(EW.ifaceLabelShort(def.dev || '?') + (def.via ? ' via ' + def.via : ''));
         }
     }
 
@@ -322,9 +322,9 @@ function _buildRouteDetails(data) {
     // DNS section
     if (data.dns) {
         rows.push('<tr><th colspan="2">DNS</th></tr>');
-        if (data.dns.resolver) rows.push('<tr><td>Resolver</td><td>' + _esc(data.dns.resolver) + '</td></tr>');
-        if (data.dns.group) rows.push('<tr><td>Group</td><td>' + _esc(data.dns.group) + '</td></tr>');
-        if (data.dns.ips) rows.push('<tr><td>IPs</td><td>' + _multiLine(data.dns.ips.map(_esc)) + '</td></tr>');
+        if (data.dns.resolver) rows.push('<tr><td>Resolver</td><td>' + EW.escapeHtml(data.dns.resolver) + '</td></tr>');
+        if (data.dns.group) rows.push('<tr><td>Group</td><td>' + EW.escapeHtml(data.dns.group) + '</td></tr>');
+        if (data.dns.ips) rows.push('<tr><td>IPs</td><td>' + _multiLine(data.dns.ips.map(EW.escapeHtml)) + '</td></tr>');
         if (data.dns.time_ms !== undefined) rows.push('<tr><td>Time</td><td>' + data.dns.time_ms + 'ms</td></tr>');
     }
 
@@ -333,19 +333,19 @@ function _buildRouteDetails(data) {
         rows.push('<tr><th colspan="2">Routes per IP (' + data.routes.length + ')</th></tr>');
         for (var i = 0; i < data.routes.length; i++) {
             var r = data.routes[i];
-            var verdictBadge = r.verdict ? ' <span class="rc-verdict-badge rc-verdict-badge--' + _esc(r.verdict) + '">' + _esc(r.verdict) + '</span>' : '';
-            var devLabel = r.dev ? _ifaceLabel(r.dev) : '?';
+            var verdictBadge = r.verdict ? ' <span class="rc-verdict-badge rc-verdict-badge--' + EW.escapeHtml(r.verdict) + '">' + EW.escapeHtml(r.verdict) + '</span>' : '';
+            var devLabel = r.dev ? EW.ifaceLabelShort(r.dev) : '?';
             var via = r.via ? ' via ' + r.via : '';
             var prefix = (r.match_prefix && r.match_prefix !== 'default') ? ' [' + r.match_prefix + ']' : '';
-            rows.push('<tr class="rc-route-row rc-route-row--' + _esc(r.verdict || 'default') + '"><td>' + _esc(r.ip) + '</td><td>' + _esc(devLabel) + via + prefix + verdictBadge + '</td></tr>');
+            rows.push('<tr class="rc-route-row rc-route-row--' + EW.escapeHtml(r.verdict || 'default') + '"><td>' + EW.escapeHtml(r.ip) + '</td><td>' + EW.escapeHtml(devLabel) + via + prefix + verdictBadge + '</td></tr>');
         }
     }
 
     // Default route
     if (data.default_route) {
         rows.push('<tr><th colspan="2">Default Route</th></tr>');
-        if (data.default_route.dev) rows.push('<tr><td>Device</td><td>' + _esc(_ifaceLabel(data.default_route.dev)) + ' (' + _esc(data.default_route.dev) + ')</td></tr>');
-        if (data.default_route.via) rows.push('<tr><td>Gateway</td><td>' + _esc(data.default_route.via) + '</td></tr>');
+        if (data.default_route.dev) rows.push('<tr><td>Device</td><td>' + EW.escapeHtml(EW.ifaceLabelShort(data.default_route.dev)) + ' (' + EW.escapeHtml(data.default_route.dev) + ')</td></tr>');
+        if (data.default_route.via) rows.push('<tr><td>Gateway</td><td>' + EW.escapeHtml(data.default_route.via) + '</td></tr>');
     }
 
     if (rows.length === 0) return '';
@@ -363,21 +363,21 @@ function _buildDnsDetails(data) {
 
     if (data.zone) {
         rows.push('<tr><th colspan="2">Zone</th></tr>');
-        if (data.zone.group) rows.push('<tr><td>Group</td><td>' + _esc(data.zone.group) + '</td></tr>');
-        if (data.zone.match_rule) rows.push('<tr><td>Match rule</td><td>' + _esc(data.zone.match_rule) + '</td></tr>');
-        if (data.zone.match_type) rows.push('<tr><td>Match type</td><td>' + _esc(data.zone.match_type) + '</td></tr>');
+        if (data.zone.group) rows.push('<tr><td>Group</td><td>' + EW.escapeHtml(data.zone.group) + '</td></tr>');
+        if (data.zone.match_rule) rows.push('<tr><td>Match rule</td><td>' + EW.escapeHtml(data.zone.match_rule) + '</td></tr>');
+        if (data.zone.match_type) rows.push('<tr><td>Match type</td><td>' + EW.escapeHtml(data.zone.match_type) + '</td></tr>');
     }
 
     if (data.upstream) {
         rows.push('<tr><th colspan="2">Upstream</th></tr>');
-        if (data.upstream.providers) rows.push('<tr><td>Providers</td><td>' + _multiLine(data.upstream.providers.map(_esc)) + '</td></tr>');
+        if (data.upstream.providers) rows.push('<tr><td>Providers</td><td>' + _multiLine(data.upstream.providers.map(EW.escapeHtml)) + '</td></tr>');
         if (data.upstream.servers) {
             // Pair each server with its hostname (if available) on separate lines
             var srvLines = [];
             var hostnames = data.upstream.hostnames || [];
             for (var si = 0; si < data.upstream.servers.length; si++) {
-                var srv = _esc(data.upstream.servers[si]);
-                var hn = hostnames[si] ? _esc(hostnames[si]) : '';
+                var srv = EW.escapeHtml(data.upstream.servers[si]);
+                var hn = hostnames[si] ? EW.escapeHtml(hostnames[si]) : '';
                 srvLines.push(hn ? hn + ' (' + srv + ')' : srv);
             }
             rows.push('<tr><td>Servers</td><td>' + _multiLine(srvLines) + '</td></tr>');
@@ -388,10 +388,10 @@ function _buildDnsDetails(data) {
             var ifaces = data.upstream.interface.split(/\s+/).filter(function(s) { return s && s !== 'default'; });
             if (ifaces.length) {
                 var ifParts = ifaces.map(function(iif) {
-                    var label = _ifaceLabel(iif);
+                    var label = EW.ifaceLabelShort(iif);
                     return (label !== iif) ? label + ' (' + iif + ')' : iif;
                 });
-                rows.push('<tr><td>Interface</td><td>' + _multiLine(ifParts.map(_esc)) + '</td></tr>');
+                rows.push('<tr><td>Interface</td><td>' + _multiLine(ifParts.map(EW.escapeHtml)) + '</td></tr>');
             } else if (data.upstream.interface.indexOf('direct') >= 0) {
                 rows.push('<tr><td>Interface</td><td>direct</td></tr>');
             }
@@ -400,18 +400,13 @@ function _buildDnsDetails(data) {
 
     if (data.result) {
         rows.push('<tr><th colspan="2">Result</th></tr>');
-        if (data.result.ips) rows.push('<tr><td>IPs</td><td>' + _multiLine(data.result.ips.map(_esc)) + '</td></tr>');
+        if (data.result.ips) rows.push('<tr><td>IPs</td><td>' + _multiLine(data.result.ips.map(EW.escapeHtml)) + '</td></tr>');
         if (data.result.ttl !== undefined) rows.push('<tr><td>TTL</td><td>' + data.result.ttl + '</td></tr>');
         if (data.result.time_ms !== undefined) rows.push('<tr><td>Time</td><td>' + data.result.time_ms + 'ms</td></tr>');
     }
 
     if (rows.length === 0) return '';
     return '<table class="rc-details-table">' + rows.join('') + '</table>';
-}
-
-/** Escape HTML. */
-function _esc(str) {
-    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 /**
@@ -578,36 +573,36 @@ function _renderBatchTable(container, results, type) {
                             routeText += ' /' + pfx[1];
                         }
                     }
-                    ifaceText = _ifaceLabel(rt.dev || '?');
+                    ifaceText = EW.ifaceLabelShort(rt.dev || '?');
                     verdictText = 'geo-split';
                 } else if (data.verdict === 'tunnel') {
                     icon = '\u2299';
                     rowCls = 'rc-batch-row--tunnel';
                     var trt = (data.routes && data.routes[0]) ? data.routes[0] : {};
                     routeText = 'policy';
-                    ifaceText = _ifaceLabel(trt.dev || '?');
+                    ifaceText = EW.ifaceLabelShort(trt.dev || '?');
                     verdictText = 'tunnel';
                 } else if (data.verdict === 'mixed') {
                     icon = '\u26a0';
                     rowCls = 'rc-batch-row--mixed';
                     routeText = (data.verdict_details || []).join(', ');
-                    ifaceText = (data.verdict_devs || []).map(function(d) { return _ifaceLabel(d); }).join(', ');
+                    ifaceText = (data.verdict_devs || []).map(function(d) { return EW.ifaceLabelShort(d); }).join(', ');
                     verdictText = 'mixed';
                 } else {
                     icon = '\u2299';
                     rowCls = 'rc-batch-row--default';
                     var def = data.default_route || {};
                     routeText = 'policy';
-                    ifaceText = _ifaceLabel(def.dev || (data.routes && data.routes[0] ? data.routes[0].dev : '?'));
+                    ifaceText = EW.ifaceLabelShort(def.dev || (data.routes && data.routes[0] ? data.routes[0].dev : '?'));
                     verdictText = 'policy';
                 }
 
                 row.className += ' ' + rowCls;
                 row.innerHTML = '<td class="rc-batch-icon">' + icon + '</td>' +
-                    '<td class="rc-batch-domain">' + _esc(item.domain) + '</td>' +
-                    '<td>' + _esc(routeText) + '</td>' +
-                    '<td>' + _esc(ifaceText) + '</td>' +
-                    '<td>' + _esc(verdictText) + '</td>' +
+                    '<td class="rc-batch-domain">' + EW.escapeHtml(item.domain) + '</td>' +
+                    '<td>' + EW.escapeHtml(routeText) + '</td>' +
+                    '<td>' + EW.escapeHtml(ifaceText) + '</td>' +
+                    '<td>' + EW.escapeHtml(verdictText) + '</td>' +
                     '<td><button class="rc-batch-expand" type="button">\u25b8</button></td>';
             } else {
                 var dIcon = '\u21c4';
@@ -648,10 +643,10 @@ function _renderBatchTable(container, results, type) {
 
                 row.className += ' ' + dRowCls;
                 row.innerHTML = '<td class="rc-batch-icon">' + dIcon + '</td>' +
-                    '<td class="rc-batch-domain">' + _esc(item.domain) + '</td>' +
-                    '<td>' + _esc(zoneText) + '</td>' +
-                    '<td>' + _esc(upText) + '</td>' +
-                    '<td>' + _esc(ipText) + '</td>' +
+                    '<td class="rc-batch-domain">' + EW.escapeHtml(item.domain) + '</td>' +
+                    '<td>' + EW.escapeHtml(zoneText) + '</td>' +
+                    '<td>' + EW.escapeHtml(upText) + '</td>' +
+                    '<td>' + EW.escapeHtml(ipText) + '</td>' +
                     '<td><button class="rc-batch-expand" type="button">\u25b8</button></td>';
             }
 
@@ -801,7 +796,7 @@ function _loadInterfaces(wrapEl) {
         { value: 'br0', label: 'Home network (br0)' }
     ], 'br0');
 
-    var ifacesP = _ensureIfaceMap();
+    var ifacesP = EW.loadIfaceMap();
     var clientsP = fetch('/api/system/clients').then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
 
     Promise.all([ifacesP, clientsP]).then(function(results) {
@@ -964,46 +959,59 @@ function _renderExamples(container, examples, onCheck) {
     }
 }
 
-// ── Route Check Modal (Tool 1) ──────────────────────────────────────────────
+// ── Check Modal Factory ──────────────────────────────────────────────────────
 
 /**
- * Open the Route Check diagnostic modal.
- * Called from app.js button in geo-split card header.
+ * Common factory for Route Check / DNS Check modal.
+ * Extracts the shared DOM-creation, event-wiring, history and batch logic
+ * so that each public opener is a thin configuration wrapper.
+ *
+ * @param {Object} opts
+ * @param {string}   opts.title          - modal title
+ * @param {string}   opts.type           - 'route' or 'dns'
+ * @param {string}   opts.placeholder    - input placeholder text
+ * @param {Array}    opts.examples       - example domains array
+ * @param {string}   opts.historyKey     - localStorage history key
+ * @param {Function} [opts.preOpen]      - called before modal opens (e.g. fetch WAN paths)
+ * @param {boolean}  opts.hasIface       - whether to show interface dropdown
+ * @param {Function} opts.buildUrl       - function(domain, iface) → URL string
+ * @param {Function} opts.extractVerdict - function(data) → verdict string|null for history pill
+ * @param {Function} [opts.beforeRender] - optional function() → Promise to wait before rendering
  */
-function openRouteCheckModal() {
+function _openCheckModal(opts) {
     var batchHandle = null;
     var allResults = [];
 
-    // Fetch WAN paths (cached on server 60s, fetched once per modal open)
-    _wanPathsReady = fetch('/api/geo-split/wan-paths').then(function(r) {
-        return r.ok ? r.json() : null;
-    }).then(function(paths) {
-        if (Array.isArray(paths)) _cachedWanPaths = paths;
-    }).catch(function() { /* non-critical */ });
+    if (opts.preOpen) opts.preOpen();
 
-    _createDiagModal('\ud83d\udd0d Route Check', function(body) {
+    _createDiagModal(opts.title, function(body) {
         // Input row
         var inputRow = document.createElement('div');
         inputRow.className = 'rc-input-row';
-        inputRow.innerHTML =
-            '<input type="text" class="rc-input" placeholder="Enter domain or IP (e.g. github.com, 8.8.8.8)" autocomplete="off">' +
-            '<span class="rc-iface-label">from</span>' +
-            '<div class="rc-iface-wrap"></div>' +
-            '<button class="ndw-button ndw-button--toggle ndw-button--toggle-enabled ndw-button--small rc-check-btn" type="button">Check</button>';
+        if (opts.hasIface) {
+            inputRow.innerHTML =
+                '<input type="text" class="rc-input" placeholder="' + opts.placeholder + '" autocomplete="off">' +
+                '<span class="rc-iface-label">from</span>' +
+                '<div class="rc-iface-wrap"></div>' +
+                '<button class="ndw-button ndw-button--toggle ndw-button--toggle-enabled ndw-button--small rc-check-btn" type="button">Check</button>';
+        } else {
+            inputRow.innerHTML =
+                '<input type="text" class="rc-input rc-input--wide" placeholder="' + opts.placeholder + '" autocomplete="off">' +
+                '<button class="ndw-button ndw-button--toggle ndw-button--toggle-enabled ndw-button--small rc-check-btn" type="button">Check</button>';
+        }
         body.appendChild(inputRow);
 
         var input = inputRow.querySelector('.rc-input');
-        var ifaceWrap = inputRow.querySelector('.rc-iface-wrap');
         var checkBtn = inputRow.querySelector('.rc-check-btn');
+        var ifaceWrap = opts.hasIface ? inputRow.querySelector('.rc-iface-wrap') : null;
 
-        // Load interfaces (builds custom radio dropdown)
-        _loadInterfaces(ifaceWrap);
+        if (opts.hasIface && ifaceWrap) _loadInterfaces(ifaceWrap);
 
         // Quick examples
         var examplesRow = document.createElement('div');
         examplesRow.className = 'rc-examples';
         body.appendChild(examplesRow);
-        _renderExamples(examplesRow, ROUTE_EXAMPLES, function(domain) {
+        _renderExamples(examplesRow, opts.examples, function(domain) {
             input.value = domain;
             doCheck(domain);
         });
@@ -1013,19 +1021,17 @@ function openRouteCheckModal() {
         historyRow.className = 'rc-history';
         body.appendChild(historyRow);
 
-        // Check All button (appended to history row)
         var checkAllBtn = document.createElement('button');
         checkAllBtn.className = 'ndw-button ndw-button--toggle ndw-button--small rc-check-all-btn';
         checkAllBtn.type = 'button';
         checkAllBtn.textContent = '\u25b6\u00a0 Check All';
 
         function refreshHistory() {
-            renderHistoryPills(historyRow, ROUTE_HISTORY_KEY, function(domain) {
+            renderHistoryPills(historyRow, opts.historyKey, function(domain) {
                 input.value = domain;
                 doCheck(domain);
             });
-            // Re-append Check All btn after history
-            var history = getHistory(ROUTE_HISTORY_KEY);
+            var history = getHistory(opts.historyKey);
             if (history.length > 0) {
                 historyRow.appendChild(checkAllBtn);
             }
@@ -1046,15 +1052,14 @@ function openRouteCheckModal() {
         function doCheck(domain) {
             var d = domain.trim().toLowerCase();
             if (!d) return;
-            saveToHistory(ROUTE_HISTORY_KEY, d, null);
+            saveToHistory(opts.historyKey, d, null);
             refreshHistory();
             input.value = '';
             progressEl.innerHTML = '';
 
-            var iface = _getSelectedIface(ifaceWrap);
-            var url = _buildRouteCheckUrl(d, iface);
+            var iface = (opts.hasIface && ifaceWrap) ? _getSelectedIface(ifaceWrap) : '';
+            var url = opts.buildUrl(d, iface);
 
-            // Show spinner
             var loadingDiv = document.createElement('div');
             loadingDiv.className = 'rc-loading';
             loadingDiv.innerHTML = '<div class="ew-spinner"></div>';
@@ -1067,44 +1072,45 @@ function openRouteCheckModal() {
                     return resp.json();
                 })
                 .then(function(data) {
-                    // Ensure WAN paths are loaded before rendering diagram
-                    return (_wanPathsReady || Promise.resolve()).then(function() {
+                    var render = function() {
                         allResults.unshift({ domain: d, data: data });
-                        // Update history verdict after result
-                        if (data && data.verdict) {
-                            saveToHistory(ROUTE_HISTORY_KEY, d, data.verdict);
+                        var verdict = opts.extractVerdict(data);
+                        if (verdict) {
+                            saveToHistory(opts.historyKey, d, verdict);
                             refreshHistory();
                         }
-                        _renderResults(resultsEl, allResults, 'route');
-                    });
+                        _renderResults(resultsEl, allResults, opts.type);
+                    };
+                    if (opts.beforeRender) {
+                        return (opts.beforeRender() || Promise.resolve()).then(render);
+                    }
+                    render();
                 })
                 .catch(function(err) {
                     allResults.unshift({ domain: d, data: { ok: false, error: err.message } });
-                    _renderResults(resultsEl, allResults, 'route');
+                    _renderResults(resultsEl, allResults, opts.type);
                 });
         }
 
         // ── Check All ──
         checkAllBtn.addEventListener('click', function() {
-            var history = getHistoryDomains(ROUTE_HISTORY_KEY);
+            var history = getHistoryDomains(opts.historyKey);
             if (history.length === 0) return;
             allResults = [];
             resultsEl.innerHTML = '';
-            var iface = _getSelectedIface(ifaceWrap);
+            var iface = (opts.hasIface && ifaceWrap) ? _getSelectedIface(ifaceWrap) : '';
             batchHandle = _runBatch({
                 domains: history,
-                type: 'route',
+                type: opts.type,
                 iface: iface,
                 progressEl: progressEl,
                 resultsEl: resultsEl,
                 onDone: function(results) {
                     allResults = results;
                     batchHandle = null;
-                    // Update verdicts in history from batch results
                     for (var r = 0; r < results.length; r++) {
-                        if (results[r].data && results[r].data.verdict) {
-                            saveToHistory(ROUTE_HISTORY_KEY, results[r].domain, results[r].data.verdict);
-                        }
+                        var v = opts.extractVerdict(results[r].data);
+                        if (v) saveToHistory(opts.historyKey, results[r].domain, v);
                     }
                     refreshHistory();
                 }
@@ -1112,18 +1118,40 @@ function openRouteCheckModal() {
         });
 
         // ── Event handlers ──
-        checkBtn.addEventListener('click', function() {
-            doCheck(input.value);
-        });
+        checkBtn.addEventListener('click', function() { doCheck(input.value); });
         input.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                doCheck(input.value);
-            }
+            if (e.key === 'Enter') { e.preventDefault(); doCheck(input.value); }
         });
 
         // Focus input
         setTimeout(function() { input.focus(); }, 50);
+    });
+}
+
+// ── Route Check Modal (Tool 1) ──────────────────────────────────────────────
+
+/**
+ * Open the Route Check diagnostic modal.
+ * Called from app.js button in geo-split card header.
+ */
+function openRouteCheckModal() {
+    _openCheckModal({
+        title: '\ud83d\udd0d Route Check',
+        type: 'route',
+        placeholder: 'Enter domain or IP (e.g. github.com, 8.8.8.8)',
+        examples: ROUTE_EXAMPLES,
+        historyKey: ROUTE_HISTORY_KEY,
+        hasIface: true,
+        preOpen: function() {
+            _wanPathsReady = fetch('/api/geo-split/wan-paths').then(function(r) {
+                return r.ok ? r.json() : null;
+            }).then(function(paths) {
+                if (Array.isArray(paths)) _cachedWanPaths = paths;
+            }).catch(function() {});
+        },
+        buildUrl: function(domain, iface) { return _buildRouteCheckUrl(domain, iface); },
+        extractVerdict: function(data) { return (data && data.verdict) ? data.verdict : null; },
+        beforeRender: function() { return _wanPathsReady || Promise.resolve(); }
     });
 }
 
@@ -1133,164 +1161,22 @@ function openRouteCheckModal() {
  * Open the DNS Check diagnostic modal.
  * Called from app.js button in smartdns card header.
  */
-/**
- * Ensure the global interface label map is loaded (for _ifaceLabel in details).
- * Idempotent — returns same promise if already in-flight or resolved.
- * Used by both Route Check (_loadInterfaces) and DNS Check.
- * @returns {Promise} - resolves with interface data or null
- */
-var _ifaceMapPromise = null;
-function _ensureIfaceMap() {
-    if (_ifaceMapPromise) return _ifaceMapPromise;
-    _ifaceMapPromise = fetch('/api/system/interfaces')
-        .then(function(r) { return r.ok ? r.json() : null; })
-        .then(function(data) {
-            if (data && data.interfaces) {
-                var map = {};
-                for (var i = 0; i < data.interfaces.length; i++) {
-                    var ifc = data.interfaces[i];
-                    map[ifc.id || ifc.name || ifc] = ifc.label || ifc.description || ifc.id || ifc;
-                }
-                window._ewIfaceMap = map;
-            }
-            return data;
-        }).catch(function() { return null; });
-    return _ifaceMapPromise;
-}
-
 function openDnsCheckModal() {
-    var batchHandle = null;
-    var allResults = [];
-    _ensureIfaceMap();
-
-    _createDiagModal('\ud83d\udd0d DNS Check', function(body) {
-        // Input row
-        var inputRow = document.createElement('div');
-        inputRow.className = 'rc-input-row';
-        inputRow.innerHTML =
-            '<input type="text" class="rc-input rc-input--wide" placeholder="Enter domain (e.g. github.com)" autocomplete="off">' +
-            '<button class="ndw-button ndw-button--toggle ndw-button--toggle-enabled ndw-button--small rc-check-btn" type="button">Check</button>';
-        body.appendChild(inputRow);
-
-        var input = inputRow.querySelector('.rc-input');
-        var checkBtn = inputRow.querySelector('.rc-check-btn');
-
-        // Quick examples
-        var examplesRow = document.createElement('div');
-        examplesRow.className = 'rc-examples';
-        body.appendChild(examplesRow);
-        _renderExamples(examplesRow, DNS_EXAMPLES, function(domain) {
-            input.value = domain;
-            doCheck(domain);
-        });
-
-        // History row
-        var historyRow = document.createElement('div');
-        historyRow.className = 'rc-history';
-        body.appendChild(historyRow);
-
-        var checkAllBtn = document.createElement('button');
-        checkAllBtn.className = 'ndw-button ndw-button--toggle ndw-button--small rc-check-all-btn';
-        checkAllBtn.type = 'button';
-        checkAllBtn.textContent = '\u25b6\u00a0 Check All';
-
-        function refreshHistory() {
-            renderHistoryPills(historyRow, DNS_HISTORY_KEY, function(domain) {
-                input.value = domain;
-                doCheck(domain);
-            });
-            var history = getHistory(DNS_HISTORY_KEY);
-            if (history.length > 0) {
-                historyRow.appendChild(checkAllBtn);
-            }
+    _openCheckModal({
+        title: '\ud83d\udd0d DNS Check',
+        type: 'dns',
+        placeholder: 'Enter domain (e.g. github.com)',
+        examples: DNS_EXAMPLES,
+        historyKey: DNS_HISTORY_KEY,
+        hasIface: false,
+        preOpen: function() { EW.loadIfaceMap(); },
+        buildUrl: function(domain) {
+            return '/api/smartdns/dns-check?host=' + encodeURIComponent(domain);
+        },
+        extractVerdict: function(data) {
+            if (!data || !data.zone || !data.zone.group) return null;
+            return (data.zone.group !== 'default') ? 'geo-split' : 'default';
         }
-        refreshHistory();
-
-        // Progress area
-        var progressEl = document.createElement('div');
-        progressEl.className = 'rc-progress';
-        body.appendChild(progressEl);
-
-        // Results area
-        var resultsEl = document.createElement('div');
-        resultsEl.className = 'rc-results';
-        body.appendChild(resultsEl);
-
-        // ── Check single domain ──
-        function doCheck(domain) {
-            var d = domain.trim().toLowerCase();
-            if (!d) return;
-            saveToHistory(DNS_HISTORY_KEY, d);
-            refreshHistory();
-            input.value = '';
-            progressEl.innerHTML = '';
-
-            var url = '/api/smartdns/dns-check?host=' + encodeURIComponent(d);
-
-            var loadingDiv = document.createElement('div');
-            loadingDiv.className = 'rc-loading';
-            loadingDiv.innerHTML = '<div class="ew-spinner"></div>';
-            resultsEl.innerHTML = '';
-            resultsEl.appendChild(loadingDiv);
-
-            _fetchWithRetry(url)
-                .then(function(resp) {
-                    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-                    return resp.json();
-                })
-                .then(function(data) {
-                    allResults.unshift({ domain: d, data: data });
-                    // Update history pill color: zone-specific → geo-split (green), default → default (gray)
-                    var dnsV = (data && data.zone && data.zone.group && data.zone.group !== 'default') ? 'geo-split' : 'default';
-                    saveToHistory(DNS_HISTORY_KEY, d, dnsV);
-                    refreshHistory();
-                    _renderResults(resultsEl, allResults, 'dns');
-                })
-                .catch(function(err) {
-                    allResults.unshift({ domain: d, data: { ok: false, error: err.message } });
-                    _renderResults(resultsEl, allResults, 'dns');
-                });
-        }
-
-        // ── Check All ──
-        checkAllBtn.addEventListener('click', function() {
-            var history = getHistoryDomains(DNS_HISTORY_KEY);
-            if (history.length === 0) return;
-            allResults = [];
-            resultsEl.innerHTML = '';
-            batchHandle = _runBatch({
-                domains: history,
-                type: 'dns',
-                iface: '',
-                progressEl: progressEl,
-                resultsEl: resultsEl,
-                onDone: function(results) {
-                    allResults = results;
-                    batchHandle = null;
-                    // Update verdict colors in history pills from batch results
-                    for (var r = 0; r < results.length; r++) {
-                        var rd = results[r].data;
-                        var rv = (rd && rd.zone && rd.zone.group && rd.zone.group !== 'default') ? 'geo-split' : 'default';
-                        saveToHistory(DNS_HISTORY_KEY, results[r].domain, rv);
-                    }
-                    refreshHistory();
-                }
-            });
-        });
-
-        // ── Event handlers ──
-        checkBtn.addEventListener('click', function() {
-            doCheck(input.value);
-        });
-        input.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                doCheck(input.value);
-            }
-        });
-
-        // Focus input
-        setTimeout(function() { input.focus(); }, 50);
     });
 }
 

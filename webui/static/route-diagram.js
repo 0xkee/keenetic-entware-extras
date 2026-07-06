@@ -6,18 +6,6 @@
 
 var SVG_NS = "http://www.w3.org/2000/svg";
 
-/**
- * Get human-readable label for an interface from the cached map.
- * Falls back to the raw device name if map is unavailable.
- * @param {string} dev - technical interface name
- * @returns {string}
- */
-function _ifaceLabel(dev) {
-    if (!dev) return "";
-    var map = window._ewIfaceMap;
-    return (map && map[dev]) ? map[dev] : dev;
-}
-
 // ── SVG helpers ──────────────────────────────────────────────────────────────
 
 /**
@@ -452,7 +440,7 @@ function renderRouteDiagram(container, data) {
     if (clientLabel.length > 18) clientLabel = clientLabel.substring(0, 16) + "\u2026";
     // Source sublabel: interface label when iif is set, empty when Router
     var sourceSublabel = data.source_iface
-        ? _ifaceLabel(data.source_iface)
+        ? EW.ifaceLabelShort(data.source_iface)
         : "";
     svg.appendChild(_svgText(clientLabel, clientX, clientY + 26, "route-node-label"));
     if (sourceSublabel) {
@@ -495,7 +483,7 @@ function renderRouteDiagram(container, data) {
         } else {
             svg.appendChild(_useIcon("ico-globe", pathNodeX, py2, iconClass));
         }
-        var pathLabel = (p.type === "policy") ? "Policy" : _ifaceLabel(p.dev);
+        var pathLabel = (p.type === "policy") ? "Policy" : EW.ifaceLabelShort(p.dev);
         svg.appendChild(_svgText(pathLabel, pathNodeX, py2 + 27, "route-node-sublabel"));
         if (p.via) {
             svg.appendChild(_svgText("via " + p.via, pathNodeX, py2 + 39, "route-node-sublabel"));

@@ -18,6 +18,59 @@ is_domain() {
   echo "$1" | grep -qE '^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$'
 }
 
+# Check if string is a valid CIDR notation (A.B.C.D/N, N=0-32).
+# Validates format only — does not normalize host bits.
+# Args: $1 - string to check
+# Returns: 0 if valid CIDR, 1 otherwise
+is_cidr() {
+  echo "$1" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$' || return 1
+  local prefix="${1##*/}"
+  [ "$prefix" -ge 0 ] 2>/dev/null && [ "$prefix" -le 32 ]
+}
+
+# Count total IPs in a CIDR subnet.
+# Args: $1 - CIDR (e.g. "10.0.0.0/24")
+# stdout: integer (e.g. 256 for /24, 1 for /32)
+cidr_total_ips() {
+  local prefix="${1##*/}"
+  awk "BEGIN { p=1; for(i=0;i<32-${prefix};i++) p*=2; print p }"
+}
+
+# Output 1-3 representative sample IPs from a CIDR for routing probes.
+# /32 → 1 IP (the host); /31-/30 → 2 IPs; /29 and wider → 3 (first, mid, last host).
+# Args: $1 - CIDR (e.g. "10.0.0.0/24")
+# stdout: space-separated IPs (e.g. "10.0.0.1 10.0.0.128 10.0.0.254")
+cidr_sample_ips() {
+  awk -v cidr="$1" 'BEGIN {
+    n = split(cidr, parts, "/")
+    prefix = int(parts[2])
+    split(parts[1], o, ".")
+    ip = o[1]*16777216 + o[2]*65536 + o[3]*256 + o[4]
+    sz = 1; for (i=0; i<32-prefix; i++) sz *= 2
+    net = ip - (ip % sz)
+    bcast = net + sz - 1
+    if (sz == 1) {
+      # /32: single host
+      _ip(net)
+    } else if (sz == 2) {
+      # /31: point-to-point, both IPs usable
+      _ip(net); printf " "; _ip(bcast)
+    } else if (sz == 4) {
+      # /30: 2 usable hosts (skip network + broadcast)
+      _ip(net + 1); printf " "; _ip(bcast - 1)
+    } else {
+      # /29 and wider: first host, middle, last host
+      _ip(net + 1); printf " "
+      _ip(net + int(sz / 2)); printf " "
+      _ip(bcast - 1)
+    }
+    printf "\n"
+  }
+  function _ip(n) {
+    printf "%d.%d.%d.%d", int(n/16777216)%256, int(n/65536)%256, int(n/256)%256, n%256
+  }'
+}
+
 # Pipe filter: aggregate (merge overlapping/adjacent) CIDR subnets.
 # Uses ISC aggregate (opkg install aggregate). IPv4 only.
 # Future: fork aggregate6 for IPv6 support.

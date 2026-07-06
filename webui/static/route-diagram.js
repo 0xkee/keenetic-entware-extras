@@ -268,24 +268,24 @@ function _buildPaths(data) {
                 mixed: isMixed && !!activeDevs[p.dev || ""]
             });
         }
-        // Always append policy path (NDM default route) if not already present
-        if (defaultRoute.dev) {
+        // Policy path: only when traffic goes through default route (no geo-split, no tunnel).
+        // "Policy" = system default routing; redundant when tunnel/ISP nodes already show the path.
+        var needsPolicy = (data.verdict === "default") ||
+            (data.verdict === "mixed" && data.verdict_details && data.verdict_details.indexOf("default") >= 0);
+        if (needsPolicy && defaultRoute.dev) {
             var hasPolicy = false;
             for (var k = 0; k < paths.length; k++) {
                 if (paths[k].type === "policy") { hasPolicy = true; break; }
             }
             if (!hasPolicy) {
-                var isDefaultVerdict = (data.verdict === "default");
                 var policyActive = !!activeDevs[defaultRoute.dev];
+                paths.push({ dev: defaultRoute.dev, via: defaultRoute.via || "", type: "policy", active: policyActive, mixed: isMixed && policyActive });
+                // When policy is active on same dev, demote ISP/tunnel path to inactive
                 var alreadySeen = false;
                 for (var m = 0; m < paths.length; m++) {
-                    if (paths[m].dev === defaultRoute.dev) { alreadySeen = true; break; }
+                    if (paths[m].dev === defaultRoute.dev && paths[m].type !== "policy") { alreadySeen = true; break; }
                 }
-                // For "default" verdict, policy IS the active path (don't suppress)
-                var policyIsActive = (alreadySeen && !isDefaultVerdict) ? false : policyActive;
-                paths.push({ dev: defaultRoute.dev, via: defaultRoute.via || "", type: "policy", active: policyIsActive, mixed: isMixed && policyActive });
-                // When policy is active on same dev, demote ISP/tunnel path to inactive
-                if (policyIsActive && alreadySeen) {
+                if (policyActive && alreadySeen) {
                     for (var n = 0; n < paths.length; n++) {
                         if (paths[n].dev === defaultRoute.dev && paths[n].type !== "policy") {
                             paths[n].active = false;
@@ -318,15 +318,13 @@ function _buildPaths(data) {
         seen[vpnDev] = true;
     }
 
-    // Policy path (NDM def/deg.def default route — ALWAYS shown regardless of other paths)
-    if (defaultRoute.dev) {
-        var isDefVerdict = (data.verdict === "default");
+    // Policy path: only when verdict involves "default" (no geo-split, no tunnel for this IP).
+    var needsPolicyLegacy = (data.verdict === "default") ||
+        (data.verdict === "mixed" && data.verdict_details && data.verdict_details.indexOf("default") >= 0);
+    if (needsPolicyLegacy && defaultRoute.dev) {
         var policyActive = !!activeDevs[defaultRoute.dev];
-        // For "default" verdict, policy IS the active path; otherwise suppress if same dev seen
-        var policyIsActive = (seen[defaultRoute.dev] && !isDefVerdict) ? false : policyActive;
-        paths.push({ dev: defaultRoute.dev, via: defaultRoute.via, type: "policy", active: policyIsActive, mixed: isMixed && policyActive });
-        // When policy is active on same dev, demote other paths to inactive
-        if (policyIsActive && seen[defaultRoute.dev]) {
+        paths.push({ dev: defaultRoute.dev, via: defaultRoute.via, type: "policy", active: policyActive, mixed: isMixed && policyActive });
+        if (policyActive && seen[defaultRoute.dev]) {
             for (var j = 0; j < paths.length; j++) {
                 if (paths[j].dev === defaultRoute.dev && paths[j].type !== "policy") {
                     paths[j].active = false;

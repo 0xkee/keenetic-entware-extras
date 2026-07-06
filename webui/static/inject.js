@@ -31,7 +31,6 @@
     var insertingIframe = false;
     var dashboardTimer = null;
     var TOGGLE_FAST_POLL = 1000;      // 1s fast polling after toggle / background update (ms)
-    var TOGGLE_POLL_TIMEOUT = 10000;  // Max fast-poll duration after toggle (ms)
     var ROUTE_POLL_INTERVAL = 2000;   // Route change detection interval (ms)
     var DRAG_SETTLE_DELAY = 300;      // Delay after drag to let CDK animation finish (ms)
     var RESTORE_OBSERVER_DELAY = 3000; // Delay before setting up content restore observer (ms)
@@ -62,8 +61,8 @@
         }
     );
 
-    /** Per-service toggle pollers — fast-poll until state settles or timeout. */
-    var togglePollers = {};
+    /** Per-service toggle poller — fast-poll until state settles or timeout. */
+    var togglePoller = EW.createTogglePoller({ interval: TOGGLE_FAST_POLL });
 
     // ═══════════════════════════════════════════════════════════════════
     // §2. RECONCILER — Angular CDK row patching
@@ -693,7 +692,7 @@
             dashboardTimer = null;
         }
         geoPoller.stop();
-        stopAllTogglePollers();
+        togglePoller.stopAll();
         ticker.stop();
     }
 
@@ -712,40 +711,13 @@
         for (var i = 0; i < entries.length; i++) {
             var e = entries[i];
             if (e.isSpacer) { html += '<div class="ew-detail-item"></div>'; continue; }
-            var valStyle = e.isError ? ' style="color:var(--error,#f44336)"'
-                : e.isWarning ? ' style="color:var(--status-caution-text,#ffbb57)"' : '';
-            var val = e.value;
-            if (e.lines) {
-                val = e.lines.map(function(l) {
-                    return l.isError ? '<span style="color:var(--error,#f44336)">' + l.text + '</span>' : l.text;
-                }).join('<br>');
-            } else if (/_provider$/.test(e.key) && dnsServerChecks && dnsServerChecks.length) {
-                var provArr = val.split(' ').map(function(prov) {
-                    var chk = null;
-                    for (var ci = 0; ci < dnsServerChecks.length; ci++) {
-                        if (dnsServerChecks[ci].provider === prov) { chk = dnsServerChecks[ci]; break; }
-                    }
-                    if (chk) {
-                        var cIcon = chk.ok ? '\u2713' : '\u2717';
-                        var cCls = chk.ok ? 'ew-bool-icon--ok' : 'ew-bool-icon--fail';
-                        return '<span class="ew-bool-icon ' + cCls + '">' + cIcon + '</span> ' +
-                            '<a class="ew-dns-link" href="https://' + chk.host + '" target="_blank" rel="noopener" data-tooltip="' + chk.host + '">' + chk.provider + '</a>';
-                    }
-                    return prov;
-                });
-                val = '<div class="ew-dns-line">' + provArr.join('</div><div class="ew-dns-line">') + '</div>';
-            } else if (val.indexOf(' ') !== -1 && !e.isTimer && (val.indexOf(':') !== -1 || /_provider$/.test(e.key))) {
-                val = val.split(' ').join('<br>');
-            }
-            var updateBtn = '';
-            if (e.updateAction) {
-                updateBtn = ' <button class="ew-update-btn" data-action="' + e.updateAction + '" data-tooltip="Force Reload">' +
-                    '<svg class="ndw-svg-icon svg-restart-dims" style="width:14px;height:14px;fill:currentColor"><use href="/assets/sprite/sprite.svg#restart"></use></svg></button>';
-            }
+            var valHtml = EW.renderDetailValue(e, { dnsServerChecks: dnsServerChecks });
+            var valStyle = EW.detailValueStyle(e);
+            var updateBtn = EW.renderUpdateBtn(e);
             var dataAttr = e.freshnessKey ? ' data-freshness-key="' + e.freshnessKey + '"' : '';
             html += '<div class="ew-detail-item">' +
-                '<div class="ew-detail-label">' + e.label + '</div>' +
-                '<div class="ew-detail-value"' + valStyle + dataAttr + '>' + val + updateBtn + '</div></div>';
+                '<div class="ew-detail-label">' + EW.escapeHtml(e.label) + '</div>' +
+                '<div class="ew-detail-value"' + valStyle + dataAttr + '>' + valHtml + updateBtn + '</div></div>';
         }
         return html;
     }
@@ -756,10 +728,7 @@
      * @param {string} serviceId - SERVICE_APIS entry id
      */
     function fetchSingleServiceStatus(serviceId) {
-        var svc = null;
-        for (var i = 0; i < EW.SERVICE_APIS.length; i++) {
-            if (EW.SERVICE_APIS[i].id === serviceId) { svc = EW.SERVICE_APIS[i]; break; }
-        }
+        var svc = EW.getService(serviceId);
         if (!svc) return;
         fetch(svc.api, { cache: 'no-store' })
             .then(function(r) { return r.json(); })
@@ -769,75 +738,19 @@
 
     /**
      * Start fast polling for a service after toggle until state settles.
-     * Polls every TOGGLE_FAST_POLL ms; stops when running matches target or TOGGLE_POLL_TIMEOUT.
      * @param {string} serviceId - SERVICE_APIS entry id
      * @param {boolean} targetRunning - expected state after toggle
      */
     function startTogglePoller(serviceId, targetRunning) {
-        stopTogglePoller(serviceId);
-        var svc = null;
-        for (var i = 0; i < EW.SERVICE_APIS.length; i++) {
-            if (EW.SERVICE_APIS[i].id === serviceId) { svc = EW.SERVICE_APIS[i]; break; }
-        }
-        if (!svc) return;
-
-        var startTime = Date.now();
-        var timerId = setInterval(function() {
-            // Timeout guard
-            if (Date.now() - startTime > TOGGLE_POLL_TIMEOUT) {
-                stopTogglePoller(serviceId);
-                return;
-            }
+        togglePoller.start(serviceId, function(svc, done) {
             fetch(svc.api, { cache: 'no-store' })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     applyServiceData(svc, data);
-                    // Stop when state matches target
-                    if (data.running === targetRunning) {
-                        stopTogglePoller(serviceId);
-                    }
+                    if (data.running === targetRunning) done();
                 })
-                .catch(function() {
-                    stopTogglePoller(serviceId);
-                });
-        }, TOGGLE_FAST_POLL);
-
-        togglePollers[serviceId] = timerId;
-    }
-
-    /**
-     * Stop fast polling for a specific service.
-     * @param {string} serviceId
-     */
-    function stopTogglePoller(serviceId) {
-        if (togglePollers[serviceId]) {
-            clearInterval(togglePollers[serviceId]);
-            delete togglePollers[serviceId];
-        }
-    }
-
-    /**
-     * Stop all active toggle pollers (used on route change or card hide).
-     */
-    function stopAllTogglePollers() {
-        for (var id in togglePollers) {
-            clearInterval(togglePollers[id]);
-        }
-        togglePollers = {};
-    }
-
-    /**
-     * Check if any detail field is boolean false (fallback when checks absent).
-     * @param {Object} details
-     * @returns {boolean}
-     */
-    function hasFailField(details) {
-        if (!details) return false;
-        var keys = Object.keys(details);
-        for (var i = 0; i < keys.length; i++) {
-            if (details[keys[i]] === false) return true;
-        }
-        return false;
+                .catch(function() { done(); });
+        });
     }
 
     /**
@@ -887,7 +800,7 @@
                 if (cs.hasFail || cs.hasWarn) {
                     state = 'caution';
                 }
-            } else if (hasFailField(data.details)) {
+            } else if (EW.hasFailField(data.details)) {
                 state = 'caution';
             }
         }
@@ -1132,7 +1045,7 @@
                 dashboardTimer = null;
             }
             geoPoller.stop();
-            stopAllTogglePollers();
+            togglePoller.stopAll();
             ticker.stop();
             // Clear our markers — let Angular manage its own rows
             var marked = document.querySelectorAll('[' + EW_ATTR + ']');

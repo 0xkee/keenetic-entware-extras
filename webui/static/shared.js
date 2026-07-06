@@ -58,7 +58,7 @@ window.EW = (function() {
                     var map = {};
                     for (var i = 0; i < data.interfaces.length; i++) {
                         var ifc = data.interfaces[i];
-                        map[ifc.id || ifc.name || ifc] = ifc.label || ifc.description || ifc.id || ifc;
+                        map[ifc.id || ifc.name] = ifc.label || ifc.description || ifc.id || ifc.name || '';
                     }
                     window._ewIfaceMap = map;
                 }
@@ -172,7 +172,7 @@ window.EW = (function() {
      * @returns {string}
      */
     function _humanizeGateway(val) {
-        if (val === 'scope link') return 'Direct';
+        if (val === 'scope link') return 'Direct (scope link)';
         if (val === 'none') return '\u2014';
         return val;
     }
@@ -440,18 +440,189 @@ window.EW = (function() {
         return parts.length <= 2 ? host : parts.slice(-2).join('.');
     }
 
+    /**
+     * Escape HTML special characters for safe insertion into DOM.
+     * @param {string} str
+     * @returns {string}
+     */
+    function escapeHtml(str) {
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    /**
+     * Find service definition by ID.
+     * @param {string} id - service id (e.g. 'geo-split')
+     * @returns {Object|null}
+     */
+    function getService(id) {
+        for (var i = 0; i < SERVICE_APIS.length; i++) {
+            if (SERVICE_APIS[i].id === id) return SERVICE_APIS[i];
+        }
+        return null;
+    }
+
+    /**
+     * Check if any detail field is boolean false.
+     * @param {Object} details - data.details from status API
+     * @returns {boolean}
+     */
+    function hasFailField(details) {
+        if (!details) return false;
+        var keys = Object.keys(details);
+        for (var i = 0; i < keys.length; i++) {
+            if (details[keys[i]] === false) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Get inline style attribute for error/warning coloring.
+     * @param {Object} e - parsed entry from parseDetails
+     * @returns {string} style attribute string (includes leading space) or empty
+     */
+    function detailValueStyle(e) {
+        if (e.isError) return ' style="color:var(--error,#f44336)"';
+        if (e.isWarning) return ' style="color:var(--status-caution-text,#ffbb57)"';
+        return '';
+    }
+
+    /**
+     * Render detail entry value to HTML.
+     * Shared logic between app.js (custom dashboard) and inject.js (stock card).
+     * @param {Object} e - parsed entry from parseDetails
+     * @param {Object} [opts]
+     * @param {Array} [opts.dnsServerChecks] - DNS server check results for provider enrichment
+     * @returns {string} value HTML
+     */
+    function renderDetailValue(e, opts) {
+        var checks = (opts && opts.dnsServerChecks) || [];
+
+        // Ok/Fail icons
+        if (e.value === 'Ok') {
+            return '<span class="ew-bool-icon ew-bool-icon--ok">\u2713</span>';
+        }
+        if (e.value === 'Fail') {
+            return '<span class="ew-bool-icon ew-bool-icon--fail">\u2717</span>';
+        }
+
+        // Multiline entries (e.lines from parseDetails)
+        if (e.lines) {
+            return e.lines.map(function(l) {
+                return l.isError ? '<span style="color:var(--error,#f44336)">' + escapeHtml(l.text) + '</span>' : escapeHtml(l.text);
+            }).join('<br>');
+        }
+
+        // DNS provider enrichment
+        if (/_provider$/.test(e.key) && checks.length) {
+            var provLines = e.value.split(' ').map(function(prov) {
+                var chk = null;
+                for (var ci = 0; ci < checks.length; ci++) {
+                    if (checks[ci].provider === prov) { chk = checks[ci]; break; }
+                }
+                if (chk) {
+                    var cIcon = chk.ok ? '\u2713' : '\u2717';
+                    var cCls = chk.ok ? 'ew-bool-icon--ok' : 'ew-bool-icon--fail';
+                    return '<span class="ew-bool-icon ' + cCls + '">' + cIcon + '</span> ' +
+                        '<a class="ew-dns-link" href="https://' + escapeHtml(chk.host) + '" target="_blank" rel="noopener" data-tooltip="' + escapeHtml(chk.host) + '">' +
+                        escapeHtml(chk.provider) + '</a>';
+                }
+                return escapeHtml(prov);
+            });
+            return '<div class="ew-dns-line">' + provLines.join('</div><div class="ew-dns-line">') + '</div>';
+        }
+
+        // Multiline splitting for addresses/ports/providers
+        if (e.value.indexOf(' ') !== -1 && !e.isTimer && (e.value.indexOf(':') !== -1 || /_provider$/.test(e.key))) {
+            return e.value.split(' ').map(function(s) { return escapeHtml(s); }).join('<br>');
+        }
+
+        return escapeHtml(e.value);
+    }
+
+    /**
+     * Render update button HTML for an entry.
+     * @param {Object} e - parsed entry with updateAction/updateTooltip
+     * @returns {string} button HTML or empty string
+     */
+    function renderUpdateBtn(e) {
+        if (!e.updateAction) return '';
+        var tooltip = e.updateTooltip || 'Force Reload';
+        return ' <button class="ew-update-btn" data-action="' + e.updateAction + '" data-tooltip="' + escapeHtml(tooltip) + '">' +
+            '<svg class="ndw-svg-icon svg-restart-dims" style="width:14px;height:14px;fill:currentColor"><use href="/assets/sprite/sprite.svg#restart"></use></svg></button>';
+    }
+
+    /**
+     * Factory for toggle polling — fast-poll a service API after toggle until state settles.
+     * @param {Object} [opts]
+     * @param {number} [opts.interval] - poll interval (ms), default 500
+     * @param {number} [opts.timeout] - max polling time (ms), default 10000
+     * @returns {{start: Function, stop: Function, stopAll: Function, isPolling: Function}}
+     */
+    function createTogglePoller(opts) {
+        var interval = (opts && opts.interval) || 500;
+        var timeout = (opts && opts.timeout) || 10000;
+        var pollers = {};
+
+        function stop(serviceId) {
+            if (pollers[serviceId]) {
+                clearInterval(pollers[serviceId]);
+                delete pollers[serviceId];
+            }
+        }
+
+        function stopAll() {
+            for (var id in pollers) {
+                clearInterval(pollers[id]);
+            }
+            pollers = {};
+        }
+
+        /**
+         * Start fast-polling for a service.
+         * @param {string} serviceId
+         * @param {Function} pollFn - called each tick: pollFn(svc, done). Must call done() when finished.
+         */
+        function start(serviceId, pollFn) {
+            stop(serviceId);
+            var svc = getService(serviceId);
+            if (!svc) return;
+            var startTime = Date.now();
+            pollers[serviceId] = setInterval(function() {
+                if (Date.now() - startTime > timeout) {
+                    stop(serviceId);
+                    return;
+                }
+                pollFn(svc, function() { stop(serviceId); });
+            }, interval);
+        }
+
+        function isPolling(serviceId) {
+            return !!pollers[serviceId];
+        }
+
+        return { start: start, stop: stop, stopAll: stopAll, isPolling: isPolling };
+    }
+
     return {
         SERVICE_APIS: SERVICE_APIS,
         TIMER_KEYS: TIMER_KEYS,
         UPDATE_ACTIONS: UPDATE_ACTIONS,
         loadIfaceMap: loadIfaceMap,
         ifaceLabelFull: ifaceLabelFull,
+        ifaceLabelShort: _ifaceLabelShort,
+        escapeHtml: escapeHtml,
+        getService: getService,
+        hasFailField: hasFailField,
         formatUptimeStock: formatUptimeStock,
         formatKey: formatKey,
         formatBool: formatBool,
         createPoller: createPoller,
+        createTogglePoller: createTogglePoller,
         createTicker: createTicker,
         parseDetails: parseDetails,
-        shortDomain: shortDomain
+        shortDomain: shortDomain,
+        detailValueStyle: detailValueStyle,
+        renderDetailValue: renderDetailValue,
+        renderUpdateBtn: renderUpdateBtn
     };
 })();

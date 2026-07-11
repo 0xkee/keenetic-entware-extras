@@ -55,13 +55,6 @@
 - [x] WebUI: обновлены `shared.js`, `app.js` (SUMMARY_KEYS + CONFIG_SCHEMAS)
 - [x] Документация обновлена (README, user-manual, CHANGELOG)
 
-**Оставшиеся задачи (Этап C.2 — тестирование на роутере):**
-
-- [ ] Деплой v0.5.0 на router-1
-- [ ] Тест: `OTHER_DNS_INTERFACES="nwg3 nwg4"` — проверить что DNS через VPN работает
-- [ ] Fallback при падении VPN-тоннеля (SmartDNS timeout → ответ от прямого)
-- [ ] Мониторинг: убедиться что SSL-ошибки в логе уменьшились после включения
-- [ ] WebUI: фронтенд-рендерер для `dns_tests` массива в detail view
 
 ### Известные проблемы
 

@@ -52,10 +52,10 @@
 
 - [x] **Route check из WebUI** ✅ — проверка выбора маршрута для конкретного хоста/домена прямо из интерфейса (диагностика: через какой интерфейс/таблицу пойдёт трафик).
 - [x] **Route check: цветные history pills** ✅ — бейджи в истории окрашены по verdict последнего теста (зелёный=geo-split, синий=tunnel, оранжевый=mixed). localStorage: `[{d:"domain", v:"tunnel"}]`, backward-compat с plain strings.
-- [ ] **Route check: стилизация Technical Details** — улучшить визуал таблицы tech details (DNS, Routes per IP, Default Route): spacing, группировка, иконки секций, аккордеон для секций.
-- [ ] **Route check: показывать policy name для tunnel клиентов** — при verdict=tunnel в "Via" колонке и на диаграмме отображать название VPN-policy (не просто первый tunnel интерфейс). Требует расширения backend `route-check.sh` для возврата policy name.
-- [ ] **Route check: семантические названия секций в Tech Details** — "Default Route" → "System Fallback" или "Main Gateway"; "Device" → "Interface". Улучшить ясность терминологии для неспециалистов.
-- [ ] **Route check: IPs overflow в batch tech details** — в batch-режиме длинный список IPs вылезает за карточку. Нужен overflow containment на `.rc-result__details` (batch контекст) или `table-layout: fixed` с автоширой первой колонки. Может просто каждый ip с новой строки?
+- [x] **Route check: стилизация Technical Details** ✅ — good enough: секции с цветными заголовками, двухколоночная таблица, multi-line IPs с border-разделителями, verdict badges, humanized interface names. Проверено 2026-07-07.
+- [x] **Route check: показывать policy name для tunnel клиентов** ✅ — реализовано в v0.31.0 (Interface humanization system): `ifaceLabelShort()` маппит `nwg0` → "FirstVDS Holland" и т.д. через `/api/system/interfaces`. Работает в Routes per IP, Via колонке batch-таблицы и на SVG-диаграмме.
+- [x] **Route check: семантические названия секций в Tech Details** ✅ — закрыто вместе со стилизацией (good enough). Текущие названия (DNS, Routes per IP, Default Route) достаточно ясны.
+- [x] **Route check: IPs overflow в batch tech details** ✅ — `_multiLine()` рендерит каждый IP как `<div>` (block-level), overflow не воспроизводится. Проверено 2026-07-07.
 - [x] добавить Upstream в status + webui (Ok когда доступен) ✅ — `check_upstream()` в status.sh: парсит listen.conf для IP, curl probe. JSON: `details.upstream` (addr) + `checks.upstream` ("ok"|"warn"). Карточка рендерит автоматически через `parseDetails`.
 - [x] **Модалы диагностики: увеличить размер** ✅ — max-height 95vh, шрифты 14px (batch table, summary) / 13px (details, examples, legend), Check All absolute-pinned top-right, flex-shrink:0 на history (fix наплывания при росте таблицы). Оба модала (Route Check + DNS Check) унифицированы.
 - [ ] **Version badge → GitHub releases ссылка** — сейчас ew-version-badge ведёт на forum.keenetic.ru. Когда появится GitHub репо, поменять URL в `app.js` (`setDetails()` isVersion block) на GitHub releases page.

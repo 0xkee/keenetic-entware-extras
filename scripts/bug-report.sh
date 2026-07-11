@@ -563,23 +563,61 @@ if command -v ip >/dev/null 2>&1 && [ -n "$_GEO_IP" ]; then
             printf "      non-geo raw: %s\n" "$_client_nongeo"
         fi
 
-        # Reachability checks
+        # Reachability checks — run both ICMP (ping) and HTTP (curl) probes.
+        # Use source IP for ping -I to leverage Keenetic policy routing rules.
+        # ping -I <dev> uses SO_BINDTODEVICE which fails when the default route
+        # points to a different interface (e.g. VPN-as-default + ISP for geo).
+        # ping -I <src_ip> triggers "from <ip> lookup <table>" rules correctly.
         printf "\n  Reachability:\n"
-        # GEO target ping through geo-split interface
+
+        # GEO target through geo-split interface
         if [ -n "$_geo_client_dev" ]; then
+            _geo_src=$(ip -4 addr show dev "$_geo_client_dev" 2>/dev/null \
+                | sed -n 's/.*inet \([0-9.]*\).*/\1/p' | head -1)
+            _geo_ping_src="${_geo_src:-$_geo_client_dev}"
+            _cr_ping="FAIL"; _cr_http=""
+            ping -I "$_geo_ping_src" -c 1 -W 3 "$_GEO_IP" >/dev/null 2>&1 && _cr_ping="OK"
+            if [ -n "$_GEO_DOMAIN" ] && command -v curl >/dev/null 2>&1; then
+                _cr_http=$(curl -so /dev/null -w '%{http_code}' \
+                    --interface "$_geo_client_dev" \
+                    --connect-timeout 5 --max-time 10 \
+                    "http://$_GEO_DOMAIN" 2>/dev/null) || _cr_http="000"
+                [ "$_cr_http" = "000" ] && _cr_http="FAIL"
+            fi
             printf "    GEO  (%s → %s): " "$_geo_client_dev" "$_GEO_IP"
-            if ping -I "$_geo_client_dev" -c 1 -W 3 "$_GEO_IP" >/dev/null 2>&1; then
-                printf "✓ OK\n"
+            if [ "$_cr_ping" = "OK" ] && [ -n "$_cr_http" ] && [ "$_cr_http" != "FAIL" ]; then
+                printf "✓ ping OK, HTTP %s\n" "$_cr_http"
+            elif [ "$_cr_ping" = "OK" ]; then
+                printf "✓ ping OK\n"
+            elif [ -n "$_cr_http" ] && [ "$_cr_http" != "FAIL" ]; then
+                printf "⚠ ping FAIL, HTTP %s (route works; ICMP blocked?)\n" "$_cr_http"
             else
                 printf "✗ FAIL (interface down? no NAT?)\n"
             fi
         fi
-        # Non-GEO target — ping through VPN if found, otherwise through default interface
+
+        # Non-GEO target — through VPN if found, otherwise through default
         _nongeo_ping_dev="${_kee_vpn_dev:-$_nongeo_client_dev}"
         if [ -n "$_nongeo_ping_dev" ]; then
+            _nongeo_src=$(ip -4 addr show dev "$_nongeo_ping_dev" 2>/dev/null \
+                | sed -n 's/.*inet \([0-9.]*\).*/\1/p' | head -1)
+            _nongeo_ping_src="${_nongeo_src:-$_nongeo_ping_dev}"
+            _cr_ping="FAIL"; _cr_http=""
+            ping -I "$_nongeo_ping_src" -c 1 -W 3 "$_NON_GEO_IP" >/dev/null 2>&1 && _cr_ping="OK"
+            if command -v curl >/dev/null 2>&1; then
+                _cr_http=$(curl -so /dev/null -w '%{http_code}' \
+                    --interface "$_nongeo_ping_dev" \
+                    --connect-timeout 5 --max-time 10 \
+                    "http://$_NON_GEO_DOMAIN" 2>/dev/null) || _cr_http="000"
+                [ "$_cr_http" = "000" ] && _cr_http="FAIL"
+            fi
             printf "    non-GEO (%s → %s): " "$_nongeo_ping_dev" "$_NON_GEO_IP"
-            if ping -I "$_nongeo_ping_dev" -c 1 -W 3 "$_NON_GEO_IP" >/dev/null 2>&1; then
-                printf "✓ OK\n"
+            if [ "$_cr_ping" = "OK" ] && [ -n "$_cr_http" ] && [ "$_cr_http" != "FAIL" ]; then
+                printf "✓ ping OK, HTTP %s\n" "$_cr_http"
+            elif [ "$_cr_ping" = "OK" ]; then
+                printf "✓ ping OK\n"
+            elif [ -n "$_cr_http" ] && [ "$_cr_http" != "FAIL" ]; then
+                printf "⚠ ping FAIL, HTTP %s (route works; ICMP blocked?)\n" "$_cr_http"
             else
                 printf "✗ FAIL"
                 if echo "$_nongeo_ping_dev" | grep -qE "^(nwg|awg|ovpn|tun|tap|wg)"; then

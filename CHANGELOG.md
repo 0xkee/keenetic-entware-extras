@@ -5,6 +5,14 @@ All notable changes to `keenetic-entware-extras` (base package) are documented h
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.16.6] - 2026-07-11
+
+### Fixed
+- `bug-report.sh`: reachability test false positive when VPN is default route —
+  `ping -I <dev>` (SO_BINDTODEVICE) conflicts with routing when default goes to
+  a different interface. Now uses `ping -I <src_ip>` to leverage policy routing rules.
+  Both ICMP and HTTP probes are run for richer diagnostics (ping OK/FAIL + HTTP status code).
+
 ## [0.16.5] - 2026-06-29
 
 ### Added

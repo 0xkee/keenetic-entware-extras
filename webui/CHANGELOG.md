@@ -5,6 +5,22 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.32.12] — 2026-07-12
+
+### Fixed
+- `kill_port_holders()`: retry loop — kills all orphaned workers holding port 8080
+
+## [0.32.11] — 2026-07-12
+
+### Fixed
+- CPU bar: use `/proc/stat` delta instead of load average (was 8× inflated on Peak KN-2710)
+
+## [0.32.10] — 2026-07-12
+
+### Fixed
+- init.d: kill orphaned nginx on port 8080 before start (fixes `bind() failed` after `--force-reinstall`)
+- Extracted `kill_port_holders()` helper, reused in both `start()` and `stop()`
+
 ## [0.32.9] — 2026-07-12
 
 ### Changed

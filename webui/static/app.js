@@ -552,10 +552,14 @@ function fetchSystemInfo() {
                 diskPct = Math.ceil((data.disk_opt.used_kb / data.disk_opt.total_kb) * 100);
             }
 
-            // CPU: normalize load1 to percentage (load1/cores * 100, capped at 100)
+            // CPU: prefer /proc/stat delta (cpu_pct) — actual utilization.
+            // Fallback to load1/cores when cpu_pct not yet available (-1 on first poll).
             var cpuCores = (data.cpu_load && data.cpu_load.cores) || 1;
             var cpuLoad1 = (data.cpu_load && data.cpu_load.load1) || 0;
-            var cpuPct = Math.min(100, Math.round((cpuLoad1 / cpuCores) * 100));
+            var cpuStatPct = data.cpu_load ? data.cpu_load.cpu_pct : -1;
+            var cpuPct = cpuStatPct >= 0
+                ? cpuStatPct
+                : Math.min(100, Math.round((cpuLoad1 / cpuCores) * 100));
 
             var cpuClass = cpuPct > 90 ? " ew-sysinfo__bar-fill--crit" : cpuPct > 75 ? " ew-sysinfo__bar-fill--warn" : "";
             var memClass = memPct > 90 ? " ew-sysinfo__bar-fill--crit" : memPct > 75 ? " ew-sysinfo__bar-fill--warn" : "";
@@ -572,10 +576,9 @@ function fetchSystemInfo() {
                     '<span class="ew-sysinfo__value">' + EW.escapeHtml(data.uptime || "?") + '</span>' +
                 '</span>' +
                 '<span class="ew-sysinfo__item" data-tooltip="' +
-                    'Load: ' + cpuLoad1.toFixed(2) + ' / ' + cpuCores + ' cores\n' +
-                    'Based on 1-minute load average, not instantaneous CPU usage.\n' +
-                    'Stock UI shows real-time utilization — this shows sustained load over time.\n' +
-                    'Values may differ from stock UI — this is normal and not a cause for concern.' + '" data-tooltip-pos="below">' +
+                    'Utilization: ' + cpuPct + '% (from /proc/stat)\n' +
+                    'Load avg: ' + cpuLoad1.toFixed(2) + ' / ' + cpuCores + ' cores\n' +
+                    'Load average includes I/O wait — may be higher than actual CPU usage.' + '" data-tooltip-pos="below">' +
                     '<span class="ew-sysinfo__icon">' + SYSINFO_ICONS.cpu + '</span>' +
                     '<span class="ew-sysinfo__label">CPU</span>' +
                     '<span class="ew-sysinfo__value">' + cpuPct + '%</span>' +

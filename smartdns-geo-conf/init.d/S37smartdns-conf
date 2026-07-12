@@ -3,12 +3,13 @@
 # Runs BEFORE S38smartdns (S37 < S38) to ensure configs are ready.
 #
 # Actions:
-#   start   — generate configs, activate current mode (split/default)
-#   stop    — no-op (S38 manages daemon lifecycle)
-#   restart — regenerate configs, re-activate, restart S38
-#   enable  — switch to split-DNS mode, regenerate, restart
-#   disable — switch to default mode (no split), regenerate, restart
-#   status  — print current mode (enabled/disabled)
+#   start       — generate configs, activate current mode (split/default)
+#   stop        — no-op (S38 manages daemon lifecycle)
+#   restart     — regenerate configs, re-activate, restart S38
+#   enable      — switch to split-DNS mode, regenerate, restart
+#   disable     — switch to default mode (no split), regenerate, restart
+#   flush-cache — stop S38, delete persistent DNS cache, start S38
+#   status      — print current mode (enabled/disabled)
 #
 # shellcheck disable=SC1091
 # shellcheck disable=SC3043
@@ -81,6 +82,17 @@ case "${1:-}" in
     do_restart_s38
     echo "SmartDNS: switched to default (simple forwarder)"
     ;;
+  flush-cache)
+    if [ -x "$S38" ]; then
+      "$S38" stop 2>/dev/null || true
+      rm -f "$CACHE_FILE"
+      "$S38" start 2>/dev/null || true
+      echo "SmartDNS: DNS cache flushed, daemon restarted"
+    else
+      echo "ERROR: S38smartdns not found" >&2
+      exit 1
+    fi
+    ;;
   status)
     if [ -f "$STATE_FILE" ]; then
       echo "enabled (zone: $DNS_ZONE)"
@@ -89,7 +101,7 @@ case "${1:-}" in
     fi
     ;;
   *)
-    echo "Usage: $0 {start|stop|restart|enable|disable|status}" >&2
+    echo "Usage: $0 {start|stop|restart|enable|disable|flush-cache|status}" >&2
     exit 1
     ;;
 esac

@@ -21,6 +21,7 @@ window.EW = (function() {
     var UPDATE_ACTIONS = {
         'geo_zone':       '/api/geo-split/update-subnets',
         'domain_sources': '/api/geo-split/update-domains',
+        'smartdns:cache': { url: '/api/smartdns/flush-cache', tooltip: 'Flush DNS Cache' },
         'webui:cache':    { url: '/api/webui/flush-cache', tooltip: 'Flush UI Cache' }
     };
 
@@ -513,7 +514,7 @@ window.EW = (function() {
         }
 
         // DNS provider enrichment
-        if (/_provider$/.test(e.key) && checks.length) {
+        if (/_providers?$/.test(e.key) && checks.length) {
             var provLines = e.value.split(' ').map(function(prov) {
                 var chk = null;
                 for (var ci = 0; ci < checks.length; ci++) {
@@ -532,7 +533,7 @@ window.EW = (function() {
         }
 
         // Multiline splitting for addresses/ports/providers
-        if (e.value.indexOf(' ') !== -1 && !e.isTimer && (e.value.indexOf(':') !== -1 || /_provider$/.test(e.key))) {
+        if (e.value.indexOf(' ') !== -1 && !e.isTimer && (e.value.indexOf(':') !== -1 || /_providers?$/.test(e.key))) {
             return e.value.split(' ').map(function(s) { return escapeHtml(s); }).join('<br>');
         }
 

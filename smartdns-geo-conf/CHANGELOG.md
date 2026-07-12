@@ -5,6 +5,14 @@ All notable changes to `smartdns-geo-conf` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.10.11] — 2026-07-12
+
+### Changed
+- Status: `zone_dns_provider` → `zone_dns_providers`, `other_dns_provider` → `other_dns_providers`
+
+### Added
+- Init `flush-cache`: stop SmartDNS, delete persistent cache, restart
+
 ## [0.10.10] — 2026-07-12
 
 ### Changed

@@ -11,9 +11,9 @@ var FETCH_TIMEOUT = 15000;    // 15 seconds (allows for queued io.popen in nginx
 /** Key detail labels shown in Summary mode per service. Others are hidden via CSS. */
 var SUMMARY_KEYS = {
     'geo-split':         ['geo_zone', 'active_zones', 'subnets', 'domains', 'route_in', 'route_out'],
-    'smartdns':          ['dns_zone', 'active_zones', 'zone_dns_provider', 'other_dns_provider', 'ports', 'rules'],
-    'smartdns-redirect': ['interfaces', 'upstream', 'dnat_target'],
-    'webui':             ['ports', 'http', 'patch_set']
+    'smartdns':          ['dns_zone', 'active_zones', 'zone_dns_providers', 'other_dns_providers', 'custom_providers', 'servers', 'rules'],
+    'smartdns-redirect': ['interfaces', 'name'],
+    'webui':             ['firmware', 'patch_set']
 };
 
 /** Get skeleton count for a service: cached from last API response, or default 6. */
@@ -1049,7 +1049,7 @@ document.addEventListener("DOMContentLoaded", function() {
             saveConfig(saveSvcId);
             return;
         }
-        // Force-reload / flush-cache button (geo-split zones or webui cache)
+        // Force-reload / flush-cache button (geo-split zones, cache flush)
         var btn = e.target.closest('.ew-update-btn');
         if (!btn || btn.disabled) return;
         var actionUrl = btn.getAttribute('data-action');
@@ -1058,11 +1058,17 @@ document.addEventListener("DOMContentLoaded", function() {
         fetch(actionUrl, { method: 'POST' })
             .then(function(r) { return r.json(); })
             .then(function() {
+                btn.classList.remove('ew-update-btn--spinning');
+                btn.disabled = false;
+                // Immediate feedback in field value
+                var _label = actionUrl.indexOf('flush') !== -1 ? '\u2713 Flushed ' : '\u2713 Updating\u2026 ';
+                var _p = btn.parentNode;
+                if (_p) { for (var _n = _p.firstChild; _n; _n = _n.nextSibling) {
+                    if (_n !== btn && (_n.nodeType === 3 || _n.nodeType === 1)) { _n.textContent = _label; break; }
+                }}
                 if (actionUrl.indexOf('geo-split') !== -1) {
                     geoPoller.start();
                 } else {
-                    btn.classList.remove('ew-update-btn--spinning');
-                    btn.disabled = false;
                     refreshAll();
                 }
             })

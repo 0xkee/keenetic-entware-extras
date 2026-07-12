@@ -5,6 +5,22 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.32.9] — 2026-07-12
+
+### Changed
+- Refresh buttons: unified "✓ Flushed"/"✓ Updating…" feedback + immediate poll for all actions
+
+## [0.32.8] — 2026-07-12
+
+### Changed
+- Summary cards: polished field selection per service (providers, servers, firmware, name)
+- `_provider` → `_providers` (plural) in detail keys and regex matching
+- Dashboard: cache field visible with ⟳ flush button (smartdns + webui)
+- Dashboard update-btn handler: proper spinner cleanup for non-geo actions
+
+### Added
+- `/api/smartdns/flush-cache` — stop + rm persistent cache + restart SmartDNS
+
 ## [0.32.7] — 2026-07-12
 
 ### Added

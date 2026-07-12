@@ -317,8 +317,8 @@ json_output() {
   # Details
   status_detail "dns_zone" "$_ck_zone"
   status_detail "active_zones" "$_ck_active_zones"
-  status_detail "zone_dns_provider" "$_ck_zone_provider"
-  status_detail "other_dns_provider" "$_ck_other_provider"
+  status_detail "zone_dns_providers" "$_ck_zone_provider"
+  status_detail "other_dns_providers" "$_ck_other_provider"
   status_detail "other_interfaces" "$_ck_other_ifaces"
   status_detail "ports" "$_st_port_addrs"
   status_detail "servers" "$_ck_servers" "num"

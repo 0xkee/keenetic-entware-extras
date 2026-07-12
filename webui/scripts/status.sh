@@ -95,32 +95,26 @@ check_upstream() {
   fi
 }
 
-# Check firmware patch compatibility.
-# Detects KeeneticOS version via ndmc, looks up patch set in hash-map.conf.
+# Check firmware patch state.
+# Reads /tmp/ew-webui/.patch-state written by patch-stock-ui.sh.
 # Sets: _ck_patch_set ("v1"|"v2"|"v3"|""), _ck_fw_version, _ck_patch_ok ("true"|"false")
 check_patch_compat() {
   _ck_patch_set=""
   _ck_fw_version=""
   _ck_patch_ok="false"
-  local _hash_map="$SCRIPT_DIR/../patches/hash-map.conf"
-  if ! command -v ndmc >/dev/null 2>&1; then
-    return
-  fi
-  _ck_fw_version=$(ndmc -c "show version" 2>/dev/null | awk '/title:/ { print $2; exit }')
-  [ -n "$_ck_fw_version" ] || return 0
-  [ -f "$_hash_map" ] || return 0
-  # Try exact version first (e.g. DEFAULT:5.1.0)
-  _ck_patch_set=$(grep -v '^#' "$_hash_map" | grep -v '^$' \
-    | awk -v d="DEFAULT:$_ck_fw_version" '$1 == d { print $2 }')
-  # Fallback to major.minor (e.g. DEFAULT:5.1)
-  if [ -z "$_ck_patch_set" ]; then
-    local _fw_mm
-    _fw_mm=$(printf '%s' "$_ck_fw_version" | sed 's/^\([0-9]*\.[0-9]*\).*/\1/')
-    _ck_patch_set=$(grep -v '^#' "$_hash_map" | grep -v '^$' \
-      | awk -v d="DEFAULT:$_fw_mm" '$1 == d { print $2 }')
-  fi
-  if [ -n "$_ck_patch_set" ]; then
-    _ck_patch_ok="true"
+  local _state="/tmp/ew-webui/.patch-state"
+  if [ -f "$_state" ]; then
+    # State file is key=value (PATCH_SET, FW_VERSION, JS_HASH, CSS_HASH)
+    # shellcheck source=/dev/null
+    . "$_state"
+    _ck_patch_set="${PATCH_SET:-}"
+    _ck_fw_version="${FW_VERSION:-}"
+    [ -n "$_ck_patch_set" ] && _ck_patch_ok="true"
+  else
+    # Fallback: get firmware version from ndmc (state file missing = not patched)
+    if command -v ndmc >/dev/null 2>&1; then
+      _ck_fw_version=$(ndmc -c "show version" 2>/dev/null | awk '/title:/ { print $2; exit }')
+    fi
   fi
 }
 

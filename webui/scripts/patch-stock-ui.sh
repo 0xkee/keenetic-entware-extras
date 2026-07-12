@@ -3,12 +3,11 @@
 # Called by S80nginx-webui before starting nginx.
 # Result: /tmp/ew-webui/ with patched index.html + main-*.js bundle.
 #
-# Multi-version support:
-#   Patch sets live in webui/patches/v<N>.sh (one per firmware branch).
-#   Mapping in webui/patches/hash-map.conf via DEFAULT:<fw_version> entries.
-#   Lookup: DEFAULT:<full_version> → DEFAULT:<major.minor> → fallback (no patches).
-#   After firmware upgrade: test existing patches against new bundle,
-#   create new vN.sh + DEFAULT entry only if DOM changed.
+# Patch detection:
+#   Auto-detects patch set by scanning the stock Angular bundle for the
+#   DashboardSection enum name: Po → v1, Vo → v2, Mo → v3.
+#   Works regardless of firmware version string or architecture.
+#   Writes result to /tmp/ew-webui/.patch-state for status.sh.
 # shellcheck disable=SC1091  # sourced files resolved at runtime on router
 set -eu
 
@@ -65,58 +64,74 @@ if ! grep -q 'inject.js' "$CACHE/index.html"; then
 fi
 
 # -- Apply version-specific bundle patches -----------------------------
-HASH_MAP="$PATCHES_DIR/hash-map.conf"
 PATCH_VER=""
 
-# Detect firmware version via ndmc (e.g. "5.0.11", "5.1")
-FW_TITLE=""
-FW_VER=""
-if command -v ndmc >/dev/null 2>&1; then
-    FW_TITLE=$(ndmc -c "show version" 2>/dev/null | awk '/title:/ { print $2; exit }')
-    FW_VER=$(printf '%s' "$FW_TITLE" | sed 's/^\([0-9]*\.[0-9]*\).*/\1/')
-fi
-
-# Look up patch set from hash-map.conf using firmware version cascade:
-#   1. DEFAULT:<full_version>  (e.g. DEFAULT:5.0.11)
-#   2. DEFAULT:<major.minor>   (e.g. DEFAULT:5.0)
-if [ -f "$HASH_MAP" ] && [ -n "$FW_TITLE" ]; then
-    # Try exact version first (e.g. DEFAULT:5.0.11)
-    PATCH_VER=$(grep -v '^#' "$HASH_MAP" | grep -v '^$' | awk -v d="DEFAULT:$FW_TITLE" '$1 == d { print $2 }')
-    # Fallback to major.minor (e.g. DEFAULT:5.0)
-    if [ -z "$PATCH_VER" ] && [ -n "$FW_VER" ]; then
-        PATCH_VER=$(grep -v '^#' "$HASH_MAP" | grep -v '^$' | awk -v d="DEFAULT:$FW_VER" '$1 == d { print $2 }')
-    fi
+# Auto-detect patch set from bundle DashboardSection enum.
+# Each vN.sh declares PATCH_ENUM="<EnumName>" (e.g. Po, Vo, Mo, Oo).
+# Content-based detection: find `Xx={INTERNET:"INTERNET"` — the unique
+# DashboardSection enum pattern. Avoids ambiguous .values(Xx)) grep.
+BUNDLE_ENUM=$(grep -o '[A-Za-z][A-Za-z0-9]*={INTERNET:"INTERNET"' "$BUNDLE" \
+    | head -1 | sed 's/=.*//')
+if [ -n "$BUNDLE_ENUM" ]; then
+    for _pf in "$PATCHES_DIR"/v*.sh; do
+        [ -f "$_pf" ] || continue
+        _enum=$(sed -n 's/^PATCH_ENUM="\([^"]*\)"/\1/p' "$_pf")
+        if [ "$_enum" = "$BUNDLE_ENUM" ]; then
+            PATCH_VER=$(basename "$_pf" .sh)
+            break
+        fi
+    done
 fi
 
 PATCH_FILE="$PATCHES_DIR/${PATCH_VER}.sh"
+
+# Detect firmware version for diagnostics (state file, logs)
+FW_TITLE=""
+if command -v ndmc >/dev/null 2>&1; then
+    FW_TITLE=$(ndmc -c "show version" 2>/dev/null | awk '/title:/ { print $2; exit }')
+fi
+
+# Combined sed + verify helper (called by vN.sh for each patch).
+# Usage: patch_sed <label> <expected_fixed_string> <sed_expression> <file>
+# Runs sed -i, then checks that <expected_fixed_string> exists in <file>.
+_PATCH_OK=0
+_PATCH_FAIL=0
+patch_sed() {
+    _ps_label="$1"; _ps_check="$2"; _ps_expr="$3"; _ps_file="$4"
+    sed -i "$_ps_expr" "$_ps_file"
+    if grep -qF "$_ps_check" "$_ps_file"; then
+        _PATCH_OK=$((_PATCH_OK + 1))
+    else
+        _PATCH_FAIL=$((_PATCH_FAIL + 1))
+        log "WARN: patch $_ps_label did not apply"
+    fi
+}
 
 if [ -n "$PATCH_VER" ] && [ -f "$PATCH_FILE" ]; then
     log "Applying patches: ${PATCH_VER}.sh (JS=main-${JS_HASH}.js)"
     # shellcheck source=/dev/null
     . "$PATCH_FILE"
-    # apply_patches is defined in the sourced file
+    # apply_patches is defined in the sourced file;
+    # it calls verify_patch() after each sed for per-patch diagnostics
     apply_patches "$BUNDLE"
 
-    # -- Verify critical patches ----------------------------------------
-    OK=0
-    FAIL=0
-    for pat in 'ENTWARE_EXTRAS:"ENTWARE_EXTRAS"' 'ENTWARE_EXTRAS:"ENTWARE EXTRAS"' '__ewLastOrder'; do
-        if grep -q "$pat" "$BUNDLE"; then
-            OK=$((OK + 1))
-        else
-            FAIL=$((FAIL + 1))
-            log "WARN: missing after patch: $pat"
-        fi
-    done
-
-    if [ "$FAIL" -gt 0 ]; then
-        log "WARN: $FAIL/$((OK + FAIL)) critical patches failed (${PATCH_VER}, JS=main-${JS_HASH}.js)"
+    # -- Summary --------------------------------------------------------
+    if [ "$_PATCH_FAIL" -gt 0 ]; then
+        log "WARN: $_PATCH_FAIL/$((_PATCH_OK + _PATCH_FAIL)) patches failed (${PATCH_VER}, JS=main-${JS_HASH}.js)"
     else
-        log "OK: $OK/$((OK + FAIL)) verified (${PATCH_VER}, JS=main-${JS_HASH}.js)"
+        log "OK: $_PATCH_OK/$((_PATCH_OK + _PATCH_FAIL)) patches verified (${PATCH_VER}, JS=main-${JS_HASH}.js)"
     fi
+
+    # Write state file for status.sh (sourced as key=value)
+    printf 'PATCH_SET=%s\nFW_VERSION=%s\nJS_HASH=%s\nCSS_HASH=%s\nPATCH_OK=%s\nPATCH_FAIL=%s\n' \
+        "$PATCH_VER" "$FW_TITLE" "$JS_HASH" "$CSS_HASH" "$_PATCH_OK" "$_PATCH_FAIL" \
+        > "$CACHE/.patch-state"
 else
-    log "WARN: no patch set available -- serving stock UI + inject.js only"
-    log "WARN: add JS hash '${JS_HASH}' to $PATCHES_DIR/hash-map.conf to enable full integration"
+    log "WARN: unknown bundle enum — no matching patch set (JS=main-${JS_HASH}.js)"
+    log "WARN: serving stock UI + inject.js only; create new vN.sh if this is a new firmware"
+    printf 'PATCH_SET=\nFW_VERSION=%s\nJS_HASH=%s\nCSS_HASH=%s\nPATCH_OK=0\nPATCH_FAIL=0\n' \
+        "$FW_TITLE" "$JS_HASH" "$CSS_HASH" \
+        > "$CACHE/.patch-state"
 fi
 
 # -- Pre-compress large assets for gzip_static -------------------------

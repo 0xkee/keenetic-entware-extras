@@ -59,20 +59,20 @@ On `start` or `reload`, script `patch-stock-ui.sh`:
 
 1. Copies `/usr/share/htdocs_/` → `/tmp/ew-webui/` (tmpfs, no flash writes)
 2. Patches `index.html` — injects `<script>` and `<link>` tags (`inject.js`, `inject.css`)
-3. Loads `patches/hash-map.conf`, determines patch-set version by firmware version
-4. Calls `source patches/v1.sh` → `apply_patches` on JS bundle (sed replacements for CDK DragDrop integration)
+3. Auto-detects patch set by scanning the stock bundle for `PATCH_ENUM` patterns
+4. Calls `source patches/vN.sh` → `apply_patches` on JS bundle (sed replacements for CDK DragDrop integration)
+5. Writes `/tmp/ew-webui/.patch-state` for `status.sh`
 
-**hash-map.conf** — firmware version → patch-set mapping (detected via `ndmc -c "show version"`):
+**Auto-detection** — each `vN.sh` declares `PATCH_ENUM="<EnumName>"` (the Angular DashboardSection enum). The script greps the stock bundle for `Xx={INTERNET:"INTERNET"` — the enum **definition** — and matches exactly one patch set:
 
-| Entry | Firmware | Patch set |
-|-------|----------|-----------|
-| `DEFAULT:5.0` | KeeneticOS 5.0.x | `v1` |
-| `DEFAULT:5.1` | KeeneticOS 5.1 betas | `v2` |
-| `DEFAULT:5.1.0` | KeeneticOS 5.1.0+ | `v3` |
+| Patch set | Enum | Firmware |
+|-----------|------|----------|
+| `v1` | `Po` | KeeneticOS 5.0.x |
+| `v2` | `Vo` | KeeneticOS 5.1 pre-release |
+| `v3` | `Mo` | KeeneticOS 5.1.0+ |
+| `v4` | `Oo` | KeeneticOS 5.1.1 |
 
-**Fallback:** lookup by `DEFAULT:<major.minor.patch>` → `DEFAULT:<major.minor>` → if not found — stock UI + inject.js only (WARN).
-
-**Adding a new firmware:** verify sed pattern matches → add `DEFAULT:` entry to `hash-map.conf` or create `vN.sh` if patterns changed.
+**Adding a new firmware:** if enum changed, create `vN.sh` with new `PATCH_ENUM` and updated sed patterns. See [patches/README.md](patches/README.md).
 
 ## Management commands
 
@@ -226,10 +226,9 @@ nginx-webui status:
 | `lua/api-router.lua` | Lua router: /api/* → shell commands → JSON |
 | `lua/serve-index.lua` | (not used in current architecture) |
 | `lua/stock-css-init.lua` | Lua: stock CSS scanning on nginx start |
-| `patches/hash-map.conf` | Firmware version → patch-set version mapping |
-| `patches/v1.sh` | Patch set v1: sed replacements for CDK DragDrop integration (KeeneticOS 5.0.x) |
-| `patches/v2.sh` | Patch set v2: KeeneticOS 5.1 betas |
-| `patches/v3.sh` | Patch set v3: KeeneticOS 5.1.0+ |
+| `patches/v1.sh` | Patch set v1: Po enum (KeeneticOS 5.0.x) |
+| `patches/v2.sh` | Patch set v2: Vo enum (KeeneticOS 5.1 pre-release) |
+| `patches/v3.sh` | Patch set v3: Mo enum (KeeneticOS 5.1.0+) |
 | `scripts/patch-stock-ui.sh` | Copies stock UI to tmpfs and applies patches |
 | `scripts/status.sh` | Diagnostics: process, port, config, HTTP, logrotate |
 | `static/index.html` | Custom dashboard — HTML |

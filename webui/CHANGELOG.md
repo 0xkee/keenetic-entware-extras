@@ -5,6 +5,24 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.33.1] — 2026-07-12
+
+### Fixed
+- Patch detection: use content-based enum lookup (`XX={INTERNET:"INTERNET"`) instead of ambiguous `.values(Xx))` grep
+- New patch set v4 for KeeneticOS 5.2+ signal architecture with `Oo` enum (router-4 KN-2310)
+
+## [0.33.0] — 2026-07-12
+
+### Changed
+- Patch detection: auto-detect from bundle enum (`PATCH_ENUM` in vN.sh) instead of `hash-map.conf`
+- `status.sh`: reads `/tmp/ew-webui/.patch-state` instead of hash-map lookup
+
+### Removed
+- `patches/hash-map.conf`
+
+### Fixed
+- Patch misdetection on KeeneticOS 5.1.1 (got v2 instead of v3)
+
 ## [0.32.12] — 2026-07-12
 
 ### Fixed

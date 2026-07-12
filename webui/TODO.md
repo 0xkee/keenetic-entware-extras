@@ -143,6 +143,6 @@
 - [ ] Создать `v0.sh` patch-set: адаптировать 7 тривиальных паттернов (`Po`→`we`, `;`→`,`, `a`→`r`)
 - [ ] #9: найти `Y8G("ngTemplateOutlet"...)` + `getTemplate` в контексте и написать новый sed
 - [ ] #4: проверить `vendor.238eaa341d3874ba.js` на CDK enterPredicate/sortPredicate
-- [ ] Добавить `DEFAULT:4.3 v0` в `hash-map.conf`
+- [ ] Создать `v0.sh` с `PATCH_ENUM` для KeeneticOS 4.x (если поддержка нужна)
 - [ ] Тест: inject.js (sidebar ✅ `ndw-menu`, dashboard card ✅ `dashboard-card` — подтверждены в бандле)
 - [ ] Определить CSS-хеш для `index.html` stock CSS link (`styles.1d2e1ec4187acf13.css`)

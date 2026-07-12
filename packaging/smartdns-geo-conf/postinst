@@ -68,9 +68,17 @@ if [ ! -f "$_CONFIG_DIR/dns-providers-custom.conf" ]; then
 # OTHER_privatedoh_LABEL="Private DoH"
 # OTHER_privatedoh_PROTO="doh"
 # OTHER_privatedoh_DOH_URL="https://dns.example.com/dns-query"
-# OTHER_privatedoh_IP1="10.0.0.1"
+# OTHER_privatedoh_IP1="10.0.0.1"    # optional — omit for Private DoH
 # OTHER_privatedoh_IP2=""
 # OTHER_privatedoh_TLS_HOST="dns.example.com"
+#
+# --- Private DoH (AdGuard, NextDNS — no IP pinning) ---
+# OTHER_agprivate_LABEL="AdGuard Private"
+# OTHER_agprivate_PROTO="doh"
+# OTHER_agprivate_DOH_URL="https://d.adguard-dns.com/dns-query/YOUR_ID"
+# OTHER_agprivate_IP1=""
+# OTHER_agprivate_IP2=""
+# OTHER_agprivate_TLS_HOST="d.adguard-dns.com"
 #
 # --- Zone provider (for regional DNS group) ---
 # ZONE_myzone_LABEL="My Zone DNS"

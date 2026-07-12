@@ -138,21 +138,26 @@ HEADER
 }
 
 # Emit a single DoH server entry.
-# Args: $1=file $2=label $3=doh_url $4=ip $5=tls_host $6=extra_flags
+# Args: $1=file $2=label $3=doh_url $4=ip(optional) $5=tls_host $6=extra_flags
+# If $4 (ip) is empty, -host-ip is omitted — SmartDNS resolves hostname via
+# bootstrap/UDP. Required for Private DoH (AdGuard, NextDNS) where IP pinning
+# breaks profile identification.
 _emit_doh_server() {
   local _file="$1" _label="$2" _url="$3" _ip="$4" _host="$5" _flags="$6"
-  local _suffix=""
-  [ -n "$_flags" ] && _suffix=" \\
-    $_flags"
-  cat >> "$_file" <<EOF
-# ${_label} DoH${_flags:+ (${_flags#-interface })}
-server-https ${_url} \\
-    -host-name ${_host} \\
-    -http-host ${_host} \\
-    -host-ip ${_ip} \\
-    -tls-host-verify ${_host}${_suffix}
-
-EOF
+  {
+    printf '# %s DoH%s\n' "$_label" "${_flags:+ (${_flags#-interface })}"
+    printf 'server-https %s \\\n' "$_url"
+    printf '    -host-name %s \\\n' "$_host"
+    printf '    -http-host %s \\\n' "$_host"
+    [ -n "$_ip" ] && printf '    -host-ip %s \\\n' "$_ip"
+    if [ -n "$_flags" ]; then
+      printf '    -tls-host-verify %s \\\n' "$_host"
+      printf '    %s\n' "$_flags"
+    else
+      printf '    -tls-host-verify %s\n' "$_host"
+    fi
+    printf '\n'
+  } >> "$_file"
 }
 
 # Emit a single DoT server entry.
@@ -299,27 +304,22 @@ EOF
 }
 
 # Emit a DoH server with group flags.
-# Args: $1=file $2=doh_url $3=ip $4=tls_host $5=group_flags $6=extra_flags
+# Args: $1=file $2=doh_url $3=ip(optional) $4=tls_host $5=group_flags $6=extra_flags
+# If $3 (ip) is empty, -host-ip is omitted (see _emit_doh_server comment).
 _emit_zone_doh() {
   local _file="$1" _url="$2" _ip="$3" _host="$4" _grp="$5" _extra="$6"
-  if [ -n "$_extra" ]; then
-    cat >> "$_file" <<EOF
-server-https ${_url} ${_grp} \\
-    -host-name ${_host} \\
-    -http-host ${_host} \\
-    -host-ip ${_ip} \\
-    -tls-host-verify ${_host} \\
-    ${_extra}
-EOF
-  else
-    cat >> "$_file" <<EOF
-server-https ${_url} ${_grp} \\
-    -host-name ${_host} \\
-    -http-host ${_host} \\
-    -host-ip ${_ip} \\
-    -tls-host-verify ${_host}
-EOF
-  fi
+  {
+    printf 'server-https %s %s \\\n' "$_url" "$_grp"
+    printf '    -host-name %s \\\n' "$_host"
+    printf '    -http-host %s \\\n' "$_host"
+    [ -n "$_ip" ] && printf '    -host-ip %s \\\n' "$_ip"
+    if [ -n "$_extra" ]; then
+      printf '    -tls-host-verify %s \\\n' "$_host"
+      printf '    %s\n' "$_extra"
+    else
+      printf '    -tls-host-verify %s\n' "$_host"
+    fi
+  } >> "$_file"
 }
 
 # Generate nameserver routing rules for a single zone.

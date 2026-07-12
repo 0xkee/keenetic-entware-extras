@@ -5,6 +5,21 @@ All notable changes to `smartdns-geo-conf` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.10.8] — 2026-07-11
+
+### Fixed
+- **DoH `-host-ip` now optional**: custom DoH providers (Private AdGuard DNS,
+  NextDNS, etc.) can omit `IP1`/`IP2` — SmartDNS will resolve hostname via
+  bootstrap/UDP instead of IP pinning. Previously, `-host-ip` was always emitted
+  in `generate-conf.sh`, which broke profile identification for personal DoH
+  services that rely on anycast/CDN hostname routing.
+
+### Changed
+- `_emit_doh_server()` / `_emit_zone_doh()` in `generate-conf.sh`: switched from
+  heredoc to printf-based output for conditional `-host-ip` support
+- postinst template: added Private DoH (AdGuard/NextDNS) example with empty IP
+- Documentation: updated DoH examples in user-manual.ru.md and README.md
+
 ## [0.10.7] — 2026-07-02
 
 ### Added

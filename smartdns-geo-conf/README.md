@@ -159,7 +159,10 @@ OTHER_mydns_IP2=""
 OTHER_DNS_PROVIDER="google mydns"
 ```
 
-Supported protocols: `udp`, `dot` (DoT), `doh` (DoH). More details — in [user-manual.ru.md](docs/user-manual.ru.md).
+Supported protocols: `udp`, `dot` (DoT), `doh` (DoH).
+For DoH, `IP1`/`IP2` are **optional** — if omitted, SmartDNS resolves the hostname itself.
+Required for Private DoH (AdGuard, NextDNS) where IP pinning breaks profile identification.
+More details — in [user-manual.ru.md](docs/user-manual.ru.md).
 
 > Provider list is cached by WebUI for 1 hour. For immediate refresh:
 > `/opt/etc/init.d/S80nginx-webui restart`

@@ -1,16 +1,15 @@
 #!/opt/bin/sh
-# Patch set v3 — dashboard card integration for ENTWARE_EXTRAS
-# Detection key: grep for .values(<PATCH_ENUM>)) in the stock bundle.
+# Patch set v4 — dashboard card integration for ENTWARE_EXTRAS
+# Detection key: content-based enum lookup in the stock bundle.
 # shellcheck disable=SC2034  # read by sed in patch-stock-ui.sh
-PATCH_ENUM="Mo"
+PATCH_ENUM="Oo"
 #
 # Verified against stock bundles:
-#   5.1.0  mipsel  main-8787931.js  styles-8787931.css
+#   5.2.x  mipsel  main-553997B.js  styles-553997B.css
 #
-# Difference from v2: Angular moved to signal-based architecture in 5.1.0.
-#   - Enum renamed Vo → Mo
-#   - NdwDragPanel: `set order(e){this.elementsOrder=e}` removed
-#     (order is now a writable signal: `order=V([])`)
+# Difference from v3: Enum renamed Mo → Oo
+#   - Same signal-based architecture as v3
+#   - NdwDragPanel: `order=V([])` writable signal (unchanged)
 #   - `getTemplate` uses signal call: `this.templateMap().get(e)??null`
 #   - Default card layout split into desktop/mobile sub-arrays
 #   - __ewLastOrder now set as side-effect in getTemplate (was in setter)
@@ -21,32 +20,32 @@ PATCH_ENUM="Mo"
 apply_patches() {
     _bundle="$1"
 
-    # #6 Mo enum -- register ENTWARE_EXTRAS as known card ID
+    # #6 Oo enum -- register ENTWARE_EXTRAS as known card ID
     patch_sed "#6" 'ENTWARE_EXTRAS:"ENTWARE_EXTRAS"' \
         's|TELEPHONY:"TELEPHONY"}|TELEPHONY:"TELEPHONY",ENTWARE_EXTRAS:"ENTWARE_EXTRAS"}|' "$_bundle"
 
     # #6a SectionManager fix -- exclude ENTWARE_EXTRAS from dashboard init tracking.
-    # .values(Mo) gates isEveryInitialized$; ENTWARE_EXTRAS has no Angular component
+    # .values(Oo) gates isEveryInitialized$; ENTWARE_EXTRAS has no Angular component
     # → never registers → blocks SectionManager. Filter it out.
     patch_sed "#6a" '!=="ENTWARE_EXTRAS"' \
-        's|\.values(Mo))|.values(Mo).filter(function(x){return x!=="ENTWARE_EXTRAS"}))|' "$_bundle"
+        's|\.values(Oo))|.values(Oo).filter(function(x){return x!=="ENTWARE_EXTRAS"}))|' "$_bundle"
 
     # #7 title map -- display name for ENTWARE_EXTRAS in Cards Position dialog
     patch_sed "#7" 'ENTWARE_EXTRAS:"ENTWARE EXTRAS"' \
-        's|\[Mo\.TELEPHONY\]:"dashboard\.card_nvox\.title"};|[Mo.TELEPHONY]:"dashboard.card_nvox.title",ENTWARE_EXTRAS:"ENTWARE EXTRAS"};|' "$_bundle"
+        's|\[Oo\.TELEPHONY\]:"dashboard\.card_nvox\.title"};|[Oo.TELEPHONY]:"dashboard.card_nvox.title",ENTWARE_EXTRAS:"ENTWARE EXTRAS"};|' "$_bundle"
 
     # #8 dialog filter -- bypass isCardAvailable check for ENTWARE_EXTRAS
     patch_sed "#8" '"ENTWARE_EXTRAS"||this.viewService' \
-        's#Object\.keys(Mo)\.filter(a=>this\.viewService\.isCardAvailable(a))#Object.keys(Mo).filter(a=>a==="ENTWARE_EXTRAS"||this.viewService.isCardAvailable(a))#' "$_bundle"
+        's#Object\.keys(Oo)\.filter(a=>this\.viewService\.isCardAvailable(a))#Object.keys(Oo).filter(a=>a==="ENTWARE_EXTRAS"||this.viewService.isCardAvailable(a))#' "$_bundle"
 
     # #QS-desktop default layout -- add ENTWARE_EXTRAS to desktop first column
-    # In 5.1.0 layout is {desktop:[[col1],[col2]], mobile:[[all]]}
-    patch_sed "#QS-desktop" 'Mo.ENTWARE_EXTRAS],[' \
-        's|Mo\.INTERNET,Mo\.USB,Mo\.APPLICATIONS,Mo\.SYSTEM,Mo\.TELEPHONY\],\[Mo\.SEGMENTS|Mo.INTERNET,Mo.USB,Mo.APPLICATIONS,Mo.SYSTEM,Mo.TELEPHONY,Mo.ENTWARE_EXTRAS],[Mo.SEGMENTS|' "$_bundle"
+    # In 5.1.1 layout is {desktop:[[col1],[col2]], mobile:[[all]]}
+    patch_sed "#QS-desktop" 'Oo.ENTWARE_EXTRAS],[' \
+        's|Oo\.INTERNET,Oo\.USB,Oo\.APPLICATIONS,Oo\.SYSTEM,Oo\.TELEPHONY\],\[Oo\.SEGMENTS|Oo.INTERNET,Oo.USB,Oo.APPLICATIONS,Oo.SYSTEM,Oo.TELEPHONY,Oo.ENTWARE_EXTRAS],[Oo.SEGMENTS|' "$_bundle"
 
     # #QS-mobile default layout -- add ENTWARE_EXTRAS to mobile layout
-    patch_sed "#QS-mobile" 'Mo.ENTWARE_EXTRAS]]' \
-        's|Mo\.TRAFFIC_MONITOR,Mo\.TELEPHONY\]\]|Mo.TRAFFIC_MONITOR,Mo.TELEPHONY,Mo.ENTWARE_EXTRAS]]|' "$_bundle"
+    patch_sed "#QS-mobile" 'Oo.ENTWARE_EXTRAS]]' \
+        's|Oo\.TRAFFIC_MONITOR,Oo\.TELEPHONY\]\]|Oo.TRAFFIC_MONITOR,Oo.TELEPHONY,Oo.ENTWARE_EXTRAS]]|' "$_bundle"
 
     # #2+3 getTemplate + __ewLastOrder -- combined hook for signal architecture.
     # getTemplate sets window.__ewLastOrder from order() signal as side-effect,

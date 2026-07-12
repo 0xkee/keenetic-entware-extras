@@ -5,6 +5,12 @@ All notable changes to `keenetic-entware-extras` (base package) are documented h
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.16.7] - 2026-07-11
+
+### Added
+- `lib/ip.sh`: `cidr_overlap_routes()` — finds routes in a routing table that overlap
+  with a given CIDR (moved from `geo-split/scripts/route-check.sh` for reuse)
+
 ## [0.16.6] - 2026-07-11
 
 ### Fixed

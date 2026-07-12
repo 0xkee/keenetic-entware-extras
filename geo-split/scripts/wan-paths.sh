@@ -55,7 +55,11 @@ else
 fi
 if [ -n "$_geo_out_dev" ]; then
   _geo_out_via=$(ip route show dev "$_geo_out_dev" 2>/dev/null | awk '/^default/{for(i=1;i<=NF;i++) if($i=="via"){print $(i+1); exit}}')
-  _add_path "$_geo_out_dev" "${_geo_out_via:-}" "isp"
+  if is_tunnel_iface "$_geo_out_dev"; then
+    _add_path "$_geo_out_dev" "${_geo_out_via:-}" "tunnel"
+  else
+    _add_path "$_geo_out_dev" "${_geo_out_via:-}" "isp"
+  fi
 fi
 
 # 2) VPN tunnel interfaces from fwmark policy tables (deduplicated, 1 fork per table)

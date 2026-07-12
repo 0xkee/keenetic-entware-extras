@@ -27,6 +27,19 @@ fi
 
 # --- Helpers ---
 
+# Convert comma-separated list to JSON array elements.
+# Args: $1 - comma-separated values (e.g. "a,b,c")
+# stdout: quoted elements without brackets (e.g. "a","b","c")
+_csv_to_json_arr() {
+  local tmp="$1" item="" out=""
+  while [ -n "$tmp" ]; do
+    item="${tmp%%,*}"
+    out="${out:+${out},}\"${item}\""
+    case "$tmp" in *,*) tmp="${tmp#*,}" ;; *) tmp="" ;; esac
+  done
+  printf '%s' "$out"
+}
+
 # Print JSON error and exit.
 # Args: $1 - error code, $2 - query, $3 - human message
 emit_error_json() {
@@ -107,36 +120,6 @@ get_match_prefix() {
   else
     echo "$prefix"
   fi
-}
-
-# Find routes in a routing table that overlap with the given CIDR.
-# Phase 1 of CIDR analysis: table-based coverage lookup.
-# Args: $1 - input CIDR, $2 - table number
-# stdout: lines "prefix route_ips dev overlap_ips" for each overlapping route
-_cidr_overlap_routes() {
-  local input_cidr="$1" table="$2"
-  ip route show table "$table" 2>/dev/null | awk -v input="$input_cidr" '
-    BEGIN {
-      n = split(input, p, "/"); in_pfx = int(p[2])
-      split(p[1], o, "."); in_ip = o[1]*16777216 + o[2]*65536 + o[3]*256 + o[4]
-      in_sz = 1; for (i=0; i<32-in_pfx; i++) in_sz *= 2
-      in_net = in_ip - (in_ip % in_sz); in_end = in_net + in_sz - 1
-    }
-    /^[0-9]/ {
-      n = split($1, p, "/")
-      if (n == 1) { pfx = 32 } else { pfx = int(p[2]) }
-      split(p[1], o, ".")
-      rip = o[1]*16777216 + o[2]*65536 + o[3]*256 + o[4]
-      rsz = 1; for (i=0; i<32-pfx; i++) rsz *= 2
-      rn = rip - (rip % rsz); re = rn + rsz - 1
-      os = (rn > in_net) ? rn : in_net
-      oe = (re < in_end) ? re : in_end
-      if (os <= oe) {
-        dev = ""
-        for (i=1; i<=NF; i++) if ($i == "dev") { dev = $(i+1); break }
-        print $1, rsz, dev, oe - os + 1
-      }
-    }'
 }
 
 # --- Argument parsing ---
@@ -271,47 +254,26 @@ if [ "$INPUT_TYPE" = "cidr" ]; then
   CIDR_TOTAL=$(cidr_total_ips "$QUERY")
 
   # --- Coverage analysis: find overlapping routes in geo-split tables ---
-  overlap_json=""
-  geo_ips=0
+  # Collect raw overlap data to temp file, then process outside pipe (no subshell).
+  _cov_tmp="/tmp/.rc_coverage.$$"
+  : > "$_cov_tmp"
   for _tbl in "$DOMAIN_ROUTE_TABLE" "$SUBNET_ROUTE_TABLE"; do
     _tbl_name=$(table_name_for "$_tbl")
-    _overlap=$(_cidr_overlap_routes "$QUERY" "$_tbl")
-    if [ -n "$_overlap" ]; then
-      echo "$_overlap" | while IFS=' ' read -r _prefix _rsz _dev _oips; do
-        printf '%s %s %s %s %s\n' "$_tbl" "$_tbl_name" "$_prefix" "$_dev" "$_oips"
-      done
-    fi
-  done | {
-    while IFS=' ' read -r _tbl _tbl_name _prefix _dev _oips; do
-      overlap_json="${overlap_json:+${overlap_json},}{\"table\":\"${_tbl}\",\"table_name\":\"${_tbl_name}\",\"prefix\":\"${_prefix}\",\"dev\":\"${_dev}\",\"ips\":${_oips}}"
-      geo_ips=$((geo_ips + _oips))
-    done
-    # Compute geo_split_pct (integer, avoid awk fork for simple cases)
-    if [ "$CIDR_TOTAL" -gt 0 ] && [ "$geo_ips" -gt 0 ]; then
-      geo_pct=$(awk "BEGIN{printf \"%d\", ${geo_ips}*100/${CIDR_TOTAL}}")
-    else
-      geo_pct=0
-    fi
-    # Export coverage results via temp file (subshell can't set parent vars)
-    _cov_tmp="/tmp/.rc_coverage.$$"
-    printf '%s\n%s\n%s\n' "$overlap_json" "$geo_ips" "$geo_pct" > "$_cov_tmp"
-  }
-  # Read back coverage results from subshell
-  _cov_tmp="/tmp/.rc_coverage.$$"
-  if [ -f "$_cov_tmp" ]; then
-    _cov_line=0
-    while IFS= read -r _line; do
-      _cov_line=$((_cov_line + 1))
-      case $_cov_line in
-        1) overlap_json="$_line" ;;
-        2) geo_ips="$_line" ;;
-        3) geo_pct="$_line" ;;
-      esac
-    done < "$_cov_tmp"
-    rm -f "$_cov_tmp"
+    cidr_overlap_routes "$QUERY" "$_tbl" \
+      | awk -v t="$_tbl" -v tn="$_tbl_name" '{print t, tn, $0}' >> "$_cov_tmp"
+  done
+
+  overlap_json=""
+  geo_ips=0
+  while IFS=' ' read -r _tbl _tbl_name _prefix _rsz _dev _oips; do
+    overlap_json="${overlap_json:+${overlap_json},}{\"table\":\"${_tbl}\",\"table_name\":\"${_tbl_name}\",\"prefix\":\"${_prefix}\",\"dev\":\"${_dev}\",\"ips\":${_oips}}"
+    geo_ips=$((geo_ips + _oips))
+  done < "$_cov_tmp"
+  rm -f "$_cov_tmp"
+
+  if [ "$CIDR_TOTAL" -gt 0 ] && [ "$geo_ips" -gt 0 ]; then
+    geo_pct=$(awk "BEGIN{printf \"%d\", ${geo_ips}*100/${CIDR_TOTAL}}")
   else
-    overlap_json=""
-    geo_ips=0
     geo_pct=0
   fi
   COVERAGE_JSON=$(printf '"coverage":{"total_ips":%d,"overlaps":[%s],"geo_split_ips":%d,"geo_split_pct":%d}' \
@@ -455,6 +417,14 @@ elif [ "$v_count" -eq 1 ]; then
   OVERALL_VERDICT="$item"
 fi
 
+# CIDR coverage override: partial geo-split overlap → force mixed verdict.
+# Sampled IPs may miss the overlapping subnets; coverage is authoritative.
+if [ "$INPUT_TYPE" = "cidr" ] && [ "${geo_ips:-0}" -gt 0 ] && [ "${geo_pct:-0}" -lt 100 ]; then
+  OVERALL_VERDICT="mixed"
+  case "$v_list" in *geo-split*) ;; *) v_list="${v_list:+${v_list},}geo-split" ;; esac
+  case "$v_list" in *default*) ;; *) v_list="${v_list:+${v_list},}default" ;; esac
+fi
+
 # Build unique devs comma-list for display
 d_list=""
 tmp="${devs_seen#|}"
@@ -490,42 +460,22 @@ fi
 
 # --- Output ---
 if [ "$JSON_MODE" = "1" ]; then
-  # JSON output (inline, no subshell forks)
-  input_type_json=",\"input_type\":\"${INPUT_TYPE}\""
-  coverage_json_field=""
-  if [ -n "$COVERAGE_JSON" ]; then
-    coverage_json_field=",${COVERAGE_JSON}"
-  fi
-  fwmark_json=""
-  if [ -n "$FWMARK" ]; then
-    fwmark_json=",\"fwmark\":\"${FWMARK}\""
-  fi
-  from_json=""
-  if [ -n "$FROM_MAC" ]; then
-    from_json=",\"from_mac\":\"${FROM_MAC}\",\"from_name\":\"$(json_escape_val "$FROM_NAME")\""
-  fi
-  tunnel_json=""
-  if [ -n "$TUNNEL_ROUTE_DEV" ]; then
-    tunnel_json=",\"tunnel_route\":{\"dev\":\"${TUNNEL_ROUTE_DEV}\"}"
-  fi
-  # Build verdict_details JSON array: ["geo-split","tunnel"]
-  vd_json=""
-  vd_tmp="$v_list"
-  while [ -n "$vd_tmp" ]; do
-    vd_item="${vd_tmp%%,*}"
-    vd_json="${vd_json:+${vd_json},}\"${vd_item}\""
-    case "$vd_tmp" in *,*) vd_tmp="${vd_tmp#*,}" ;; *) vd_tmp="" ;; esac
-  done
-  # Build verdict_devs JSON array: ["nwg0","lte_br1"]
-  dd_json=""
-  dd_tmp="$d_list"
-  while [ -n "$dd_tmp" ]; do
-    dd_item="${dd_tmp%%,*}"
-    dd_json="${dd_json:+${dd_json},}\"${dd_item}\""
-    case "$dd_tmp" in *,*) dd_tmp="${dd_tmp#*,}" ;; *) dd_tmp="" ;; esac
-  done
-  printf '{"ok":true,"query":"%s"%s,"source_iface":"%s"%s%s%s,"dns":%s,"routes":[%s],"default_route":{"dev":"%s","via":"%s"}%s,"verdict":"%s","verdict_details":[%s],"verdict_devs":[%s]}\n' \
-    "$QUERY" "$input_type_json" "$IIF" "$fwmark_json" "$from_json" "$coverage_json_field" "$DNS_JSON" "$ROUTES_JSON" "$dr_dev" "$dr_via" "$tunnel_json" "$OVERALL_VERDICT" "$vd_json" "$dd_json"
+  # JSON output — build optional fragments, then assemble (no subshell forks).
+  # Optional fields: only appended when non-empty.
+  _opt=""
+  [ -n "$FWMARK" ]          && _opt="${_opt},\"fwmark\":\"${FWMARK}\""
+  [ -n "$FROM_MAC" ]        && _opt="${_opt},\"from_mac\":\"${FROM_MAC}\",\"from_name\":\"$(json_escape_val "$FROM_NAME")\""
+  [ -n "$COVERAGE_JSON" ]   && _opt="${_opt},${COVERAGE_JSON}"
+  [ -n "$TUNNEL_ROUTE_DEV" ] && _opt="${_opt},\"tunnel_route\":{\"dev\":\"${TUNNEL_ROUTE_DEV}\"}"
+
+  printf '{"ok":true,"query":"%s","input_type":"%s","source_iface":"%s"%s,' \
+    "$QUERY" "$INPUT_TYPE" "$IIF" "$_opt"
+  printf '"dns":%s,"routes":[%s],' \
+    "$DNS_JSON" "$ROUTES_JSON"
+  printf '"default_route":{"dev":"%s","via":"%s"},' \
+    "$dr_dev" "$dr_via"
+  printf '"verdict":"%s","verdict_details":[%s],"verdict_devs":[%s]}\n' \
+    "$OVERALL_VERDICT" "$(_csv_to_json_arr "$v_list")" "$(_csv_to_json_arr "$d_list")"
 else
   # Human-readable text output
   printf 'Route Check: %s\n' "$QUERY"

@@ -22,8 +22,8 @@
     ];
 
     var DASH_POLL_INTERVAL = (__cfg.pollInterval > 0) ? __cfg.pollInterval : 30000;
-    var DETAILS_SKIP_KEYS = { uptime: 1, version: 1, pid: 1, background: 1, cache: 1 };
-    var DASH_SKELETON_COUNTS = { 'geo-split': 16, 'smartdns': 9, 'smartdns-redirect': 8, 'webui': 8 };
+    var DETAILS_SKIP_KEYS = { uptime: 1, version: 1, pid: 1, background: 1 };
+    var DASH_SKELETON_COUNTS = { 'geo-split': 16, 'smartdns': 10, 'smartdns-redirect': 8, 'webui': 9 };
 
     var injected = false;
     var dashboardInjected = false;
@@ -282,7 +282,7 @@
             });
         }
 
-        // Event delegation for update buttons (geo-split subnet/domain refresh)
+        // Event delegation for update buttons (geo-split refresh, cache flush)
         card.addEventListener('click', function(e) {
             var btn = e.target.closest('.ew-update-btn');
             if (!btn || btn.disabled) return;
@@ -291,7 +291,20 @@
             btn.disabled = true;
             fetch(actionUrl, { method: 'POST' })
                 .then(function(r) { return r.json(); })
-                .then(function() { geoPoller.start(); })
+                .then(function() {
+                    btn.classList.remove('ew-update-btn--spinning');
+                    btn.disabled = false;
+                    var _label = actionUrl.indexOf('flush') !== -1 ? '\u2713 Flushed ' : '\u2713 Updating\u2026 ';
+                    var _p = btn.parentNode;
+                    if (_p) { for (var _n = _p.firstChild; _n; _n = _n.nextSibling) {
+                        if (_n !== btn && (_n.nodeType === 3 || _n.nodeType === 1)) { _n.textContent = _label; break; }
+                    }}
+                    if (actionUrl.indexOf('geo-split') !== -1) {
+                        geoPoller.start();
+                    } else {
+                        fetchDashboardStatuses();
+                    }
+                })
                 .catch(function() {
                     btn.classList.remove('ew-update-btn--spinning');
                     btn.disabled = false;

@@ -854,6 +854,8 @@ local action_routes = {
     -- does not produce "&;" which is a syntax error in BusyBox ash.
     ["/api/geo-split/update-subnets"]  = "(" .. base .. "/geo-split/scripts/update-subnets.sh --force >/dev/null 2>&1 &)",
     ["/api/geo-split/update-domains"]  = "(" .. base .. "/geo-split/scripts/update-domains.sh --force >/dev/null 2>&1 &)",
+    -- Cache flush (smartdns: stop daemon, delete persistent cache, restart)
+    ["/api/smartdns/flush-cache"]      = base .. "/smartdns-geo-conf/init.d/S37smartdns-conf flush-cache 2>&1",
 }
 
 -- Lua-computed routes: cached JSON endpoints

@@ -603,6 +603,18 @@ window.EW = (function() {
         return { start: start, stop: stop, stopAll: stopAll, isPolling: isPolling };
     }
 
+    /**
+     * Check if a Linux device name is a VPN/tunnel interface.
+     * Matches prefixes: nwg, awg, wg, ovpn, l2tp, pptp, sstp, ipsec,
+     * tun[0-9], tap, gre, vti, sit, ip6tnl, xfrm.
+     * @param {string} dev - Linux device name
+     * @returns {boolean}
+     */
+    function isTunnelIface(dev) {
+        if (!dev) return false;
+        return /^(nwg|awg|wg|ovpn|l2tp|pptp|sstp|ipsec|tun\d|tap|gre|vti|sit|ip6tnl|xfrm)/.test(dev);
+    }
+
     return {
         SERVICE_APIS: SERVICE_APIS,
         TIMER_KEYS: TIMER_KEYS,
@@ -623,6 +635,7 @@ window.EW = (function() {
         shortDomain: shortDomain,
         detailValueStyle: detailValueStyle,
         renderDetailValue: renderDetailValue,
-        renderUpdateBtn: renderUpdateBtn
+        renderUpdateBtn: renderUpdateBtn,
+        isTunnelIface: isTunnelIface
     };
 })();

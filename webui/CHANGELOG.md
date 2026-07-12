@@ -5,6 +5,56 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.32.5] — 2026-07-11
+
+### Fixed
+- **Route Devices: missing devices from CIDR coverage overlaps** — for CIDR mixed
+  verdict (e.g. 2.0.0.0/8 → 7%), Route Devices section only showed devices from
+  sampled IPs, missing devices found via coverage overlap analysis. Now includes
+  both sources, consistent with diagram, summary line, and batch table.
+
+### Refactored
+- `route-check.js`: extracted `_collectAllDevs(data)` helper that collects unique
+  device names from `verdict_devs` + CIDR `coverage.overlaps`. Replaces 3 inline
+  copies of the same logic (summary line, batch table, route devices section).
+- Removed all `!== 'lo'` device filtering from `route-check.js` (4 places) and
+  `route-diagram.js` (3 places). Loopback device now passes through all display
+  stages — no special-case treatment.
+
+## [0.32.4] — 2026-07-11
+
+### Refactored
+- `route-check.js`: batch table switched to append-only rendering — new rows are
+  appended to existing `<tbody>` instead of full DOM rebuild on each result.
+  Removed 15-line state preservation hack (`openDomains`/`openDetails` scanning).
+- `route-check.js`: extracted `_createBatchTableEl()` and `_buildBatchRowPair()`
+  from monolithic `_renderBatchTable()` for better separation of concerns.
+
+## [0.32.3] — 2026-07-11
+
+### Added
+- `EW.isTunnelIface(dev)` helper in shared.js — client-side tunnel prefix detection
+  (mirrors `is_tunnel_iface` from lib/ip.sh)
+
+### Changed
+- Route diagram: simplified to two-icon model (globe for ISP + shield for tunnel),
+  removed Policy/signpost path type entirely. Path coloring: green for geo-split,
+  blue for all other active paths. Removed gateway "via" sublabel under path nodes.
+- Route diagram: CIDR mixed verdict now activates devices from coverage overlaps
+  and default route in diagram paths
+- Route check details: "Default Route" section → "Route Devices" — shows unique
+  devices grouped by verdict with table names (more informative for multi-path)
+- Route check summary: cleaned up — removed gateway "via" text, shows "tunnel"
+  prefix instead of "system", "policy" label for default verdict in legend
+- Route check: CIDR mixed devs collected from both sampled IPs and coverage
+  overlaps (summary, batch table, and legend)
+
+### Fixed
+- Dashboard card header "ENTWARE EXTRAS" is now a clickable link to Summary page
+  with pointer cursor (hand icon) on hover
+- Interface blacklist: added `rai` (5 GHz), `rax` (6 GHz), `xfrm`/`xfrms` (IPsec)
+  exclusions in `api-router.lua` → `system_interfaces()`
+
 ## [0.32.2] — 2026-07-07
 
 ### Added

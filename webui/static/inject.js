@@ -254,8 +254,8 @@
         var header = document.createElement('div');
         header.className = 'dashboard-card__header';
         header.innerHTML =
-            '<div class="dashboard-card__header-link">' +
-                '<span class="text-card-heading" role="heading" aria-level="2" style="cursor:default">ENTWARE EXTRAS</span>' +
+            '<div class="dashboard-card__header-link" style="cursor:pointer">' +
+                '<span class="text-card-heading" role="heading" aria-level="2">ENTWARE EXTRAS</span>' +
             '</div>' +
             '<div class="dashboard-card__header-buttons">' +
                 '<ndw-svg-icon class="ndw-drag-handle dashboard-card__drag-icon">' +
@@ -273,6 +273,14 @@
         card.appendChild(header);
         card.appendChild(content);
         inner.appendChild(card);
+
+        var headerLink = header.querySelector('.dashboard-card__header-link');
+        if (headerLink) {
+            headerLink.addEventListener('click', function(e) {
+                e.preventDefault();
+                showInContent({ id: 'dashboard', url: '/custom/' });
+            });
+        }
 
         // Event delegation for update buttons (geo-split subnet/domain refresh)
         card.addEventListener('click', function(e) {

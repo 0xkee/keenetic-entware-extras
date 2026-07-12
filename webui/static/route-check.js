@@ -43,8 +43,8 @@ function _fetchWithRetry(url, retries) {
     });
 }
 
-var ROUTE_EXAMPLES = ['ozon.ru', 'github.com', 'kaspi.kz', '8.8.8.8', '5.0.0.0/8'];
-var DNS_EXAMPLES = ['ozon.ru', 'github.com', 'kaspi.kz', 'bbc.co.uk'];
+var ROUTE_EXAMPLES = [ 'github.com', 'kaspi.kz', 'ozon.ru', '8.8.8.8', '5.0.0.0/8'];
+var DNS_EXAMPLES = ['github.com', 'kaspi.kz', 'bbc.co.uk', 'ozon.ru' ];
 
 // ── localStorage History ─────────────────────────────────────────────────────
 
@@ -232,6 +232,28 @@ function _getVerdictClass(data, type) {
 }
 
 /**
+ * Collect all unique non-lo device names from verdict_devs + CIDR coverage overlaps.
+ * Used by summary line, batch table, and route devices section.
+ * @param {Object} data - route-check API response
+ * @returns {Object} map {dev_name: true}
+ */
+function _collectAllDevs(data) {
+    var devs = {};
+    if (data.verdict_devs) {
+        for (var i = 0; i < data.verdict_devs.length; i++) {
+            devs[data.verdict_devs[i]] = true;
+        }
+    }
+    if (data.input_type === 'cidr' && data.coverage && data.coverage.overlaps) {
+        for (var j = 0; j < data.coverage.overlaps.length; j++) {
+            var d = data.coverage.overlaps[j].dev;
+            if (d) devs[d] = true;
+        }
+    }
+    return devs;
+}
+
+/**
  * Build one-line text summary for a route check result.
  * @param {Object} data - API response from route-check
  * @returns {string}
@@ -253,18 +275,18 @@ function _buildRouteSummary(data) {
     }
 
     if (data.verdict === 'mixed' && data.verdict_devs && data.verdict_devs.length > 0) {
-        parts.push(data.verdict_devs.map(function(d) { return EW.ifaceLabelShort(d); }).join(', '));
+        parts.push(Object.keys(_collectAllDevs(data)).map(function(d) { return EW.ifaceLabelShort(d); }).join(', '));
     } else {
         var route = (data.routes && data.routes[0]) ? data.routes[0] : null;
         if (route) {
-            var routePrefix = (data.verdict === 'geo-split') ? 'geo ' : ((data.verdict === 'tunnel') ? 'system ' : '');
+            var routePrefix = (data.verdict === 'geo-split') ? 'geo ' : ((data.verdict === 'tunnel') ? 'tunnel ' : '');
             var tableInfo = route.match_type ? routePrefix + route.match_type + ' (table ' + (route.table || 'main') + ')' : 'table ' + (route.table || 'main');
             parts.push(tableInfo);
-            parts.push(EW.ifaceLabelShort(route.dev || '?') + (route.via ? ' via ' + route.via : ''));
+            parts.push(EW.ifaceLabelShort(route.dev || '?'));
         } else {
             var def = data.default_route || {};
             parts.push('main table');
-            parts.push(EW.ifaceLabelShort(def.dev || '?') + (def.via ? ' via ' + def.via : ''));
+            parts.push(EW.ifaceLabelShort(def.dev || '?'));
         }
     }
 
@@ -372,17 +394,45 @@ function _buildRouteDetails(data) {
             var r = data.routes[i];
             var verdictBadge = r.verdict ? ' <span class="rc-verdict-badge rc-verdict-badge--' + EW.escapeHtml(r.verdict) + '">' + EW.escapeHtml(r.verdict) + '</span>' : '';
             var devLabel = r.dev ? EW.ifaceLabelShort(r.dev) : '?';
-            var via = r.via ? ' via ' + r.via : '';
             var prefix = (r.match_prefix && r.match_prefix !== 'default') ? ' [' + r.match_prefix + ']' : '';
-            rows.push('<tr class="rc-route-row rc-route-row--' + EW.escapeHtml(r.verdict || 'default') + '"><td>' + EW.escapeHtml(r.ip) + '</td><td>' + EW.escapeHtml(devLabel) + via + prefix + verdictBadge + '</td></tr>');
+            rows.push('<tr class="rc-route-row rc-route-row--' + EW.escapeHtml(r.verdict || 'default') + '"><td>' + EW.escapeHtml(r.ip) + '</td><td>' + EW.escapeHtml(devLabel) + prefix + verdictBadge + '</td></tr>');
         }
     }
 
-    // Default route
-    if (data.default_route) {
-        rows.push('<tr><th colspan="2">Default Route</th></tr>');
-        if (data.default_route.dev) rows.push('<tr><td>Device</td><td>' + EW.escapeHtml(EW.ifaceLabelShort(data.default_route.dev)) + ' (' + EW.escapeHtml(data.default_route.dev) + ')</td></tr>');
-        if (data.default_route.via) rows.push('<tr><td>Gateway</td><td>' + EW.escapeHtml(data.default_route.via) + '</td></tr>');
+    // Route devices — unique devices from sampled routes + CIDR coverage overlaps
+    var routeDevs = {};
+    if (data.routes && data.routes.length > 0) {
+        for (var ri = 0; ri < data.routes.length; ri++) {
+            var rd = data.routes[ri];
+            if (rd.dev && !routeDevs[rd.dev]) {
+                routeDevs[rd.dev] = { verdict: rd.verdict || 'default', via: rd.via || '', table_name: rd.table_name || '' };
+            }
+        }
+    }
+    // Add devices from CIDR coverage overlaps missing in sampled routes
+    if (data.input_type === 'cidr' && data.coverage && data.coverage.overlaps) {
+        for (var oi = 0; oi < data.coverage.overlaps.length; oi++) {
+            var ov = data.coverage.overlaps[oi];
+            if (ov.dev && !routeDevs[ov.dev]) {
+                routeDevs[ov.dev] = { verdict: 'geo-split', via: ov.via || '', table_name: ov.table_name || '' };
+            }
+        }
+    }
+    var devKeys = Object.keys(routeDevs);
+    if (devKeys.length > 0) {
+        rows.push('<tr><th colspan="2">Route Devices</th></tr>');
+        for (var di = 0; di < devKeys.length; di++) {
+            var dk = devKeys[di];
+            var info = routeDevs[dk];
+            var verdictLabel = info.verdict === 'geo-split' ? 'geo' : info.verdict;
+            var viaText = info.via ? ' via ' + info.via : '';
+            var tableText = info.table_name ? ' <span style="color:#888">\u00b7 ' + EW.escapeHtml(info.table_name) + '</span>' : '';
+            rows.push('<tr><td>' + EW.escapeHtml(verdictLabel) + '</td><td>' + EW.escapeHtml(EW.ifaceLabelShort(dk)) + ' (' + EW.escapeHtml(dk) + ')' + EW.escapeHtml(viaText) + tableText + '</td></tr>');
+        }
+    } else if (data.default_route && data.default_route.dev) {
+        var defVia = data.default_route.via ? ' via ' + data.default_route.via : '';
+        rows.push('<tr><th colspan="2">Route Devices</th></tr>');
+        rows.push('<tr><td>default</td><td>' + EW.escapeHtml(EW.ifaceLabelShort(data.default_route.dev)) + ' (' + EW.escapeHtml(data.default_route.dev) + ')' + EW.escapeHtml(defVia) + '</td></tr>');
     }
 
     if (rows.length === 0) return '';
@@ -485,7 +535,12 @@ function _renderFullResult(container, data, type) {
             if (verdict) {
                 var isPolicy = verdict === 'default';
                 var displayVerdict = isPolicy ? 'policy' : verdict;
-                var lIcon = verdict === 'geo-split' ? '\u21c4' : (verdict === 'tunnel' ? '\u2299' : (verdict === 'mixed' ? '\u26a0' : (isPolicy ? '\u2299' : '\u21d2')));
+                // Append CIDR coverage % for mixed verdict (<1% when rounds to 0)
+                if (verdict === 'mixed' && data.input_type === 'cidr' && data.coverage) {
+                    var pctLabel = (data.coverage.geo_split_pct === 0 && data.coverage.geo_split_ips > 0) ? '<1' : data.coverage.geo_split_pct;
+                    displayVerdict += ' ' + pctLabel + '%';
+                }
+                var lIcon = verdict === 'geo-split' ? '\u21c4' : (verdict === 'tunnel' ? '\u2299' : (verdict === 'mixed' ? '\u26a0' : (isPolicy ? '\u229E' : '\u21d2')));
                 legend.textContent = query + ' ' + lIcon + ' ' + displayVerdict;
             } else {
                 legend.textContent = query;
@@ -542,35 +597,13 @@ function _renderFullResult(container, data, type) {
 // ── Batch Table ──────────────────────────────────────────────────────────────
 
 /**
- * Render batch results as compact table with expandable rows.
- * @param {HTMLElement} container - parent element
- * @param {Array} results - array of {domain: string, data: Object}
+ * Create an empty batch table element with header.
  * @param {string} type - "route" or "dns"
+ * @returns {HTMLTableElement}
  */
-function _renderBatchTable(container, results, type) {
-    // Preserve expanded rows + tech details state before re-render
-    var openDomains = {};
-    var openDetails = {};
-    var prevRows = container.querySelectorAll('.rc-batch-row');
-    for (var p = 0; p < prevRows.length; p++) {
-        var nxt = prevRows[p].nextElementSibling;
-        if (nxt && nxt.classList.contains('rc-batch-detail-row') && !nxt.classList.contains('rc-hidden')) {
-            var domCell = prevRows[p].querySelector('.rc-batch-domain');
-            if (domCell) {
-                openDomains[domCell.textContent] = true;
-                // Check if tech details inside were expanded
-                if (nxt.querySelector('.rc-result__summary--open')) {
-                    openDetails[domCell.textContent] = true;
-                }
-            }
-        }
-    }
-
-    container.innerHTML = '';
+function _createBatchTableEl(type) {
     var table = document.createElement('table');
     table.className = 'rc-batch-table';
-
-    // Header
     var thead = '<thead><tr>';
     if (type === 'route') {
         thead += '<th></th><th>Domain</th><th>Route</th><th>Via</th><th>Verdict</th><th></th>';
@@ -579,157 +612,158 @@ function _renderBatchTable(container, results, type) {
     }
     thead += '</tr></thead>';
     table.innerHTML = thead;
+    return table;
+}
 
+/**
+ * Build a single batch row pair (summary row + expandable detail row).
+ * @param {Object} item - {domain: string, data: Object}
+ * @param {string} type - "route" or "dns"
+ * @returns {{row: HTMLElement, detailRow: HTMLElement}}
+ */
+function _buildBatchRowPair(item, type) {
+    var data = item.data;
+    var row = document.createElement('tr');
+    row.className = 'rc-batch-row';
+
+    if (type === 'route') {
+        var icon = '\u21c4';
+        var rowCls = 'rc-batch-row--geosplit';
+        var routeText = '';
+        var ifaceText = '';
+        var verdictText = '';
+
+        if (!data || data.ok === false) {
+            icon = '\u2717';
+            rowCls = 'rc-batch-row--error';
+            routeText = data && data.error ? data.error : 'ERROR';
+            ifaceText = '\u2014';
+            verdictText = 'error';
+        } else if (data.verdict === 'geo-split') {
+            var rt = (data.routes && data.routes[0]) ? data.routes[0] : {};
+            routeText = rt.table_name || 'geo';
+            if (rt.match_prefix && rt.match_prefix !== 'default') {
+                var pfx = rt.match_prefix.split('/');
+                if (pfx[1] && pfx[1] !== '32') {
+                    routeText += ' /' + pfx[1];
+                }
+            }
+            ifaceText = EW.ifaceLabelShort(rt.dev || '?');
+            verdictText = 'geo-split';
+        } else if (data.verdict === 'tunnel') {
+            icon = '\u2299';
+            rowCls = 'rc-batch-row--tunnel';
+            var trt = (data.routes && data.routes[0]) ? data.routes[0] : {};
+            routeText = trt.table_name || 'tunnel';
+            ifaceText = EW.ifaceLabelShort(trt.dev || '?');
+            verdictText = 'tunnel';
+        } else if (data.verdict === 'mixed') {
+            icon = '\u26a0';
+            rowCls = 'rc-batch-row--mixed';
+            routeText = (data.verdict_details || []).join(', ');
+            ifaceText = Object.keys(_collectAllDevs(data)).map(function(d) { return EW.ifaceLabelShort(d); }).join(', ');
+            var mixedPctVal = (data.input_type === 'cidr' && data.coverage) ? ((data.coverage.geo_split_pct === 0 && data.coverage.geo_split_ips > 0) ? '<1' : data.coverage.geo_split_pct) : '';
+            var mixedPct = mixedPctVal !== '' ? ' ' + mixedPctVal + '%' : '';
+            verdictText = 'mixed' + mixedPct;
+        } else {
+            icon = '\u229E';
+            rowCls = 'rc-batch-row--default';
+            var def = data.default_route || {};
+            routeText = 'default';
+            ifaceText = EW.ifaceLabelShort(def.dev || (data.routes && data.routes[0] ? data.routes[0].dev : '?'));
+            verdictText = 'policy';
+        }
+
+        row.className += ' ' + rowCls;
+        row.innerHTML = '<td class="rc-batch-icon">' + icon + '</td>' +
+            '<td class="rc-batch-domain">' + EW.escapeHtml(item.domain) + '</td>' +
+            '<td>' + EW.escapeHtml(routeText) + '</td>' +
+            '<td>' + EW.escapeHtml(ifaceText) + '</td>' +
+            '<td>' + EW.escapeHtml(verdictText) + '</td>' +
+            '<td><button class="rc-batch-expand" type="button">\u25b8</button></td>';
+    } else {
+        var dIcon = '\u21c4';
+        var dRowCls = 'rc-batch-row--geosplit';
+        var zoneText = '';
+        var upText = '';
+        var ipText = '';
+
+        if (!data || data.ok === false) {
+            dIcon = '\u2717';
+            dRowCls = 'rc-batch-row--error';
+            zoneText = data && data.error ? data.error : 'ERROR';
+            upText = '\u2014';
+            ipText = '\u2014';
+        } else {
+            var z = data.zone || {};
+            zoneText = z.group || 'default';
+            if (zoneText === 'default') {
+                dIcon = '\u2192';
+                dRowCls = 'rc-batch-row--default';
+            }
+            var u = data.upstream || {};
+            upText = (u.providers && u.providers.length) ? u.providers.join(', ') : '\u2014';
+            var res = data.result || {};
+            var dIps = res.ips || [];
+            if (dIps.length > 1) {
+                ipText = dIps[0] + ' (' + dIps.length + ' IPs)';
+            } else if (dIps.length === 1) {
+                ipText = dIps[0];
+            } else {
+                ipText = '\u2014';
+            }
+        }
+
+        row.className += ' ' + dRowCls;
+        row.innerHTML = '<td class="rc-batch-icon">' + dIcon + '</td>' +
+            '<td class="rc-batch-domain">' + EW.escapeHtml(item.domain) + '</td>' +
+            '<td>' + EW.escapeHtml(zoneText) + '</td>' +
+            '<td>' + EW.escapeHtml(upText) + '</td>' +
+            '<td>' + EW.escapeHtml(ipText) + '</td>' +
+            '<td><button class="rc-batch-expand" type="button">\u25b8</button></td>';
+    }
+
+    // Expandable detail row
+    var detailRow = document.createElement('tr');
+    detailRow.className = 'rc-batch-detail-row rc-hidden';
+    detailRow.innerHTML = '<td colspan="6"><div class="rc-batch-detail-content"></div></td>';
+
+    // Click on entire row toggles detail (not just the ▸ button)
+    var expandBtn = row.querySelector('.rc-batch-expand');
+    row.addEventListener('click', function() {
+        var isOpen = !detailRow.classList.contains('rc-hidden');
+        if (isOpen) {
+            detailRow.classList.add('rc-hidden');
+            expandBtn.textContent = '\u25b8';
+        } else {
+            detailRow.classList.remove('rc-hidden');
+            expandBtn.textContent = '\u25be';
+            var content = detailRow.querySelector('.rc-batch-detail-content');
+            if (!content.hasChildNodes()) {
+                _renderFullResult(content, data, type);
+            }
+        }
+    });
+
+    return { row: row, detailRow: detailRow };
+}
+
+/**
+ * Render batch results as compact table with expandable rows.
+ * Used for full (re)render: _renderResults auto-switch and non-batch contexts.
+ * @param {HTMLElement} container - parent element
+ * @param {Array} results - array of {domain: string, data: Object}
+ * @param {string} type - "route" or "dns"
+ */
+function _renderBatchTable(container, results, type) {
+    container.innerHTML = '';
+    var table = _createBatchTableEl(type);
     var tbody = document.createElement('tbody');
 
     for (var i = 0; i < results.length; i++) {
-        (function(item) {
-            var data = item.data;
-            var row = document.createElement('tr');
-            row.className = 'rc-batch-row';
-
-            if (type === 'route') {
-                var icon = '\u21c4';
-                var rowCls = 'rc-batch-row--geosplit';
-                var routeText = '';
-                var ifaceText = '';
-                var verdictText = '';
-
-                if (!data || data.ok === false) {
-                    icon = '\u2717';
-                    rowCls = 'rc-batch-row--error';
-                    routeText = data && data.error ? data.error : 'ERROR';
-                    ifaceText = '\u2014';
-                    verdictText = 'error';
-                } else if (data.verdict === 'geo-split') {
-                    var rt = (data.routes && data.routes[0]) ? data.routes[0] : {};
-                    routeText = rt.table_name || 'geo';
-                    if (rt.match_prefix && rt.match_prefix !== 'default') {
-                        var pfx = rt.match_prefix.split('/');
-                        if (pfx[1] && pfx[1] !== '32') {
-                            routeText += ' /' + pfx[1];
-                        }
-                    }
-                    ifaceText = EW.ifaceLabelShort(rt.dev || '?');
-                    verdictText = 'geo-split';
-                } else if (data.verdict === 'tunnel') {
-                    icon = '\u2299';
-                    rowCls = 'rc-batch-row--tunnel';
-                    var trt = (data.routes && data.routes[0]) ? data.routes[0] : {};
-                    routeText = 'policy';
-                    ifaceText = EW.ifaceLabelShort(trt.dev || '?');
-                    verdictText = 'tunnel';
-                } else if (data.verdict === 'mixed') {
-                    icon = '\u26a0';
-                    rowCls = 'rc-batch-row--mixed';
-                    routeText = (data.verdict_details || []).join(', ');
-                    ifaceText = (data.verdict_devs || []).map(function(d) { return EW.ifaceLabelShort(d); }).join(', ');
-                    verdictText = 'mixed';
-                } else {
-                    icon = '\u2299';
-                    rowCls = 'rc-batch-row--default';
-                    var def = data.default_route || {};
-                    routeText = 'policy';
-                    ifaceText = EW.ifaceLabelShort(def.dev || (data.routes && data.routes[0] ? data.routes[0].dev : '?'));
-                    verdictText = 'policy';
-                }
-
-                row.className += ' ' + rowCls;
-                row.innerHTML = '<td class="rc-batch-icon">' + icon + '</td>' +
-                    '<td class="rc-batch-domain">' + EW.escapeHtml(item.domain) + '</td>' +
-                    '<td>' + EW.escapeHtml(routeText) + '</td>' +
-                    '<td>' + EW.escapeHtml(ifaceText) + '</td>' +
-                    '<td>' + EW.escapeHtml(verdictText) + '</td>' +
-                    '<td><button class="rc-batch-expand" type="button">\u25b8</button></td>';
-            } else {
-                var dIcon = '\u21c4';
-                var dRowCls = 'rc-batch-row--geosplit';
-                var zoneText = '';
-                var upText = '';
-                var ipText = '';
-
-                if (!data || data.ok === false) {
-                    dIcon = '\u2717';
-                    dRowCls = 'rc-batch-row--error';
-                    zoneText = data && data.error ? data.error : 'ERROR';
-                    upText = '\u2014';
-                    ipText = '\u2014';
-                } else {
-                    var z = data.zone || {};
-                    zoneText = z.group || 'default';
-                    // Icon + row color mirror the card border/legend: a
-                    // zone-specific override group is a "matched rule" (green,
-                    // \u21c4); the plain "default" group stays neutral blue (\u2192).
-                    if (zoneText === 'default') {
-                        dIcon = '\u2192';
-                        dRowCls = 'rc-batch-row--default';
-                    }
-                    var u = data.upstream || {};
-                    upText = (u.providers && u.providers.length) ? u.providers.join(', ') : '\u2014';
-                    var res = data.result || {};
-                    var dIps = res.ips || [];
-                    if (dIps.length > 1) {
-                        // Show first IP + total count, e.g. "142.250.27.18 (3 IPs)"
-                        ipText = dIps[0] + ' (' + dIps.length + ' IPs)';
-                    } else if (dIps.length === 1) {
-                        ipText = dIps[0];
-                    } else {
-                        ipText = '\u2014';
-                    }
-                }
-
-                row.className += ' ' + dRowCls;
-                row.innerHTML = '<td class="rc-batch-icon">' + dIcon + '</td>' +
-                    '<td class="rc-batch-domain">' + EW.escapeHtml(item.domain) + '</td>' +
-                    '<td>' + EW.escapeHtml(zoneText) + '</td>' +
-                    '<td>' + EW.escapeHtml(upText) + '</td>' +
-                    '<td>' + EW.escapeHtml(ipText) + '</td>' +
-                    '<td><button class="rc-batch-expand" type="button">\u25b8</button></td>';
-            }
-
-            // Expandable detail row
-            var detailRow = document.createElement('tr');
-            detailRow.className = 'rc-batch-detail-row rc-hidden';
-            detailRow.innerHTML = '<td colspan="6"><div class="rc-batch-detail-content"></div></td>';
-
-            // Click on entire row toggles detail (not just the ▸ button)
-            var expandBtn = row.querySelector('.rc-batch-expand');
-            row.addEventListener('click', function() {
-                var isOpen = !detailRow.classList.contains('rc-hidden');
-                if (isOpen) {
-                    detailRow.classList.add('rc-hidden');
-                    expandBtn.textContent = '\u25b8';
-                } else {
-                    detailRow.classList.remove('rc-hidden');
-                    expandBtn.textContent = '\u25be';
-                    // Render SVG on first expand
-                    var content = detailRow.querySelector('.rc-batch-detail-content');
-                    if (!content.hasChildNodes()) {
-                        _renderFullResult(content, data, type);
-                    }
-                }
-            });
-
-            // Restore expanded state if was open before re-render
-            if (openDomains[item.domain]) {
-                detailRow.classList.remove('rc-hidden');
-                expandBtn.textContent = '\u25be';
-                var restoreContent = detailRow.querySelector('.rc-batch-detail-content');
-                if (!restoreContent.hasChildNodes()) {
-                    _renderFullResult(restoreContent, data, type);
-                }
-                // Restore tech details expansion
-                if (openDetails[item.domain]) {
-                    var techDetails = restoreContent.querySelector('.rc-result__details');
-                    var techSummary = restoreContent.querySelector('.rc-result__summary');
-                    if (techDetails) techDetails.classList.remove('rc-hidden');
-                    if (techSummary) techSummary.classList.add('rc-result__summary--open');
-                }
-            }
-
-            tbody.appendChild(row);
-            tbody.appendChild(detailRow);
-        })(results[i]);
+        var pair = _buildBatchRowPair(results[i], type);
+        tbody.appendChild(pair.row);
+        tbody.appendChild(pair.detailRow);
     }
 
     table.appendChild(tbody);
@@ -759,6 +793,25 @@ function _runBatch(opts) {
     var stopped = false;
     var results = [];
     var idx = 0;
+    var batchTbody = null;
+
+    /** Create batch table on first result (lazy init). */
+    function ensureBatchTable() {
+        if (batchTbody) return;
+        resultsEl.innerHTML = '';
+        var table = _createBatchTableEl(type);
+        batchTbody = document.createElement('tbody');
+        table.appendChild(batchTbody);
+        resultsEl.appendChild(table);
+    }
+
+    /** Append a single result row (no full re-render). */
+    function appendResult(domain, data) {
+        ensureBatchTable();
+        var pair = _buildBatchRowPair({ domain: domain, data: data }, type);
+        batchTbody.appendChild(pair.row);
+        batchTbody.appendChild(pair.detailRow);
+    }
 
     function updateProgress() {
         if (progressEl) {
@@ -779,7 +832,6 @@ function _runBatch(opts) {
                     ? '<span class="rc-progress__text">Stopped at ' + idx + '/' + domains.length + '</span>'
                     : '<span class="rc-progress__text">Done \u2014 ' + domains.length + ' checked</span>';
             }
-            _renderBatchTable(resultsEl, results, type);
             if (onDone) onDone(results);
             return;
         }
@@ -802,14 +854,14 @@ function _runBatch(opts) {
             .then(function(data) {
                 results.push({ domain: domain, data: data });
                 idx++;
-                // Render incrementally in table mode
-                _renderBatchTable(resultsEl, results, type);
+                appendResult(domain, data);
                 next();
             })
             .catch(function(err) {
-                results.push({ domain: domain, data: { ok: false, error: err.message } });
+                var errData = { ok: false, error: err.message };
+                results.push({ domain: domain, data: errData });
                 idx++;
-                _renderBatchTable(resultsEl, results, type);
+                appendResult(domain, errData);
                 next();
             });
     }

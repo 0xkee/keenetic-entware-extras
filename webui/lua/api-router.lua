@@ -345,7 +345,9 @@ local function system_interfaces()
                 name:match("^sit") or name:match("^gre") or
                 name:match("^ethoip") or name:match("^dummy") or
                 name:match("^ezcfg") or name:match("^ifb") or
-                name:match("^ra%d") or name:match("^apcli") or
+                name:match("^ra%d") or name:match("^rai%d") or
+                name:match("^rax%d") or name:match("^apcli") or
+                name:match("^xfrm") or
                 name:match("%.%d+$")          -- VLAN sub-interfaces (eth2.1, ra7.1)
             )
             -- Physical/radio ifaces: include only if NDM resolved a label

@@ -241,16 +241,19 @@ json_output() {
   local enabled_val=1
   is_service_enabled "S39smartdns-redirect" && enabled_val=0
 
-  # Details
+  # Details — Redirect chain
   status_detail "interfaces" "$INTERFACES"
   status_detail "ipv6" "$ENABLE_IPV6"
   status_detail "dnat_target" "${ROUTER_IP}:${UPSTREAM_PORT}"
-  status_detail "ndm_hook" "$_ck_ndm_hook_ok" "bool"
+  status_detail "rules" "$_ck_rules_ok" "bool"
+  # Details — Upstream resolver
   status_detail "upstream" "127.0.0.1:${UPSTREAM_PORT}"
   status_detail "name" "$_ck_upstream_name"
   status_detail "status" "$_ck_upstream_ok" "bool"
+  # Details — Infrastructure
+  status_detail "ndm_hook" "$_ck_ndm_hook_ok" "bool"
   status_detail "init" "$_ck_init_ok" "bool"
-  status_detail "rules" "$_ck_rules_ok" "bool"
+  # Details — System
   status_detail "uptime" "$uptime_seconds_val" "num"
   status_detail "version" "${_st_version:-unknown}"
 

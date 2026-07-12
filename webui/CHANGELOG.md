@@ -5,6 +5,16 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.32.7] — 2026-07-12
+
+### Added
+- Dashboard: `rules_detail` per-iface breakdown in DNS Redirect card (`br0: v4 udp/tcp`)
+- Summary mode: `dnat_target` (DNS Redirect), `patch_set` (WebUI)
+
+### Fixed
+- `patch_set` check key mismatch (`"patch"` → `"patch_set"`) — orange warning now works
+- Details reorder: firmware/patch_set moved up in WebUI, rules after dnat_target in Redirect
+
 ## [0.32.6] — 2026-07-12
 
 ### Added

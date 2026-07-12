@@ -857,6 +857,53 @@
         // Update expandable details grid
         if (detailsEl) {
             var detailsHtml = renderDetailsGrid(data.details, data.running, data.checks, data.dns_server_checks, svc.id);
+            // rules_detail per-iface breakdown (smartdns-redirect, geo-split style)
+            if (data.rules_detail && data.rules_detail.length) {
+                var rlByIface = {}, rlOrder = [];
+                for (var rli = 0; rli < data.rules_detail.length; rli++) {
+                    var rl = data.rules_detail[rli];
+                    if (!rlByIface[rl.iface]) { rlByIface[rl.iface] = {}; rlOrder.push(rl.iface); }
+                    if (!rlByIface[rl.iface][rl.family]) rlByIface[rl.iface][rl.family] = [];
+                    rlByIface[rl.iface][rl.family].push(rl);
+                }
+                var rlLines = [];
+                for (var rlg = 0; rlg < rlOrder.length; rlg++) {
+                    var rlIface = rlOrder[rlg];
+                    var rlFamilies = rlByIface[rlIface];
+                    var rlFamParts = [];
+                    for (var rlFam in rlFamilies) {
+                        var rlFEntries = rlFamilies[rlFam];
+                        var rlFAllOk = true;
+                        for (var rlFk = 0; rlFk < rlFEntries.length; rlFk++) { if (!rlFEntries[rlFk].ok) { rlFAllOk = false; break; } }
+                        if (rlFAllOk) {
+                            var rlProtos = [];
+                            for (var rlFp = 0; rlFp < rlFEntries.length; rlFp++) rlProtos.push(rlFEntries[rlFp].proto);
+                            rlFamParts.push(EW.escapeHtml(rlFam + ' ' + rlProtos.join('/')));
+                        } else {
+                            var rlProtoParts = [];
+                            for (var rlFp2 = 0; rlFp2 < rlFEntries.length; rlFp2++) {
+                                var rle = rlFEntries[rlFp2];
+                                var rleIcon = rle.ok ? '\u2713' : '\u2717';
+                                var rleCls = rle.ok ? 'ew-bool-icon--ok' : 'ew-bool-icon--fail';
+                                rlProtoParts.push(EW.escapeHtml(rle.proto) + ' <span class="ew-bool-icon ' + rleCls + '">' + rleIcon + '</span>');
+                            }
+                            rlFamParts.push(EW.escapeHtml(rlFam) + ' ' + rlProtoParts.join(', '));
+                        }
+                    }
+                    rlLines.push(EW.escapeHtml(rlIface) + ': ' + rlFamParts.join(', '));
+                }
+                var rlBreakdown = '<div class="ew-dns-line">' + rlLines.join('</div><div class="ew-dns-line">') + '</div>';
+                var rlp = detailsHtml.indexOf('ew-detail-label">Rules<');
+                if (rlp !== -1) {
+                    var rlvp = detailsHtml.indexOf('ew-detail-value', rlp);
+                    if (rlvp !== -1) {
+                        var rlEndTag = detailsHtml.indexOf('</div>', detailsHtml.indexOf('>', rlvp) + 1);
+                        if (rlEndTag !== -1) {
+                            detailsHtml = detailsHtml.substring(0, rlvp) + 'ew-detail-value">' + rlBreakdown + detailsHtml.substring(rlEndTag);
+                        }
+                    }
+                }
+            }
             // Insert DNS test results before cache (concise: ✓/✗ domain)
             if (data.dns_tests && data.dns_tests.length) {
                 var dnsLines = [];

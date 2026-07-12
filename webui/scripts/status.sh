@@ -246,19 +246,22 @@ json_output() {
   local enabled_val=1
   is_service_enabled "S80nginx-webui" && enabled_val=0
 
-  # Details
+  # Details — Service status
   status_detail "ports" "$ports_val"
   status_detail "status" "$([ "$_st_port_ok" = "true" ] && echo 0 || echo 1)" "bool"
   status_detail "config" "$config_ok_val" "bool"
+  status_detail "firmware" "${_ck_fw_version:-unknown}"
+  status_detail "patch_set" "${_ck_patch_set:-none}"
+  # Details — Infrastructure
   status_detail "upstream" "$_ck_upstream_addr"
   status_detail "lua_module" "$lua_module_ok_val" "bool"
   status_detail "http" "$http_ok_val" "bool"
-  status_detail "cache" "0" "bool"
+  # Details — Resources
   status_detail "pid" "$_st_pid"
   status_detail "memory" "$mem_formatted"
   status_detail "logrotate" "$logrotate_ok_val" "bool"
-  status_detail "firmware" "${_ck_fw_version:-unknown}"
-  status_detail "patch_set" "${_ck_patch_set:-none}"
+  status_detail "cache" "0" "bool"
+  # Details — System
   status_detail "uptime" "$_st_uptime_seconds" "num"
   status_detail "version" "${_st_version:-unknown}"
 
@@ -269,7 +272,7 @@ json_output() {
   status_check_result "http" "$(if [ "$http_ok_val" = 0 ]; then printf ok; else printf fail; fi)"
   status_check_result "logrotate" "$(if [ "$logrotate_ok_val" = 0 ]; then printf ok; else printf warn; fi)"
   status_check_result "upstream" "$(if [ "$upstream_ok_val" = 0 ]; then printf ok; else printf warn; fi)"
-  status_check_result "patch" "$(if [ "$_ck_patch_ok" = "true" ]; then printf ok; elif [ -z "$_ck_fw_version" ]; then printf ok; else printf warn; fi)"
+  status_check_result "patch_set" "$(if [ "$_ck_patch_ok" = "true" ]; then printf ok; elif [ -z "$_ck_fw_version" ]; then printf ok; else printf warn; fi)"
 
   # Emit
   status_emit_json "$enabled_val" "$([ "$_st_running" = "true" ] && echo 0 || echo 1)" "$STATUS_OK"

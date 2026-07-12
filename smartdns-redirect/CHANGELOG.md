@@ -5,6 +5,12 @@ All notable changes to `smartdns-redirect` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.3.7] - 2026-07-12
+
+### Changed
+- `status.sh`: details reordered — redirect chain (interfaces → dnat_target → rules)
+  first, then upstream resolver, then infrastructure (ndm_hook, init)
+
 ## [0.3.6] - 2026-07-12
 
 ### Added

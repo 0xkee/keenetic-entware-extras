@@ -5,6 +5,11 @@ All notable changes to `smartdns-redirect` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.3.5] - 2026-07-12
+
+### Fixed
+- DNS redirect on non-br0 interfaces (nwg1, br1): `REDIRECT` → `DNAT` to br0 IP
+
 ## [0.3.4] - 2026-06-15
 
 ### Changed

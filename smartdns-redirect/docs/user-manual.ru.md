@@ -35,7 +35,7 @@
 
 | Пакет | Назначение |
 |-------|-----------|
-| `iptables` | NAT PREROUTING REDIRECT правила |
+| `iptables` | NAT PREROUTING DNAT правила |
 
 **Из проекта keenetic-entware-extras** (устанавливаются вручную):
 
@@ -146,7 +146,7 @@ WATCHDOG_SERVICE=""
 
 | Команда | Описание |
 |---------|----------|
-| `start` | Добавить iptables REDIRECT правила |
+| `start` | Добавить iptables DNAT правила |
 | `stop` | Удалить iptables правила |
 | `restart` | Переприменить правила |
 | `status` | Подробная диагностика |
@@ -157,8 +157,8 @@ WATCHDOG_SERVICE=""
 
 ```
 Client (10.0.0.42) → UDP :53 → br0
-  → [iptables PREROUTING REDIRECT :6053]
-    → SmartDNS (127.0.0.1:6053) → upstream (DoT/DoH/UDP)
+  → [iptables PREROUTING DNAT → 10.0.0.1:6053]
+    → SmartDNS (10.0.0.1:6053) → upstream (DoT/DoH/UDP)
 ```
 
 Роутер сам (loopback 127.0.0.1:53) ходит в ndnproxy — правила `br0` его не касаются.
@@ -171,7 +171,7 @@ Keenetic периодически flush'ит iptables через свои netfil
 
 Cron каждые 5 минут запускает `watchdog.sh`:
 
-1. Проверяет наличие REDIRECT-правил → если отсутствуют, восстанавливает
+1. Проверяет наличие DNAT-правил → если отсутствуют, восстанавливает
 2. Шлёт тестовый DNS-запрос на `UPSTREAM_PORT` → если upstream не отвечает, рестартует `WATCHDOG_SERVICE`
 
 ### Совместимость с «Интернет-фильтрами» Keenetic
@@ -203,8 +203,8 @@ smartdns-redirect status: ✓ Alive
     IPv6:        no
 
   Rules:
-    v4   udp    br0 → :6053 ✓
-    v4   tcp    br0 → :6053 ✓
+    v4   udp    br0 → 10.0.0.1:6053 ✓
+    v4   tcp    br0 → 10.0.0.1:6053 ✓
 
   Upstream probe:
     UDP :6053: listening (192.168.1.1:6053 127.0.0.1:6053) ✓
@@ -220,11 +220,11 @@ smartdns-redirect status: ✓ Alive
 
 ```sh
 # Посмотреть NAT PREROUTING
-iptables -t nat -S PREROUTING | grep REDIRECT
+iptables -t nat -S PREROUTING | grep DNAT
 
-# Ожидаемый вывод:
-# -A PREROUTING -i br0 -p udp -m udp --dport 53 -j REDIRECT --to-ports 6053
-# -A PREROUTING -i br0 -p tcp -m tcp --dport 53 -j REDIRECT --to-ports 6053
+# Ожидаемый вывод (10.0.0.1 = IP вашего роутера):
+# -A PREROUTING -i br0 -p udp -m udp --dport 53 -j DNAT --to-destination 10.0.0.1:6053
+# -A PREROUTING -i br0 -p tcp -m tcp --dport 53 -j DNAT --to-destination 10.0.0.1:6053
 ```
 
 ### Тест DNS через redirect

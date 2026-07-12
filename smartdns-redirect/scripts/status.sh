@@ -13,6 +13,14 @@ CONFIG_FILE="$_CONFIG_DIR/defaults.conf"
 . "$CONFIG_FILE"
 [ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
 
+# Detect router LAN IP for DNAT rule check (must match dns-redirect.sh).
+ROUTER_IP="$(detect_router_ip)"
+ROUTER_IP6=""
+if [ "${ENABLE_IPV6:-no}" = "yes" ] && command -v ip6tables >/dev/null 2>&1; then
+    ROUTER_IP6=$(ip -6 addr show br0 2>/dev/null \
+        | awk '/inet6.*global/ {split($2, a, "/"); print a[1]; exit}')
+fi
+
 STATUS_OK=0
 
 # Globals set by check functions / lib/status.sh
@@ -48,7 +56,7 @@ check_upstream() {
   [ -z "$_ck_upstream_name" ] && _ck_upstream_name="unknown" || true
 }
 
-# Verify iptables REDIRECT rules for all interfaces × protos.
+# Verify iptables DNAT rules for all interfaces × protos.
 # Sets: _ck_rules_ok (0=all present, 1=some missing)
 check_rules() {
   _ck_rules_ok=0
@@ -59,14 +67,14 @@ check_rules() {
   for _iface in $INTERFACES; do
     for _proto in udp tcp; do
       iptables -t nat -C PREROUTING -i "$_iface" -p "$_proto" --dport 53 \
-        -j REDIRECT --to-ports "$UPSTREAM_PORT" 2>/dev/null || _ck_rules_ok=1
+        -j DNAT --to-destination "${ROUTER_IP}:${UPSTREAM_PORT}" 2>/dev/null || _ck_rules_ok=1
     done
   done
   if [ "$ENABLE_IPV6" = "yes" ] && command -v ip6tables >/dev/null 2>&1; then
     for _iface in $INTERFACES; do
       for _proto in udp tcp; do
         ip6tables -t nat -C PREROUTING -i "$_iface" -p "$_proto" --dport 53 \
-          -j REDIRECT --to-ports "$UPSTREAM_PORT" 2>/dev/null || _ck_rules_ok=1
+          -j DNAT --to-destination "[${ROUTER_IP6}]:${UPSTREAM_PORT}" 2>/dev/null || _ck_rules_ok=1
       done
     done
   fi
@@ -107,21 +115,22 @@ show_mode() {
   status_line "IPv6" "$ENABLE_IPV6"
 }
 
-# Check a single iptables REDIRECT rule for (family, iface, proto).
+# Check a single iptables DNAT rule for (family, iface, proto).
 # Args: $1 - "v4"|"v6", $2 - iface, $3 - proto (udp|tcp)
 check_rule() {
-  local family="$1" iface="$2" proto="$3" bin
+  local family="$1" iface="$2" proto="$3" bin target display_target
   case "$family" in
-    v4) bin="iptables" ;;
-    v6) bin="ip6tables" ;;
+    v4) bin="iptables"; target="${ROUTER_IP}:${UPSTREAM_PORT}" ;;
+    v6) bin="ip6tables"; target="[${ROUTER_IP6}]:${UPSTREAM_PORT}" ;;
     *)  return 1 ;;
   esac
+  display_target="$target"
   if "$bin" -t nat -C PREROUTING -i "$iface" -p "$proto" --dport 53 \
-      -j REDIRECT --to-ports "$UPSTREAM_PORT" 2>/dev/null; then
-    _text_buf="${_text_buf}$(printf '    %-4s %-6s %s → :%s ✓\n' "$family" "$proto" "$iface" "$UPSTREAM_PORT")
+      -j DNAT --to-destination "$target" 2>/dev/null; then
+    _text_buf="${_text_buf}$(printf '    %-4s %-6s %s → %s ✓\n' "$family" "$proto" "$iface" "$display_target")
 "
   else
-    _text_buf="${_text_buf}$(printf '    %-4s %-6s %s → :%s ✗\n' "$family" "$proto" "$iface" "$UPSTREAM_PORT")
+    _text_buf="${_text_buf}$(printf '    %-4s %-6s %s → %s ✗\n' "$family" "$proto" "$iface" "$display_target")
 "
     STATUS_OK=1
   fi

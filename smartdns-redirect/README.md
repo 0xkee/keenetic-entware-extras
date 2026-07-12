@@ -6,7 +6,7 @@ Universal DNS DNAT for Keenetic/Entware — intercept LAN `:53` and redirect to 
 
 ## What is this
 
-iptables REDIRECT on `PREROUTING` for interface `br0` (LAN): all client DNS queries go directly to local DNS (SmartDNS `:6053` by default) instead of Keenetic ndnproxy. The router itself (ndnproxy :53) is **not affected** — works as before.
+iptables DNAT on `PREROUTING` for configured interfaces (`br0` LAN, `br1` Guest, `nwg1` WG Server, etc.): all client DNS queries go directly to local DNS (SmartDNS `:6053` by default) instead of Keenetic ndnproxy. The router itself (ndnproxy :53) is **not affected** — works as before.
 
 **Why:**
 - **Latency** — measured: ~130ms → <80ms on LAN clients (minus hop through ndnproxy).
@@ -64,10 +64,10 @@ After changing config:
 
 ```sh
 # Rules in NAT PREROUTING
-iptables -t nat -S PREROUTING | grep REDIRECT
-# Expected:
-#   -A PREROUTING -i br0 -p udp -m udp --dport 53 -j REDIRECT --to-ports 6053
-#   -A PREROUTING -i br0 -p tcp -m tcp --dport 53 -j REDIRECT --to-ports 6053
+iptables -t nat -S PREROUTING | grep DNAT
+# Expected (10.0.0.1 = router LAN IP):
+#   -A PREROUTING -i br0 -p udp -m udp --dport 53 -j DNAT --to-destination 10.0.0.1:6053
+#   -A PREROUTING -i br0 -p tcp -m tcp --dport 53 -j DNAT --to-destination 10.0.0.1:6053
 
 # Status
 /opt/etc/init.d/S39smartdns-redirect status
@@ -82,11 +82,11 @@ logread | grep smartdns-redirect
 
 ```
 Client (10.0.0.42) → UDP :53 → br0 →
-  [iptables PREROUTING REDIRECT :6053] →
-    SmartDNS (127.0.0.1:6053) → upstream (DoT/DoH/UDP)
+  [iptables PREROUTING DNAT → 10.0.0.1:6053] →
+    SmartDNS (10.0.0.1:6053) → upstream (DoT/DoH/UDP)
 ```
 
-The router itself (loopback `127.0.0.1:53`) goes to ndnproxy — `br0` rules don't apply to it.
+The router itself (loopback `127.0.0.1:53`) goes to ndnproxy — LAN interface rules don't apply to it.
 
 ### NDM resilience
 

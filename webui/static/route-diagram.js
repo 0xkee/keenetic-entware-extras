@@ -254,8 +254,18 @@ function _buildPaths(data) {
     } else {
         activeDevs[activeDev] = true;
     }
+    // CIDR mixed: also activate devs from coverage overlaps + default route
+    if (isMixed && data.input_type === "cidr") {
+        if (defaultRoute.dev) activeDevs[defaultRoute.dev] = true;
+        if (data.coverage && data.coverage.overlaps) {
+            for (var oi = 0; oi < data.coverage.overlaps.length; oi++) {
+                var oDev = data.coverage.overlaps[oi].dev;
+                if (oDev) activeDevs[oDev] = true;
+            }
+        }
+    }
 
-    // If backend provides all_paths — use it directly
+    // If backend provides all_paths — use directly (two-icon model: globe + shield)
     if (data.all_paths && data.all_paths.length > 0) {
         var paths = [];
         for (var i = 0; i < data.all_paths.length; i++) {
@@ -268,69 +278,31 @@ function _buildPaths(data) {
                 mixed: isMixed && !!activeDevs[p.dev || ""]
             });
         }
-        // Policy path: only when traffic goes through default route (no geo-split, no tunnel).
-        // "Policy" = system default routing; redundant when tunnel/ISP nodes already show the path.
-        var needsPolicy = (data.verdict === "default") ||
-            (data.verdict === "mixed" && data.verdict_details && data.verdict_details.indexOf("default") >= 0);
-        if (needsPolicy && defaultRoute.dev) {
-            var hasPolicy = false;
-            for (var k = 0; k < paths.length; k++) {
-                if (paths[k].type === "policy") { hasPolicy = true; break; }
-            }
-            if (!hasPolicy) {
-                var policyActive = !!activeDevs[defaultRoute.dev];
-                paths.push({ dev: defaultRoute.dev, via: defaultRoute.via || "", type: "policy", active: policyActive, mixed: isMixed && policyActive });
-                // When policy is active on same dev, demote ISP/tunnel path to inactive
-                var alreadySeen = false;
-                for (var m = 0; m < paths.length; m++) {
-                    if (paths[m].dev === defaultRoute.dev && paths[m].type !== "policy") { alreadySeen = true; break; }
-                }
-                if (policyActive && alreadySeen) {
-                    for (var n = 0; n < paths.length; n++) {
-                        if (paths[n].dev === defaultRoute.dev && paths[n].type !== "policy") {
-                            paths[n].active = false;
-                        }
-                    }
-                }
-            }
-        }
         return paths;
     }
 
-    // Fallback: derive paths from legacy fields (up to 3 branches: ISP + VPN + Policy)
+    // Fallback: derive paths from legacy fields (two-icon model: globe + shield)
     var paths = [];
     var seen = {};
 
-    // ISP path (geo-split route or config ROUTE_OUT)
-    var ispDev = "";
-    if (data.verdict === "geo-split" && activeRoute) {
-        ispDev = activeRoute.dev;
-    }
-    if (ispDev) {
-        paths.push({ dev: ispDev, via: activeRoute.via, type: "isp", active: true, mixed: isMixed && !!activeDevs[ispDev] });
-        seen[ispDev] = true;
+    // ISP/default path — globe, always present when non-tunnel default route exists
+    if (defaultRoute.dev && !EW.isTunnelIface(defaultRoute.dev)) {
+        var ispActive = !!activeDevs[defaultRoute.dev];
+        paths.push({ dev: defaultRoute.dev, via: defaultRoute.via || "", type: "isp", active: ispActive, mixed: isMixed && ispActive });
+        seen[defaultRoute.dev] = true;
     }
 
-    // VPN/tunnel path (client's VPN policy fwmark → policy table default route)
+    // VPN/tunnel path — shield (client's VPN policy fwmark → policy table default route)
     var vpnDev = tunnelRoute.dev || "";
     if (vpnDev && !seen[vpnDev]) {
         paths.push({ dev: vpnDev, via: "", type: "tunnel", active: !!activeDevs[vpnDev], mixed: isMixed && !!activeDevs[vpnDev] });
         seen[vpnDev] = true;
     }
 
-    // Policy path: only when verdict involves "default" (no geo-split, no tunnel for this IP).
-    var needsPolicyLegacy = (data.verdict === "default") ||
-        (data.verdict === "mixed" && data.verdict_details && data.verdict_details.indexOf("default") >= 0);
-    if (needsPolicyLegacy && defaultRoute.dev) {
-        var policyActive = !!activeDevs[defaultRoute.dev];
-        paths.push({ dev: defaultRoute.dev, via: defaultRoute.via, type: "policy", active: policyActive, mixed: isMixed && policyActive });
-        if (policyActive && seen[defaultRoute.dev]) {
-            for (var j = 0; j < paths.length; j++) {
-                if (paths[j].dev === defaultRoute.dev && paths[j].type !== "policy") {
-                    paths[j].active = false;
-                }
-            }
-        }
+    // Geo-split through tunnel (ROUTE_OUT→tunnel): add as tunnel if not yet seen
+    if (data.verdict === "geo-split" && activeRoute && EW.isTunnelIface(activeRoute.dev) && !seen[activeRoute.dev]) {
+        paths.push({ dev: activeRoute.dev, via: activeRoute.via || "", type: "tunnel", active: true, mixed: false });
+        seen[activeRoute.dev] = true;
     }
 
     return paths;
@@ -409,8 +381,10 @@ function renderRouteDiagram(container, data) {
         var py = pathYs[pi];
         var isActive = paths[pi].active;
         var isMixedPath = paths[pi].mixed;
-        var isPolicyPath = (paths[pi].type === "tunnel" || paths[pi].type === "policy") && isActive;
-        var pathCls = isMixedPath ? "route-path--mixed" : (isPolicyPath ? "route-path--tunnel" : (isActive ? "route-path--active" : "route-path--inactive"));
+        var isGeoVerdict = data.verdict === "geo-split";
+        // Green only for geo-split active paths; all other active paths are blue
+        var isBlue = !isGeoVerdict && isActive;
+        var pathCls = isMixedPath ? "route-path--mixed" : (isBlue ? "route-path--tunnel" : (isActive ? "route-path--active" : "route-path--inactive"));
 
         // Router → path node
         var routerExitY = routerY + ((py - routerY) * 0.15);
@@ -467,25 +441,18 @@ function renderRouteDiagram(container, data) {
     svg.appendChild(_useIcon("ico-router", routerX, routerY, ""));
     svg.appendChild(_svgText("Router", routerX, routerY + 26, "route-node-label"));
 
-    // Path nodes (globe for ISP, shield for tunnel, signpost for policy)
-    // Icons use fixed type-based color (not highlighted on active — only paths animate)
+    // Path nodes — two-icon model: globe (ISP/default) + shield (tunnel)
+    // Globe icon always gray; shield icon always blue. Path lines carry the color.
     for (var pi2 = 0; pi2 < pathCount; pi2++) {
         var py2 = pathYs[pi2];
         var p = paths[pi2];
-        var iconClass = (p.type === "tunnel") ? " route-icon--tunnel" : "";
 
         if (p.type === "tunnel") {
-            svg.appendChild(_useIcon("ico-shield", pathNodeX, py2, iconClass));
-        } else if (p.type === "policy") {
-            svg.appendChild(_useIcon("ico-signpost", pathNodeX, py2, ""));
+            svg.appendChild(_useIcon("ico-shield", pathNodeX, py2, " route-icon--tunnel"));
         } else {
-            svg.appendChild(_useIcon("ico-globe", pathNodeX, py2, iconClass));
+            svg.appendChild(_useIcon("ico-globe", pathNodeX, py2, ""));
         }
-        var pathLabel = (p.type === "policy") ? "Policy" : EW.ifaceLabelShort(p.dev);
-        svg.appendChild(_svgText(pathLabel, pathNodeX, py2 + 27, "route-node-sublabel"));
-        if (p.via) {
-            svg.appendChild(_svgText("via " + p.via, pathNodeX, py2 + 39, "route-node-sublabel"));
-        }
+        svg.appendChild(_svgText(EW.ifaceLabelShort(p.dev), pathNodeX, py2 + 27, "route-node-sublabel"));
     }
 
     // Internet cloud

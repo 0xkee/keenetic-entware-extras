@@ -184,7 +184,7 @@ local function system_info()
         end
     end
 
-    -- CPU load average from /proc/loadavg (1min, 5min, 15min)
+    -- CPU load average from /proc/loadavg (kept for tooltip, not for bar)
     local load1 = "0"
     local load5 = "0"
     local loadavg = read_file("/proc/loadavg")
@@ -202,10 +202,46 @@ local function system_info()
         if count > 0 then cpu_cores = count end
     end
 
+    -- Actual CPU utilization from /proc/stat delta.
+    -- Load average includes I/O-waiting processes (USB, DNS, network) and
+    -- grossly overstates CPU on embedded SoCs (e.g. 57% shown vs 7% real on
+    -- Peak KN-2710).  /proc/stat cpu ticks are what top/htop use.
+    -- Previous snapshot stored in lua_shared_dict; first poll returns -1.
+    local cpu_pct = -1
+    local stat_line = read_file("/proc/stat")
+    if stat_line then
+        local u, n, s, idle, iow, irq, sirq, st =
+            stat_line:match("^cpu%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)")
+        if u then
+            u = tonumber(u);  n = tonumber(n);  s = tonumber(s)
+            idle = tonumber(idle); iow = tonumber(iow); irq = tonumber(irq)
+            sirq = tonumber(sirq); st = tonumber(st)
+
+            local total = u + n + s + idle + iow + irq + sirq + st
+            local busy  = u + n + s + irq + sirq + st
+
+            local pt = tonumber(cache:get("cpu::prev_total")) or 0
+            local pb = tonumber(cache:get("cpu::prev_busy"))  or 0
+
+            local dt = total - pt
+            local db = busy  - pb
+
+            if pt > 0 and dt > 0 then
+                cpu_pct = math.floor(db / dt * 100 + 0.5)
+                if cpu_pct < 0   then cpu_pct = 0   end
+                if cpu_pct > 100 then cpu_pct = 100 end
+            end
+
+            cache:set("cpu::prev_total", tostring(total))
+            cache:set("cpu::prev_busy",  tostring(busy))
+        end
+    end
+
     return '{"ok":true,'
         .. '"hostname":"' .. json_escape(hostname) .. '",'
         .. '"uptime":"' .. json_escape(uptime_str) .. '",'
-        .. '"cpu_load":{"load1":' .. load1 .. ',"load5":' .. load5 .. ',"cores":' .. cpu_cores .. '},'
+        .. '"cpu_load":{"load1":' .. load1 .. ',"load5":' .. load5
+        .. ',"cores":' .. cpu_cores .. ',"cpu_pct":' .. cpu_pct .. '},'
         .. '"memory":{"total_kb":' .. mem_total .. ',"available_kb":' .. mem_available .. '},'
         .. '"disk_opt":{"total_kb":' .. disk_total .. ',"used_kb":' .. disk_used .. ',"free_kb":' .. disk_free .. '}'
         .. '}'

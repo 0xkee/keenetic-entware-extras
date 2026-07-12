@@ -23,6 +23,24 @@ is_running() {
     [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null
 }
 
+# Kill any process holding our port 8080 (orphaned nginx after force-reinstall, etc.)
+# netstat shows only one worker PID per listen socket, but all N workers inherit
+# the fd via fork — killing one lets the next sibling take over the socket.
+# Fix: retry loop — each iteration kills the current holder until port is free.
+kill_port_holders() {
+    _retries=0
+    while [ "$_retries" -lt 10 ]; do
+        _PORT_PIDS=$(netstat -tlnp 2>/dev/null \
+            | awk '/:8080 /{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+\//) {split($i,a,"/"); print a[1]}}' \
+            | sort -u)
+        [ -z "$_PORT_PIDS" ] && return 0
+        [ "$_retries" -eq 0 ] && echo " Killing orphaned process(es) on port 8080..."
+        echo "$_PORT_PIDS" | xargs kill -9 2>/dev/null || true
+        sleep 1
+        _retries=$((_retries + 1))
+    done
+}
+
 start() {
     [ "$ENABLED" != "yes" ] && return 8
     printf " Starting %s... " "$DESC"
@@ -40,6 +58,8 @@ start() {
     fi
     # Clear stale PID (Keenetic /tmp survives firmware updates)
     rm -f "$PIDFILE"
+    # Ensure port 8080 is free (handles orphaned nginx after --force-reinstall)
+    kill_port_holders
     # Patch stock UI into tmpfs
     "$PATCH"
     $NGINX -c "$CONF" 2>&1
@@ -70,16 +90,8 @@ stop() {
     else
         echo "not running (no PID)."
     fi
-    # Kill any orphaned nginx processes holding our port.
-    # Can't use cmdline match for workers (they lack $CONF in args and
-    # "nginx: worker" pattern would hit stock Keenetic nginx workers).
-    # Port-based detection is safe — only our instance uses 8080.
-    _PORT_PIDS=$(netstat -tlnp 2>/dev/null | awk '/:8080 /{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+\//) {split($i,a,"/"); print a[1]}}' | sort -u)
-    if [ -n "$_PORT_PIDS" ]; then
-        echo " Killing orphaned nginx-webui process(es) on port 8080..."
-        echo "$_PORT_PIDS" | xargs kill -9 2>/dev/null || true
-        sleep 1
-    fi
+    # Kill any orphaned processes still holding port 8080
+    kill_port_holders
     rm -f "$PIDFILE"
     # Clean up patched UI cache (tmpfs — large ephemeral data)
     rm -rf /tmp/ew-webui

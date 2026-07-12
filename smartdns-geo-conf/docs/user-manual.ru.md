@@ -242,15 +242,29 @@ OTHER_privatedot_IP2=""
 OTHER_privatedot_TLS_HOST="dns.example.com"
 ```
 
-**Пример: DoH:**
+**Пример: DoH (с IP — оптимизация, без DNS-резолвинга hostname):**
 ```sh
 OTHER_privatedoh_LABEL="Private DoH"
 OTHER_privatedoh_PROTO="doh"
 OTHER_privatedoh_DOH_URL="https://dns.example.com/dns-query"
-OTHER_privatedoh_IP1="10.0.0.1"
+OTHER_privatedoh_IP1="10.0.0.1"    # опционально — если задан, SmartDNS идёт сразу по IP
 OTHER_privatedoh_IP2=""
 OTHER_privatedoh_TLS_HOST="dns.example.com"
 ```
+
+**Пример: Private AdGuard / NextDNS DoH (без IP):**
+```sh
+OTHER_agprivate_LABEL="AdGuard Private"
+OTHER_agprivate_PROTO="doh"
+OTHER_agprivate_DOH_URL="https://d.adguard-dns.com/dns-query/YOUR_ID"
+OTHER_agprivate_IP1=""             # не указывать! IP-pinning ломает привязку к профилю
+OTHER_agprivate_IP2=""
+OTHER_agprivate_TLS_HOST="d.adguard-dns.com"
+```
+
+> ⚠️ **Важно:** Для персональных DoH-серверов (Private AdGuard DNS, NextDNS и т.п.)
+> **не указывайте IP1/IP2** — они используют anycast/CDN-маршрутизацию по hostname,
+> и принудительный IP ломает привязку запросов к вашему профилю.
 
 **Пример: зоновый провайдер:**
 ```sh

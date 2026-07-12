@@ -5,6 +5,14 @@ All notable changes to `smartdns-redirect` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.3.6] - 2026-07-12
+
+### Added
+- `status.sh`: DNAT target IP shown in CLI (`DNAT to: 192.168.1.1:6053`) and
+  JSON (`dnat_target` field) — visible when debugging multi-interface setups
+- `status.sh`: per-interface rule breakdown in JSON (`rules_detail` array with
+  iface/family/proto/ok for each expected iptables rule)
+
 ## [0.3.5] - 2026-07-12
 
 ### Fixed

@@ -5,6 +5,13 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.32.6] — 2026-07-12
+
+### Added
+- `status.sh`: firmware patch compatibility check — detects KeeneticOS version
+  via ndmc, looks up patch set in `hash-map.conf`. CLI: `Firmware: 5.1.0 → patch v3 ✓`.
+  JSON: `firmware`, `patch_set` details + `patch` check (ok/warn).
+
 ## [0.32.5] — 2026-07-11
 
 ### Fixed

@@ -66,11 +66,23 @@ check_enabled() {
   _ck_active_zones="$(resolve_geo_zone "$_ck_zone")"
 }
 
+# Check custom DNS providers file.
+# Sets: _ck_custom_providers (count of uncommented LABEL= lines, 0 if absent)
+check_custom_providers() {
+  _ck_custom_providers=0
+  local _f="$_CONFIG_DIR/dns-providers-custom.conf"
+  if [ -f "$_f" ]; then
+    _ck_custom_providers=$(grep -v '^[[:space:]]*#' "$_f" | grep -c '_LABEL=' 2>/dev/null) || _ck_custom_providers=0
+  fi
+}
+
 # --- Show functions (text, use lib + local checks) ---
 
 show_config() {
+  local _extra=""
+  [ "$_ck_custom_providers" -gt 0 ] && _extra=", $_ck_custom_providers custom"
   if [ "$_ck_config_ok" = "true" ]; then
-    status_line "Config" "$CONF ($_ck_servers servers, $_ck_rules rules)" "ok"
+    status_line "Config" "$CONF ($_ck_servers servers, $_ck_rules rules${_extra})" "ok"
   else
     status_line "Config" "NOT found" "fail"; STATUS_OK=1
   fi
@@ -311,6 +323,7 @@ json_output() {
   status_detail "ports" "$_st_port_addrs"
   status_detail "servers" "$_ck_servers" "num"
   status_detail "rules" "$_ck_rules" "num"
+  status_detail "custom_providers" "$_ck_custom_providers" "num"
   status_detail "cache" "$([ -n "$_ck_cache_kb" ] && format_size_kb "$_ck_cache_kb" || printf 'none')"
   status_detail "memory" "$([ "$_st_running" = "true" ] && [ "$_st_mem_kb" != "0" ] && format_size_kb "$_st_mem_kb" || printf '')"
   status_detail "pid" "$_st_pid"
@@ -341,6 +354,7 @@ status_check_version "smartdns-geo-conf"
 check_config
 check_cache
 check_enabled
+check_custom_providers
 
 # Set STATUS_OK based on critical checks
 [ "$_st_running" = "false" ] && STATUS_OK=1

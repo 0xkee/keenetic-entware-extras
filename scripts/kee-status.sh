@@ -176,22 +176,30 @@ for script in "$BASE"/*/scripts/status.sh; do
       ;;
   esac
 
+  # Extract version from "Version: X.Y.Z" line (dim suffix for summary row)
+  pkg_ver=""
+  if [ -n "$output" ]; then
+    pkg_ver=$(printf "%s" "$output" | sed -n 's/.*Version:[[:space:]]*\([0-9][0-9.]*\).*/\1/p' | head -1)
+  fi
+  ver_suffix=""
+  [ -n "$pkg_ver" ] && ver_suffix="  ${C_DIM}v${pkg_ver}${C_RESET}"
+
   case "$status" in
     alive)
-      print_pkg_row "$pkg" "Alive" "$C_GREEN"
+      print_pkg_row "$pkg" "Alive${ver_suffix}" "$C_GREEN"
       if [ -n "$DETAILS" ] && [ -n "$output" ]; then
         printf "%s\n" "$output" | indent_output
       fi
       ;;
     disabled)
-      print_pkg_row "$pkg" "Disabled" "$C_YELLOW"
+      print_pkg_row "$pkg" "Disabled${ver_suffix}" "$C_YELLOW"
       if [ -n "$DETAILS" ] && [ -n "$output" ]; then
         printf "%s\n" "$output" | indent_output
       fi
       ;;
     fail)
       OVERALL_RC=1
-      print_pkg_row "$pkg" "FAIL" "$C_RED"
+      print_pkg_row "$pkg" "FAIL${ver_suffix}" "$C_RED"
       if [ -n "$output" ]; then
         if [ -n "$DETAILS" ]; then
           printf "%s\n" "$output" | indent_output

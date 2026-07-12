@@ -5,6 +5,12 @@ All notable changes to `geo-split` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.17.4] - 2026-07-12
+
+### Added
+- `status.sh`: route-out type detection — `Active out` now shows `isp` or `tunnel`
+  suffix (e.g. `nwg0 (tunnel, tables 1000,1001)`). JSON: `route_out_type` field.
+
 ## [0.17.3] - 2026-07-11
 
 ### Changed

@@ -33,6 +33,7 @@ _ck_upstream_ok=1
 _ck_upstream_name="unknown"
 _ck_upstream_listening=""
 _ck_rules_ok=0
+_ck_rules_json=""
 _ck_ndm_hook_ok=1
 _ck_init_ok=1
 
@@ -57,24 +58,30 @@ check_upstream() {
 }
 
 # Verify iptables DNAT rules for all interfaces × protos.
-# Sets: _ck_rules_ok (0=all present, 1=some missing)
+# Sets: _ck_rules_ok (0=all present, 1=some missing),
+#        _ck_rules_json (JSON array of per-iface/proto results)
 check_rules() {
   _ck_rules_ok=0
-  local _iface _proto
+  _ck_rules_json=""
+  local _iface _proto _ok
   if [ -z "$INTERFACES" ]; then
     return
   fi
   for _iface in $INTERFACES; do
     for _proto in udp tcp; do
+      _ok="true"
       iptables -t nat -C PREROUTING -i "$_iface" -p "$_proto" --dport 53 \
-        -j DNAT --to-destination "${ROUTER_IP}:${UPSTREAM_PORT}" 2>/dev/null || _ck_rules_ok=1
+        -j DNAT --to-destination "${ROUTER_IP}:${UPSTREAM_PORT}" 2>/dev/null || { _ck_rules_ok=1; _ok="false"; }
+      _ck_rules_json="${_ck_rules_json:+${_ck_rules_json},}{\"iface\":\"${_iface}\",\"family\":\"v4\",\"proto\":\"${_proto}\",\"ok\":${_ok}}"
     done
   done
   if [ "$ENABLE_IPV6" = "yes" ] && command -v ip6tables >/dev/null 2>&1; then
     for _iface in $INTERFACES; do
       for _proto in udp tcp; do
+        _ok="true"
         ip6tables -t nat -C PREROUTING -i "$_iface" -p "$_proto" --dport 53 \
-          -j DNAT --to-destination "[${ROUTER_IP6}]:${UPSTREAM_PORT}" 2>/dev/null || _ck_rules_ok=1
+          -j DNAT --to-destination "[${ROUTER_IP6}]:${UPSTREAM_PORT}" 2>/dev/null || { _ck_rules_ok=1; _ok="false"; }
+        _ck_rules_json="${_ck_rules_json:+${_ck_rules_json},}{\"iface\":\"${_iface}\",\"family\":\"v6\",\"proto\":\"${_proto}\",\"ok\":${_ok}}"
       done
     done
   fi
@@ -113,6 +120,7 @@ show_mode() {
     status_line "Interfaces" "— (empty → disabled)"
   fi
   status_line "IPv6" "$ENABLE_IPV6"
+  status_line "DNAT to" "${ROUTER_IP}:${UPSTREAM_PORT}"
 }
 
 # Check a single iptables DNAT rule for (family, iface, proto).
@@ -236,6 +244,7 @@ json_output() {
   # Details
   status_detail "interfaces" "$INTERFACES"
   status_detail "ipv6" "$ENABLE_IPV6"
+  status_detail "dnat_target" "${ROUTER_IP}:${UPSTREAM_PORT}"
   status_detail "ndm_hook" "$_ck_ndm_hook_ok" "bool"
   status_detail "upstream" "127.0.0.1:${UPSTREAM_PORT}"
   status_detail "name" "$_ck_upstream_name"
@@ -244,6 +253,9 @@ json_output() {
   status_detail "rules" "$_ck_rules_ok" "bool"
   status_detail "uptime" "$uptime_seconds_val" "num"
   status_detail "version" "${_st_version:-unknown}"
+
+  # Per-interface rule detail (pre-serialized JSON array)
+  status_extra "rules_detail" "[${_ck_rules_json}]"
 
   # Checks
   status_check_result "running" "$(if [ "$running" = "true" ]; then printf ok; else printf fail; fi)"

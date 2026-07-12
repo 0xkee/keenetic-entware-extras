@@ -21,17 +21,25 @@ _st_version=""
 # --- Check functions ---
 # Pure data collection. May set STATUS_OK=1 on failures.
 
-# Sets: _ck_geo_zone, _ck_active_zones, _ck_active_out, _ck_gateway
+# Sets: _ck_geo_zone, _ck_active_zones, _ck_active_out, _ck_gateway, _ck_out_type
 check_mode() {
   _ck_geo_zone="${GEO_ZONE:-ru}"
   _ck_active_zones="$(resolve_geo_zone "$_ck_geo_zone")"
   _ck_gateway=""
+  _ck_out_type="isp"
   # head -5: all routes in a table share the same dev (filled by fill_routes_batch),
   # so a few lines suffice to extract unique interface names (~11K → 10 lines).
   _ck_active_out=$( {
     ip route show table "$DOMAIN_ROUTE_TABLE" 2>/dev/null | head -5
     ip route show table "$SUBNET_ROUTE_TABLE" 2>/dev/null | head -5
   } | sed -n 's/.*dev \([^ ]*\).*/\1/p' | sort -u | tr '\n' ' ' | sed 's/ $//')
+  # Detect route-out type: tunnel if any active out device is a tunnel interface
+  local _dev
+  for _dev in $_ck_active_out; do
+    if is_tunnel_iface "$_dev"; then
+      _ck_out_type="tunnel"; break
+    fi
+  done
   # Gateway: extract "via <IP>" from first route, or "scope link" if none
   local _gw_ip
   _gw_ip=$(ip route show table "$SUBNET_ROUTE_TABLE" 2>/dev/null | \
@@ -193,7 +201,7 @@ show_mode() {
     status_line "Route out" "$ROUTE_OUT"
   fi
   if [ -n "$_ck_active_out" ]; then
-    status_line "Active out" "$_ck_active_out (tables $DOMAIN_ROUTE_TABLE,$SUBNET_ROUTE_TABLE)"
+    status_line "Active out" "$_ck_active_out ($_ck_out_type, tables $DOMAIN_ROUTE_TABLE,$SUBNET_ROUTE_TABLE)"
     # Show gateway from first route in subnet table (if present)
     local _active_gw
     _active_gw=$(ip route show table "$SUBNET_ROUTE_TABLE" 2>/dev/null | \
@@ -407,6 +415,7 @@ json_output() {
   else
     status_detail "route_out" "${_ck_active_out:-detached}"
   fi
+  status_detail "route_out_type" "$_ck_out_type"
   status_detail "gateway" "${_ck_gateway:-none}"
   # Details — Data
   status_detail "subnets" "$_ck_subnet_routes" "num"

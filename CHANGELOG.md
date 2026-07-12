@@ -5,6 +5,12 @@ All notable changes to `keenetic-entware-extras` (base package) are documented h
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.16.8] - 2026-07-12
+
+### Added
+- `kee-status.sh`: package versions shown in summary mode (without `--details`) —
+  dim `vX.Y.Z` suffix after Alive/FAIL label
+
 ## [0.16.7] - 2026-07-11
 
 ### Added

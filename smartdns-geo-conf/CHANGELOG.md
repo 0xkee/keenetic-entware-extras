@@ -5,6 +5,13 @@ All notable changes to `smartdns-geo-conf` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.10.9] — 2026-07-12
+
+### Added
+- `status.sh`: custom DNS providers count — `Config` line now shows
+  `(N servers, M rules, K custom)` when `dns-providers-custom.conf` exists.
+  JSON: `custom_providers` numeric field.
+
 ## [0.10.8] — 2026-07-11
 
 ### Fixed

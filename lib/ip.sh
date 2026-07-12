@@ -71,6 +71,37 @@ cidr_sample_ips() {
   }'
 }
 
+# Find routes in a routing table that overlap with the given CIDR.
+# For each overlapping route outputs: "prefix route_ips dev overlap_ips".
+# Uses inline AWK for IP→int math (same arithmetic as cidr_sample_ips).
+# Args: $1 - input CIDR, $2 - routing table number
+# stdout: lines "prefix route_ips dev overlap_ips" for each overlapping route
+cidr_overlap_routes() {
+  local input_cidr="$1" table="$2"
+  ip route show table "$table" 2>/dev/null | awk -v input="$input_cidr" '
+    BEGIN {
+      n = split(input, p, "/"); in_pfx = int(p[2])
+      split(p[1], o, "."); in_ip = o[1]*16777216 + o[2]*65536 + o[3]*256 + o[4]
+      in_sz = 1; for (i=0; i<32-in_pfx; i++) in_sz *= 2
+      in_net = in_ip - (in_ip % in_sz); in_end = in_net + in_sz - 1
+    }
+    /^[0-9]/ {
+      n = split($1, p, "/")
+      if (n == 1) { pfx = 32 } else { pfx = int(p[2]) }
+      split(p[1], o, ".")
+      rip = o[1]*16777216 + o[2]*65536 + o[3]*256 + o[4]
+      rsz = 1; for (i=0; i<32-pfx; i++) rsz *= 2
+      rn = rip - (rip % rsz); re = rn + rsz - 1
+      os = (rn > in_net) ? rn : in_net
+      oe = (re < in_end) ? re : in_end
+      if (os <= oe) {
+        dev = ""
+        for (i=1; i<=NF; i++) if ($i == "dev") { dev = $(i+1); break }
+        print $1, rsz, dev, oe - os + 1
+      }
+    }'
+}
+
 # Pipe filter: aggregate (merge overlapping/adjacent) CIDR subnets.
 # Uses ISC aggregate (opkg install aggregate). IPv4 only.
 # Future: fork aggregate6 for IPv6 support.

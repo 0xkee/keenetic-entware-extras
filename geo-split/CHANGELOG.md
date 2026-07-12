@@ -5,6 +5,30 @@ All notable changes to `geo-split` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.17.3] - 2026-07-11
+
+### Changed
+- `route-check.sh`: removed `lo`-specific filtering from `devs_seen` — loopback
+  device now passes through all stages like any other dev (consistent with routes
+  and coverage data). Filtering for display is handled by the frontend.
+
+## [0.17.2] - 2026-07-11
+
+### Refactored
+- `route-check.sh`: extracted `_cidr_overlap_routes()` → `cidr_overlap_routes()` in `lib/ip.sh`
+- `route-check.sh`: simplified CIDR coverage analysis — removed subshell temp-file hack,
+  variables now persist directly via `while read < file`
+- `route-check.sh`: added `_csv_to_json_arr()` helper, deduplicating two identical
+  while-loops for CSV→JSON array conversion
+- `route-check.sh`: JSON output restructured — optional fields built compactly,
+  mega-printf split into 4 readable statements (−59 LOC total)
+
+## [0.17.1] - 2026-07-11
+
+### Fixed
+- `wan-paths.sh`: geo-split ROUTE_OUT tunnel detection — reports `type: "tunnel"`
+  instead of `"isp"` when ROUTE_OUT points to a VPN/tunnel interface
+
 ## [0.17.0] - 2026-07-07
 
 ### Added

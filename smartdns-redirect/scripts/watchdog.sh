@@ -23,19 +23,27 @@ is_service_enabled "S39smartdns-redirect" || exit 0
 
 DNS_REDIRECT_SCRIPT="$SCRIPT_DIR/dns-redirect.sh"
 
+# Detect router LAN IP for DNAT rule check (must match dns-redirect.sh).
+ROUTER_IP="$(detect_router_ip)"
+ROUTER_IP6=""
+if [ "$ENABLE_IPV6" = "yes" ] && command -v ip6tables >/dev/null 2>&1; then
+    ROUTER_IP6=$(ip -6 addr show br0 2>/dev/null \
+        | awk '/inet6.*global/ {split($2, a, "/"); print a[1]; exit}')
+fi
+
 # --- helpers ---
 
-# Check if a single REDIRECT rule exists for (family, iface, proto).
+# Check if a single DNAT rule exists for (family, iface, proto).
 # Args: $1 - "v4"|"v6", $2 - iface, $3 - proto (udp|tcp)
 rule_exists() {
-    local family="$1" iface="$2" proto="$3" bin
+    local family="$1" iface="$2" proto="$3" bin target
     case "$family" in
-        v4) bin="iptables" ;;
-        v6) bin="ip6tables" ;;
+        v4) bin="iptables"; target="${ROUTER_IP}:${UPSTREAM_PORT}" ;;
+        v6) bin="ip6tables"; target="[${ROUTER_IP6}]:${UPSTREAM_PORT}" ;;
         *)  return 1 ;;
     esac
     "$bin" -t nat -C PREROUTING -i "$iface" -p "$proto" --dport 53 \
-        -j REDIRECT --to-ports "$UPSTREAM_PORT" 2>/dev/null
+        -j DNAT --to-destination "$target" 2>/dev/null
 }
 
 # Returns 0 if any expected rule is missing (i.e. reload needed).

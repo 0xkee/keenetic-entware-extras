@@ -29,6 +29,22 @@ fi
 
 require_cmd iptables
 
+# Detect router LAN IP for DNAT target.
+# DNAT to br0 IP ensures SmartDNS receives the packet regardless of which
+# interface it arrived on (br0, br1, nwg1, etc.) — unlike REDIRECT which
+# sends to the primary IP of the *incoming* interface (may not have SmartDNS).
+ROUTER_IP="$(detect_router_ip)"
+if [ -z "$ROUTER_IP" ]; then
+    log_error "cannot detect router LAN IP (br0) — DNAT target unknown"
+    exit 1
+fi
+
+ROUTER_IP6=""
+if [ "$ENABLE_IPV6" = "yes" ] && command -v ip6tables >/dev/null 2>&1; then
+    ROUTER_IP6=$(ip -6 addr show br0 2>/dev/null \
+        | awk '/inet6.*global/ {split($2, a, "/"); print a[1]; exit}')
+fi
+
 # --- rule manipulation helpers (IPv4) ---
 
 # Idempotent insert at index 1. No-op if the rule already exists.
@@ -36,25 +52,28 @@ require_cmd iptables
 add_rule_if_missing() {
     local iface="$1" proto="$2"
     if iptables -t nat -C PREROUTING -i "$iface" -p "$proto" --dport 53 \
-            -j REDIRECT --to-ports "$UPSTREAM_PORT" 2>/dev/null; then
+            -j DNAT --to-destination "${ROUTER_IP}:${UPSTREAM_PORT}" 2>/dev/null; then
         return 0
     fi
     iptables -t nat -I PREROUTING 1 -i "$iface" -p "$proto" --dport 53 \
-        -j REDIRECT --to-ports "$UPSTREAM_PORT"
-    log "added: -i $iface -p $proto --dport 53 -> REDIRECT :$UPSTREAM_PORT"
+        -j DNAT --to-destination "${ROUTER_IP}:${UPSTREAM_PORT}"
+    log "added: -i $iface -p $proto --dport 53 -> DNAT ${ROUTER_IP}:${UPSTREAM_PORT}"
 }
 
 # --- rule manipulation helpers (IPv6, when ENABLE_IPV6=yes) ---
 
 add_rule_if_missing_v6() {
     local iface="$1" proto="$2"
+    if [ -z "$ROUTER_IP6" ]; then
+        return 0
+    fi
     if ip6tables -t nat -C PREROUTING -i "$iface" -p "$proto" --dport 53 \
-            -j REDIRECT --to-ports "$UPSTREAM_PORT" 2>/dev/null; then
+            -j DNAT --to-destination "[${ROUTER_IP6}]:${UPSTREAM_PORT}" 2>/dev/null; then
         return 0
     fi
     ip6tables -t nat -I PREROUTING 1 -i "$iface" -p "$proto" --dport 53 \
-        -j REDIRECT --to-ports "$UPSTREAM_PORT"
-    log "added (v6): -i $iface -p $proto --dport 53 -> REDIRECT :$UPSTREAM_PORT"
+        -j DNAT --to-destination "[${ROUTER_IP6}]:${UPSTREAM_PORT}"
+    log "added (v6): -i $iface -p $proto --dport 53 -> DNAT [${ROUTER_IP6}]:${UPSTREAM_PORT}"
 }
 
 # True when IPv6 redirect is requested AND ip6tables is available.
@@ -79,15 +98,14 @@ add_rules() {
     done
 }
 
-# Remove ALL our REDIRECT-to-port rules for dport 53 (any port, any iface).
+# Remove ALL our DNS DNAT/REDIRECT rules for dport 53 (any port, any iface).
 # Used by stop/reload so they fully clean up after any previous config
 # (different UPSTREAM_PORT, different INTERFACES, stale v6 rules).
-# Signature: iptables -t nat -S PREROUTING lines ending with:
-#   --dport 53 -j REDIRECT --to-ports <N>
+# Matches both DNAT (current) and legacy REDIRECT rules for clean upgrade.
 del_all_rules() {
     local line rest
     iptables -t nat -S PREROUTING 2>/dev/null \
-        | grep -E '^-A PREROUTING .*--dport 53 .*-j REDIRECT --to-ports [0-9]+' \
+        | grep -E '^-A PREROUTING .*--dport 53 .*-j (DNAT|REDIRECT) ' \
         | while IFS= read -r line; do
             rest=${line#-A PREROUTING }
             # shellcheck disable=SC2086
@@ -98,7 +116,7 @@ del_all_rules() {
     # IPv6 (always try if ip6tables available — defensive cleanup)
     if command -v ip6tables >/dev/null 2>&1; then
         ip6tables -t nat -S PREROUTING 2>/dev/null \
-            | grep -E '^-A PREROUTING .*--dport 53 .*-j REDIRECT --to-ports [0-9]+' \
+            | grep -E '^-A PREROUTING .*--dport 53 .*-j (DNAT|REDIRECT) ' \
             | while IFS= read -r line; do
                 rest=${line#-A PREROUTING }
                 # shellcheck disable=SC2086

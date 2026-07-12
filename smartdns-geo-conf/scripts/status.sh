@@ -323,7 +323,7 @@ json_output() {
   status_detail "ports" "$_st_port_addrs"
   status_detail "servers" "$_ck_servers" "num"
   status_detail "rules" "$_ck_rules" "num"
-  status_detail "custom_providers" "$_ck_custom_providers" "num"
+  [ "$_ck_custom_providers" -gt 0 ] && status_detail "custom_providers" "$_ck_custom_providers" "num"
   status_detail "cache" "$([ -n "$_ck_cache_kb" ] && format_size_kb "$_ck_cache_kb" || printf 'none')"
   status_detail "memory" "$([ "$_st_running" = "true" ] && [ "$_st_mem_kb" != "0" ] && format_size_kb "$_st_mem_kb" || printf '')"
   status_detail "pid" "$_st_pid"

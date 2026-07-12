@@ -5,6 +5,12 @@ All notable changes to `smartdns-geo-conf` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.10.10] — 2026-07-12
+
+### Changed
+- `status.sh`: `custom_providers` field hidden in JSON when 0 — avoids false-red
+  display in WebUI (0 custom providers is normal, not an error)
+
 ## [0.10.9] — 2026-07-12
 
 ### Added

@@ -12,8 +12,8 @@ var FETCH_TIMEOUT = 15000;    // 15 seconds (allows for queued io.popen in nginx
 var SUMMARY_KEYS = {
     'geo-split':         ['geo_zone', 'active_zones', 'subnets', 'domains', 'route_in', 'route_out'],
     'smartdns':          ['dns_zone', 'active_zones', 'zone_dns_provider', 'other_dns_provider', 'ports', 'rules'],
-    'smartdns-redirect': ['interfaces', 'upstream'],
-    'webui':             ['ports', 'http']
+    'smartdns-redirect': ['interfaces', 'upstream', 'dnat_target'],
+    'webui':             ['ports', 'http', 'patch_set']
 };
 
 /** Get skeleton count for a service: cached from last API response, or default 6. */
@@ -167,6 +167,55 @@ function setDetails(id, data) {
         html += '<div class="ew-detail-item" data-priority="' + priority + '">' +
             '<div class="ew-detail-label">' + EW.escapeHtml(e.label) + '</div>' +
             '<div class="ew-detail-value' + numClass + '"' + valStyle + dataAttr + '>' + valHtml + updateBtn + '</div></div>';
+    }
+    // rules_detail per-iface breakdown (smartdns-redirect, geo-split style)
+    // Groups by iface+family: ok → "br0: v4 udp/tcp"; mixed → "v4 udp ✓, tcp ✗"
+    if (data.rules_detail && data.rules_detail.length) {
+        // Group by iface, then by family within each iface
+        var rByIface = {}, rOrder = [];
+        for (var ri = 0; ri < data.rules_detail.length; ri++) {
+            var r = data.rules_detail[ri];
+            if (!rByIface[r.iface]) { rByIface[r.iface] = {}; rOrder.push(r.iface); }
+            if (!rByIface[r.iface][r.family]) rByIface[r.iface][r.family] = [];
+            rByIface[r.iface][r.family].push(r);
+        }
+        var rulesLines = [];
+        for (var rg = 0; rg < rOrder.length; rg++) {
+            var rIface = rOrder[rg];
+            var rFamilies = rByIface[rIface];
+            var famParts = [];
+            for (var fam in rFamilies) {
+                var fEntries = rFamilies[fam];
+                var fAllOk = true;
+                for (var fk = 0; fk < fEntries.length; fk++) { if (!fEntries[fk].ok) { fAllOk = false; break; } }
+                if (fAllOk) {
+                    var protos = [];
+                    for (var fp = 0; fp < fEntries.length; fp++) protos.push(fEntries[fp].proto);
+                    famParts.push(EW.escapeHtml(fam + ' ' + protos.join('/')));
+                } else {
+                    var protoParts = [];
+                    for (var fp2 = 0; fp2 < fEntries.length; fp2++) {
+                        var fe = fEntries[fp2];
+                        var feIcon = fe.ok ? '\u2713' : '\u2717';
+                        var feCls = fe.ok ? 'ew-bool-icon--ok' : 'ew-bool-icon--fail';
+                        protoParts.push(EW.escapeHtml(fe.proto) + ' <span class="ew-bool-icon ' + feCls + '">' + feIcon + '</span>');
+                    }
+                    famParts.push(EW.escapeHtml(fam) + ' ' + protoParts.join(', '));
+                }
+            }
+            rulesLines.push(EW.escapeHtml(rIface) + ': ' + famParts.join(', '));
+        }
+        var rulesBreakdown = '<div class="ew-dns-line">' + rulesLines.join('</div><div class="ew-dns-line">') + '</div>';
+        var rp = html.indexOf('ew-detail-label">Rules<');
+        if (rp !== -1) {
+            var rvp = html.indexOf('ew-detail-value', rp);
+            if (rvp !== -1) {
+                var rvEndTag = html.indexOf('</div>', html.indexOf('>', rvp) + 1);
+                if (rvEndTag !== -1) {
+                    html = html.substring(0, rvp) + 'ew-detail-value">' + rulesBreakdown + html.substring(rvEndTag);
+                }
+            }
+        }
     }
     // DNS test results: one grid item with all tests as lines (like Ports)
     if (data.dns_tests && data.dns_tests.length) {

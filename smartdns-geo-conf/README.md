@@ -215,8 +215,40 @@ OTHER_DNS_INTERFACES="nwg3 nwg4"
 # Regenerate configs + restart SmartDNS
 /opt/etc/init.d/S37smartdns-conf restart
 
+# Flush persistent DNS cache (stops SmartDNS, deletes cache, restarts)
+/opt/etc/init.d/S37smartdns-conf flush-cache
+
 # Diagnostics
 /opt/keenetic-entware-extras/smartdns-geo-conf/scripts/status.sh
+```
+
+### DNS zone diagnostic
+
+`dns-check.sh` — CLI tool to check which DNS zone/group and upstream resolves a given domain:
+
+```sh
+/opt/keenetic-entware-extras/smartdns-geo-conf/scripts/dns-check.sh <domain>
+```
+
+Example output:
+```
+DNS Zone Check: ya.ru
+
+  Zone:       ru (match: /.ru/, type: ccTLD)
+
+  ✓ eas:  yandex adguard
+    default:  google cloudflare
+
+  Upstream:   Yandex DNS, AdGuard Unfiltered
+  Servers:    77.88.8.8:853, 94.140.14.140:853
+  Interface:  direct
+
+  Result:     5.255.255.242 (TTL 300, 4ms)
+```
+
+JSON output (for WebUI / automation):
+```sh
+/opt/keenetic-entware-extras/smartdns-geo-conf/scripts/dns-check.sh --json ya.ru
 ```
 
 ## Ports
@@ -241,6 +273,7 @@ smartdns-geo-conf/
 ├── init.d/
 │   └── S37smartdns-conf       # init script (enable/disable/restart)
 ├── scripts/
+│   ├── dns-check.sh           # DNS zone diagnostic tool
 │   ├── generate-conf.sh       # dynamic config generator
 │   ├── status.sh              # diagnostics
 │   └── toggle.sh              # enable/disable helper (legacy, used by API)

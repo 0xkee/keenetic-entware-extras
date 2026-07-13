@@ -80,8 +80,10 @@ logread | grep smartdns-redirect
 
 ### LAN client request flow
 
+All configured interfaces use `DNAT` to br0 IP — this ensures SmartDNS receives the packet regardless of which interface it arrived on:
+
 ```
-Client (10.0.0.42) → UDP :53 → br0 →
+Client (10.0.0.42) → UDP :53 → br0/br1/nwg1 →
   [iptables PREROUTING DNAT → 10.0.0.1:6053] →
     SmartDNS (10.0.0.1:6053) → upstream (DoT/DoH/UDP)
 ```

@@ -150,18 +150,22 @@ WATCHDOG_SERVICE=""
 | `stop` | Удалить iptables правила |
 | `restart` | Переприменить правила |
 | `status` | Подробная диагностика |
+| `enable` | Включить автозапуск (создать symlink в `/opt/etc/init.d/`) |
+| `disable` | Отключить автозапуск (удалить symlink); сервис не стартует при загрузке |
 
-Работает аналогично geo-split: при `disable` symlink удаляется, сервис не стартует при загрузке.
+При `disable` symlink удаляется — сервис не стартует при загрузке, NDM-hook и watchdog также пропускают работу.
 
 ### Как это работает
 
+Для всех настроенных интерфейсов используется `DNAT` на IP br0 — это гарантирует, что SmartDNS получит пакет независимо от входного интерфейса:
+
 ```
-Client (10.0.0.42) → UDP :53 → br0
+Client (10.0.0.42) → UDP :53 → br0/br1/nwg1
   → [iptables PREROUTING DNAT → 10.0.0.1:6053]
     → SmartDNS (10.0.0.1:6053) → upstream (DoT/DoH/UDP)
 ```
 
-Роутер сам (loopback 127.0.0.1:53) ходит в ndnproxy — правила `br0` его не касаются.
+Роутер сам (loopback 127.0.0.1:53) ходит в ndnproxy — правила LAN-интерфейсов его не касаются.
 
 ### NDM-устойчивость
 
@@ -213,7 +217,7 @@ smartdns-redirect status: ✓ Alive
     Uptime:      2d 5h ✓
     Init:        /opt/etc/init.d/S39smartdns-redirect ✓
     NDM hook:    /opt/etc/ndm/netfilter.d/smartdns-redirect-hook ✓
-    Version:     0.3.1
+    Version:     0.3.7
 ```
 
 ### Проверка правил вручную

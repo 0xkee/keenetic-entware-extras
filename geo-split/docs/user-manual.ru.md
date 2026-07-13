@@ -314,14 +314,20 @@ SUBNET_URL="https://stat.ripe.net/data/country-resource-list/data.json?resource=
 Утилита `route-check.sh` определяет, через какой интерфейс пойдёт трафик к указанному хосту или IP.
 
 ```sh
-/opt/keenetic-entware-extras/geo-split/scripts/route-check.sh <домен-или-IP>
+/opt/keenetic-entware-extras/geo-split/scripts/route-check.sh <домен-или-IP-или-CIDR>
 ```
+
+Принимает домены, IP-адреса и **CIDR-подсети**.
 
 **Примеры:**
 ```sh
 # Проверить маршрут до домена
 route-check.sh ozon.ru
 # ⇒  ozon.ru → geo-split (subnet 5.188.140.0/22 table 1001) → eth3
+
+# Проверить CIDR-подсеть (анализ покрытия таблицами geo-split)
+route-check.sh 5.0.0.0/8
+# ⇒  5.0.0.0/8 → geo-split (coverage 92.3%, 14207744/15400960 IPs overlap)
 
 # Проверить как конкретный клиент
 route-check.sh github.com --from AA:BB:CC:DD:EE:FF
@@ -330,6 +336,8 @@ route-check.sh github.com --from AA:BB:CC:DD:EE:FF
 # JSON-формат (для WebUI/автоматизации)
 route-check.sh --json ozon.ru
 ```
+
+Для CIDR-подсетей: проверяются 1–3 IP из диапазона для определения маршрутного вердикта ядра + анализ покрытия по таблицам geo-split (пересечение подсетей, `geo_split_pct`).
 
 **Опции:**
 
@@ -383,7 +391,7 @@ my-ru-service.com
 После запуска geo-split работает автономно:
 
 1. **Cron** (каждые 15 мин со случайным сдвигом) — проверяет свежесть кэша, обновляет при необходимости
-2. **NDM hook** — реагирует на переключение интерфейсов (VPN up/down) и восстанавливает маршруты
+2. **NDM hook** — отслеживает каждое событие `ifstatechanged`, проверяет состояние таблиц маршрутизации и заполняет их заново, если они пусты или указывают на неверный интерфейс (reconciliation pattern)
 3. **Boot** — автоматический запуск при загрузке роутера (если сервис enabled)
 
 ---
@@ -404,7 +412,7 @@ geo-split status: ✓ Alive
     Geo zone:    eas → [ru by kz am kg]
     Route in:    br0
     Route out:   auto (detect ISP)
-    Active out:  apcli0 (tables 1000,1001)
+    Active out:  apcli0 (isp, tables 1000,1001)
     Gateway:     192.168.1.1
 
   IP rules:
@@ -429,7 +437,7 @@ geo-split status: ✓ Alive
     DNS:         localhost:6153 (SmartDNS no-speed-check)
     Background:  idle
     Loader:      cidr-plain
-    Version:     0.16.1
+    Version:     0.17.4
 ```
 
 Пример вывода (сервис отключён):

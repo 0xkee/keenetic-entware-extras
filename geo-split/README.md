@@ -130,12 +130,17 @@ Hook listens to interface depending on `ROUTE_OUT`:
 # Check which interface traffic will use
 geo-split/scripts/route-check.sh ozon.ru
 
+# Check a CIDR subnet (coverage analysis against geo-split tables)
+geo-split/scripts/route-check.sh 5.0.0.0/8
+
 # Check from a specific client's perspective (MAC)
 geo-split/scripts/route-check.sh github.com --from AA:BB:CC:DD:EE:FF
 
 # JSON for automation / WebUI
 geo-split/scripts/route-check.sh --json ozon.ru
 ```
+
+Accepts domains, IPs, and CIDR notation. For CIDRs: samples 1–3 IPs for kernel route verdict + coverage analysis from geo-split routing tables (overlap detection, `geo_split_pct`).
 
 Verdicts: `⇒` geo-split | `⊙` tunnel | `⚠` mixed (CDN) | `→` default
 
@@ -209,7 +214,9 @@ DOMAINS_UPDATE_INTERVAL=0
 | `scripts/detach-rules.sh` | Detach ip rules + flush route tables |
 | `scripts/update-subnets.sh` | Download GeoIP subnets via loader + populate subnet table |
 | `scripts/update-domains.sh` | DNS resolution of domains (dig → /32 host routes in domain table) |
-| `scripts/ndm-hook.sh` | NDM hook: react to interface up/down |
+| `scripts/ndm-hook.sh` | NDM hook: reconcile routing tables on interface state changes |
+| `scripts/route-check.sh` | Route diagnostics: determine where traffic to a host/IP/CIDR routes |
+| `scripts/wan-paths.sh` | List all WAN egress paths (ISP + VPN tunnels) as JSON via NDM API |
 | `scripts/status.sh` | Diagnostics: mode, rules, tables, caches |
 | `loaders/cidr-plain.sh` | Loader: plain CIDR (default) |
 | `loaders/ripe-json.sh` | Loader: RIPE JSON API (requires `jq`) |
@@ -248,7 +255,7 @@ geo-split status: ✓ Alive
     Geo zone:    eas → [ru by kz am kg]
     Route in:    br0
     Route out:   auto (detect ISP)
-    Active out:  apcli0 (tables 1000,1001)
+    Active out:  apcli0 (isp, tables 1000,1001)
     Gateway:     192.168.1.1
 
   IP rules:
@@ -273,7 +280,7 @@ geo-split status: ✓ Alive
     DNS:         localhost:6153 (SmartDNS no-speed-check)
     Background:  idle
     Loader:      cidr-plain
-    Version:     0.16.1
+    Version:     0.17.4
 ```
 
 **Exit code:** `0` — all OK, `1` — issues detected (✗ in output).

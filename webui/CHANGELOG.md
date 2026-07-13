@@ -5,6 +5,12 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.33.2] — 2026-07-12
+
+### Changed
+- Patch families: extracted shared logic from v1–v4 into `families/setter.sh` and `families/signal.sh`
+- Each vN.sh is now declarative (~22 lines): sets `PATCH_ENUM` and sources family logic
+
 ## [0.33.1] — 2026-07-12
 
 ### Fixed

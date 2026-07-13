@@ -50,7 +50,7 @@ Browser → nginx :8080
   ├── /api/*        → content_by_lua (api-router.lua) → shell → JSON
   ├── /auth, /rci/  → proxy_pass 127.0.0.1:80 (stock httpd, WebSocket)
   └── /*            → static /tmp/ew-webui/ (patched stock UI from tmpfs)
-                      └── patch-stock-ui.sh: inject.js + inject.css + v1/v2/v3.sh bundle patches
+                      └── patch-stock-ui.sh: inject.js + inject.css + v1/v2/v3/v4.sh bundle patches
 ```
 
 ### Stock UI patching (tmpfs)
@@ -70,7 +70,7 @@ On `start` or `reload`, script `patch-stock-ui.sh`:
 | `v1` | `Po` | KeeneticOS 5.0.x |
 | `v2` | `Vo` | KeeneticOS 5.1 pre-release |
 | `v3` | `Mo` | KeeneticOS 5.1.0+ |
-| `v4` | `Oo` | KeeneticOS 5.1.1 |
+| `v4` | `Oo` | KeeneticOS 5.1.1+ |
 
 **Adding a new firmware:** if enum changed, create `vN.sh` with new `PATCH_ENUM` and updated sed patterns. See [patches/README.md](patches/README.md).
 
@@ -146,6 +146,8 @@ Return `405 Method Not Allowed` if called via non-POST.
 | POST | `/api/smartdns-redirect/stop` | Stop dns-redirect |
 | POST | `/api/geo-split/update-subnets` | Update subnets (background) |
 | POST | `/api/geo-split/update-domains` | Update domains (background) |
+| POST | `/api/webui/flush-cache` | Flush UI status cache (force fresh data) |
+| POST | `/api/smartdns/flush-cache` | Flush SmartDNS persistent cache (stop + rm + restart) |
 
 ### GET/POST (configuration)
 
@@ -229,6 +231,9 @@ nginx-webui status:
 | `patches/v1.sh` | Patch set v1: Po enum (KeeneticOS 5.0.x) |
 | `patches/v2.sh` | Patch set v2: Vo enum (KeeneticOS 5.1 pre-release) |
 | `patches/v3.sh` | Patch set v3: Mo enum (KeeneticOS 5.1.0+) |
+| `patches/v4.sh` | Patch set v4: Oo enum (KeeneticOS 5.1.1+) |
+| `patches/families/setter.sh` | Shared patch logic for setter-based Angular (v1, v2) |
+| `patches/families/signal.sh` | Shared patch logic for signal-based Angular (v3, v4) |
 | `scripts/patch-stock-ui.sh` | Copies stock UI to tmpfs and applies patches |
 | `scripts/status.sh` | Diagnostics: process, port, config, HTTP, logrotate |
 | `static/index.html` | Custom dashboard — HTML |

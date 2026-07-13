@@ -1,7 +1,8 @@
 #!/opt/bin/sh
 # Patch set v3 — dashboard card integration for ENTWARE_EXTRAS
+# Family: signal (order signal / templateMap().get)
 # Detection key: grep for .values(<PATCH_ENUM>)) in the stock bundle.
-# shellcheck disable=SC2034  # read by sed in patch-stock-ui.sh
+# shellcheck disable=SC2034,SC1091  # SC2034: PATCH_ENUM read by caller; SC1091: source resolved at runtime
 PATCH_ENUM="Mo"
 #
 # Verified against stock bundles:
@@ -14,52 +15,12 @@ PATCH_ENUM="Mo"
 #   - `getTemplate` uses signal call: `this.templateMap().get(e)??null`
 #   - Default card layout split into desktop/mobile sub-arrays
 #   - __ewLastOrder now set as side-effect in getTemplate (was in setter)
-#
-# Each patch is a sed -i on the bundle file.
-# Function apply_patches() is called by patch-stock-ui.sh with $1 = bundle path.
+
+# Source family logic (PATCHES_DIR set by patch-stock-ui.sh before sourcing)
+: "${PATCHES_DIR:=$(cd "$(dirname "$0")" && pwd)}"
+# shellcheck source=families/signal.sh
+. "$PATCHES_DIR/families/signal.sh"
 
 apply_patches() {
-    _bundle="$1"
-
-    # #6 Mo enum -- register ENTWARE_EXTRAS as known card ID
-    patch_sed "#6" 'ENTWARE_EXTRAS:"ENTWARE_EXTRAS"' \
-        's|TELEPHONY:"TELEPHONY"}|TELEPHONY:"TELEPHONY",ENTWARE_EXTRAS:"ENTWARE_EXTRAS"}|' "$_bundle"
-
-    # #6a SectionManager fix -- exclude ENTWARE_EXTRAS from dashboard init tracking.
-    # .values(Mo) gates isEveryInitialized$; ENTWARE_EXTRAS has no Angular component
-    # → never registers → blocks SectionManager. Filter it out.
-    patch_sed "#6a" '!=="ENTWARE_EXTRAS"' \
-        's|\.values(Mo))|.values(Mo).filter(function(x){return x!=="ENTWARE_EXTRAS"}))|' "$_bundle"
-
-    # #7 title map -- display name for ENTWARE_EXTRAS in Cards Position dialog
-    patch_sed "#7" 'ENTWARE_EXTRAS:"ENTWARE EXTRAS"' \
-        's|\[Mo\.TELEPHONY\]:"dashboard\.card_nvox\.title"};|[Mo.TELEPHONY]:"dashboard.card_nvox.title",ENTWARE_EXTRAS:"ENTWARE EXTRAS"};|' "$_bundle"
-
-    # #8 dialog filter -- bypass isCardAvailable check for ENTWARE_EXTRAS
-    patch_sed "#8" '"ENTWARE_EXTRAS"||this.viewService' \
-        's#Object\.keys(Mo)\.filter(a=>this\.viewService\.isCardAvailable(a))#Object.keys(Mo).filter(a=>a==="ENTWARE_EXTRAS"||this.viewService.isCardAvailable(a))#' "$_bundle"
-
-    # #QS-desktop default layout -- add ENTWARE_EXTRAS to desktop first column
-    # In 5.1.0 layout is {desktop:[[col1],[col2]], mobile:[[all]]}
-    patch_sed "#QS-desktop" 'Mo.ENTWARE_EXTRAS],[' \
-        's|Mo\.INTERNET,Mo\.USB,Mo\.APPLICATIONS,Mo\.SYSTEM,Mo\.TELEPHONY\],\[Mo\.SEGMENTS|Mo.INTERNET,Mo.USB,Mo.APPLICATIONS,Mo.SYSTEM,Mo.TELEPHONY,Mo.ENTWARE_EXTRAS],[Mo.SEGMENTS|' "$_bundle"
-
-    # #QS-mobile default layout -- add ENTWARE_EXTRAS to mobile layout
-    patch_sed "#QS-mobile" 'Mo.ENTWARE_EXTRAS]]' \
-        's|Mo\.TRAFFIC_MONITOR,Mo\.TELEPHONY\]\]|Mo.TRAFFIC_MONITOR,Mo.TELEPHONY,Mo.ENTWARE_EXTRAS]]|' "$_bundle"
-
-    # #2+3 getTemplate + __ewLastOrder -- combined hook for signal architecture.
-    # getTemplate sets window.__ewLastOrder from order() signal as side-effect,
-    # returns truthy placeholder {__ew:1} for ENTWARE_EXTRAS (not in real templateMap).
-    patch_sed "#2+3" '__ewLastOrder' \
-        's#getTemplate(e){return this\.templateMap()\.get(e)??null}#getTemplate(e){try{window.__ewLastOrder=this.order()}catch(x){}return this.templateMap().get(e)??(e==="ENTWARE_EXTRAS"?{__ew:1}:null)}#' "$_bundle"
-
-    # #9 ngTemplateOutlet -- skip rendering for cards not in templateMap.
-    # Signal architecture: templateMap is a computed signal → templateMap().has(e).
-    patch_sed "#9" 'i.templateMap().has(e)?i.getTemplate(e):null' \
-        's|d("ngTemplateOutlet",i\.getTemplate(e))|d("ngTemplateOutlet",i.templateMap().has(e)?i.getTemplate(e):null)|' "$_bundle"
-
-    # #4 predicates -- catch getControl errors for injected cards in CDK DragDrop
-    patch_sed "#4" 'catch(_x){return!0}' \
-        's|this\._dropListRef\.enterPredicate=(n,r)=>this\.enterPredicate(n\.data,r\.data),this\._dropListRef\.sortPredicate=(n,r,a)=>this\.sortPredicate(n,r\.data,a\.data)|this._dropListRef.enterPredicate=(n,r)=>{try{return this.enterPredicate(n.data,r.data)}catch(_x){return!0}},this._dropListRef.sortPredicate=(n,r,a)=>{try{return this.sortPredicate(n,r.data,a.data)}catch(_x){return!0}}|' "$_bundle"
+    _apply_signal_patches "$PATCH_ENUM" "$1"
 }

@@ -12,7 +12,7 @@ Includes subprojects: **geo-split** (GeoIP/domain split routing), **smartdns-geo
 | `keenetic-entware-extras` | Base package — shared libraries (`lib/common.sh`, `lib/ip.sh`, `lib/lists.sh`, `lib/status.sh`, `lib/geo.sh`, `lib/zones.sh`) + CLI `kee-status` |
 | `geo-split` | GeoIP + domain split routing. Depends on `keenetic-entware-extras` |
 | `geo-split-data` | Data: domain lists, GeoIP zones, whitelist. Conffiles — preserved on upgrade |
-| `smartdns-geo-conf` | Split DNS: .ru/.рф → Russian DNS, everything else → Google/Cloudflare DoH |
+| `smartdns-geo-conf` | Multi-zone split DNS: route queries by GeoIP zones (RU, EAEU, BRICS, 40+ alliances) to configurable providers with zone-routing-rules |
 | `smartdns-redirect` | Universal DNS DNAT: intercept LAN `:53` → local DNS |
 | `webui` | Custom dashboard for Keenetic/Entware services on :8080 + Config Editor, Route Check, DNS Check, stock WebUI integration |
 
@@ -57,7 +57,7 @@ Split routing for Keenetic: route traffic by GeoIP subnets and domain lists thro
 
 ### [smartdns-geo-conf](smartdns-geo-conf/README.md)
 
-Split DNS for Russian internet: `.ru`/`.рф`/`.su` → Yandex/AdGuard DoT, everything else → Google/Cloudflare DoH.
+Multi-zone split DNS: route domain queries by configurable GeoIP zones (RU, EAEU, CIS, BRICS, EU, 40+ alliances) to regional DNS providers (Yandex/AdGuard DoT), everything else → Google/Cloudflare DoH. Supports custom zone-routing-rules, multiple DNS provider profiles, and VPN-bypass binding.
 
 ### [smartdns-redirect](smartdns-redirect/README.md)
 

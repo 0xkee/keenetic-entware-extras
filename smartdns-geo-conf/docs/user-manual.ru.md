@@ -362,6 +362,9 @@ example.com    # ← добавить сюда
 # Проверить текущий режим
 /opt/etc/init.d/S37smartdns-conf status
 
+# Очистить persistent DNS-кэш (останавливает SmartDNS, удаляет кэш, перезапускает)
+/opt/etc/init.d/S37smartdns-conf flush-cache
+
 # SmartDNS daemon напрямую
 /opt/etc/init.d/S38smartdns start|stop|restart
 ```
@@ -394,17 +397,16 @@ smartdns-geo-conf status: ✓ Alive
     Zone:        eas → [ru by kz am kg]
     Zone DNS:    yandex adguard
     Other DNS:   google cloudflare
-    Other VPN:   —
     Process:     running (pid 2035 via pidfile, RSS 10132kB) ✓
     Ports:       192.168.1.1:6053 ✓
                  127.0.0.1:6053 ✓
                  127.0.0.1:6153 ✓
-    Config:      /opt/etc/smartdns/smartdns.conf (81 servers, 47 rules) ✓
+    Config:      /opt/etc/smartdns/smartdns.conf (81 servers, 47 rules, 2 custom) ✓
     Cache:       48.0K (/opt/var/cache/smartdns.cache) ✓
 
   System:
     Uptime:      2d 5h ✓
-    Version:     0.8.0
+    Version:     0.10.11
 
   DNS Tests:
     ya.ru:         5.255.255.242 (ru-group) ✓
@@ -415,10 +417,51 @@ smartdns-geo-conf status: ✓ Alive
     google.com:    142.251.143.142 (default-group) ✓
 ```
 
+> 📝 Строка **Config** показывает количество серверов, правил и пользовательских провайдеров (custom). Строка **Other VPN** отображается только если настроены `OTHER_DNS_INTERFACES`.
+
 **JSON-вывод** (для автоматизации):
 ```sh
 /opt/keenetic-entware-extras/smartdns-geo-conf/scripts/status.sh --json
 ```
+
+JSON включает дополнительные поля: `dns_server_checks` (проверка доступности upstream DNS), `custom_providers` (количество пользовательских провайдеров), `zone_dns_providers` / `other_dns_providers`.
+
+### Диагностика DNS-зон (dns-check)
+
+`dns-check.sh` — CLI-инструмент для определения, в какую DNS-зону/группу попадает домен и какой upstream его резолвит:
+
+```sh
+/opt/keenetic-entware-extras/smartdns-geo-conf/scripts/dns-check.sh <домен>
+```
+
+Пример вывода:
+```
+DNS Zone Check: ya.ru
+
+  Zone:       ru (match: /.ru/, type: ccTLD)
+
+  ✓ eas:  yandex adguard
+    default:  google cloudflare
+
+  Upstream:   Yandex DNS, AdGuard Unfiltered
+  Servers:    77.88.8.8:853, 94.140.14.140:853
+  Interface:  direct
+
+  Result:     5.255.255.242 (TTL 300, 4ms)
+```
+
+Инструмент показывает:
+- **Zone** — в какую зону попал домен и по какому правилу (ccTLD `.ru`, явный домен и т.д.)
+- **Группы** — обе DNS-группы (zone + default), активная отмечена `✓`
+- **Upstream** — провайдеры, серверы и интерфейс для резолвинга
+- **Result** — IP-адреса, TTL и время ответа
+
+**JSON-вывод** (для WebUI / автоматизации):
+```sh
+/opt/keenetic-entware-extras/smartdns-geo-conf/scripts/dns-check.sh --json ya.ru
+```
+
+JSON содержит массив `groups` — обе DNS-группы (zone + other/default) с провайдерами, серверами, hostname'ами и флагом `matched`.
 
 ### DNS-тесты вручную
 

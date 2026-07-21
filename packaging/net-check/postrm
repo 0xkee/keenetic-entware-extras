@@ -1,0 +1,9 @@
+#!/opt/bin/sh
+# postrm — runs after package files are removed.
+set -eu
+for d in scripts config docs; do
+  rmdir "/opt/keenetic-entware-extras/net-check/$d" 2>/dev/null || true
+done
+rmdir "/opt/keenetic-entware-extras/net-check" 2>/dev/null || true
+# Clean cache
+rm -rf /opt/tmp/net-check

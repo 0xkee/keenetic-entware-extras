@@ -1,0 +1,11 @@
+#!/opt/bin/sh
+# postinst — runs after package files are unpacked.
+set -eu
+INSTALL_DIR="/opt/keenetic-entware-extras/net-check"
+chmod +x "$INSTALL_DIR/scripts/"*.sh
+
+# Create persistent data directory for cache + results
+mkdir -p /opt/tmp/net-check
+
+echo "net-check installed. Usage: $INSTALL_DIR/scripts/net-check.sh --help"
+echo "User config: $INSTALL_DIR/config/config.conf (create if needed)"

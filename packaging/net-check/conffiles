@@ -1,0 +1,8 @@
+/opt/keenetic-entware-extras/net-check/config/defaults.conf
+/opt/keenetic-entware-extras/net-check/config/check-targets.conf
+/opt/keenetic-entware-extras/net-check/config/cdn-domains.conf
+/opt/keenetic-entware-extras/net-check/config/anomaly-markers.conf
+/opt/keenetic-entware-extras/net-check/config/mitm-issuers.conf
+/opt/keenetic-entware-extras/net-check/config/privacy-providers.conf
+/opt/keenetic-entware-extras/net-check/config/dns-providers.conf
+/opt/keenetic-entware-extras/net-check/config/wellknown-ips.conf

@@ -1,0 +1,13 @@
+Package: net-check
+Version: 0.0.1
+Architecture: all
+Maintainer: 0xkee
+Depends: keenetic-entware-extras, curl, bind-dig, iputils-ping
+Recommends: netcat, openssl-util
+Description: Network connectivity diagnostics and degradation control.
+ End-to-end reachability verification across WAN interfaces,
+ MITM/DPI anomaly detection, CDN geo-steering analysis,
+ DNS routing alignment, ISP blocking detection, path quality comparison.
+ Measurements per ITU-T Y.1540/Y.1541 methodology.
+Section: net
+Priority: optional

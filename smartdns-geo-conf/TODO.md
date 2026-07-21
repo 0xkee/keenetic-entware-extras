@@ -68,6 +68,7 @@
 
 ### Улучшения (backlog)
 
+- [ ] - когда сервис выключен checker всё равно показывает разные пути - очевидно баг (нужно проверять фактичесткое положение вещей!)
 - [x] ~~**Конфигурируемые international DNS-серверы**~~ — **Сделано (v0.8.0, 2026-06-09):** `OTHER_DNS_PROVIDER` / `ZONE_DNS_PROVIDER` в `config.conf`. Каталог 15 провайдеров в `dns-providers.conf`. Динамическая генерация зон из `zone-routing-rules.conf` (заменено 235 статических zone-файлов).
 - [x] ~~**`default` (ISP DNS) провайдер**~~ — **Сделано (v0.9.0, 2026-06-15):** `default` в обоих провайдер-списках. Proto `udp` в generate-conf.sh, динамическое чтение из `/tmp/ndnproxymain.conf`. WebUI, README, user-manual обновлены.
 - [ ] **Exclude-список для зонового DNS-роутинга** — возможность исключить домен из обработки зоны (`nameserver /specific-host.ru/default`). Реализация: файл `config/dns-zone-exclude.conf` с правилами, include в конец zone-конфига. Документировать в user-manual.

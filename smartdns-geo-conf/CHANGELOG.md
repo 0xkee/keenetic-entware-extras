@@ -5,6 +5,15 @@ All notable changes to `smartdns-geo-conf` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.10.12] — 2026-07-21
+
+### Fixed
+- **opkg install conflict with upstream smartdns**: removed `/opt/etc/smartdns/smartdns.conf`,
+  `smartdns-split-dns.conf`, `smartdns-default.conf` from `data.tar.gz` — these files are
+  already deployed by `postinst` + S37 init script. Fixes `check_data_file_clashes` error
+  on clean installs where upstream `smartdns` conffiles claims `/opt/etc/smartdns/smartdns.conf`.
+  (reported by nikolay1980)
+
 ## [0.10.11] — 2026-07-12
 
 ### Changed

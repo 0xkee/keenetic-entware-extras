@@ -176,6 +176,18 @@ json_check() {
   printf '"%s":"%s"' "$1" "$2"
 }
 
+# Append element to JSON array string variable (comma-separated).
+# Uses eval to update the caller's variable by name.
+# Args: $1 - variable name, $2 - JSON element string
+json_arr_add() {
+  eval "_ja_v=\"\${$1}\""
+  if [ -z "$_ja_v" ]; then
+    eval "$1=\"\$2\""
+  else
+    eval "$1=\"\${_ja_v},\$2\""
+  fi
+}
+
 # Get monotonic milliseconds (BusyBox date has no %N).
 # Uses /proc/uptime centiseconds if available, else seconds*1000.
 # stdout: integer milliseconds

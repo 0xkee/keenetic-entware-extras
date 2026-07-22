@@ -38,7 +38,7 @@ curl http://<router-ip>:8080/
 opkg remove webui
 ```
 
-Automatically performs: nginx-webui stop, tmpfs patch removal (`/tmp/ew-webui`), init script and logrotate config deletion. Logs are preserved for inspection.
+Automatically performs: nginx-webui stop, htdocs-cache removal, init script and logrotate config deletion. Logs are preserved for inspection.
 
 ## Architecture
 
@@ -49,19 +49,21 @@ Browser → nginx :8080
   ├── /custom/*     → static (custom dashboard, JS/CSS)
   ├── /api/*        → content_by_lua (api-router.lua) → shell → JSON
   ├── /auth, /rci/  → proxy_pass 127.0.0.1:80 (stock httpd, WebSocket)
-  └── /*            → static /tmp/ew-webui/ (patched stock UI from tmpfs)
+  └── /*            → static webui/htdocs-cache/ (patched bundles) + @stock /usr/share/htdocs_ (flash)
                       └── patch-stock-ui.sh: inject.js + inject.css + v1/v2/v3/v4.sh bundle patches
 ```
 
-### Stock UI patching (tmpfs)
+### Stock UI patching
 
 On `start` or `reload`, script `patch-stock-ui.sh`:
 
-1. Copies `/usr/share/htdocs_/` → `/tmp/ew-webui/` (tmpfs, no flash writes)
+1. Copies only bundle files (`index.html`, `main-*.js`, `polyfills-*.js`, `styles-*.css`) from `/usr/share/htdocs_/` → `webui/htdocs-cache/`
 2. Patches `index.html` — injects `<script>` and `<link>` tags (`inject.js`, `inject.css`)
 3. Auto-detects patch set by scanning the stock bundle for `PATCH_ENUM` patterns
 4. Calls `source patches/vN.sh` → `apply_patches` on JS bundle (sed replacements for CDK DragDrop integration)
-5. Writes `/tmp/ew-webui/.patch-state` for `status.sh`
+5. Pre-compresses bundles with gzip for `gzip_static`
+6. Writes `webui/htdocs-cache/.patch-state` for `status.sh`
+7. nginx serves patched files from htdocs-cache/, unpatched files via `@stock` fallback from flash
 
 **Auto-detection** — each `vN.sh` declares `PATCH_ENUM="<EnumName>"` (the Angular DashboardSection enum). The script greps the stock bundle for `Xx={INTERNET:"INTERNET"` — the enum **definition** — and matches exactly one patch set:
 
@@ -83,7 +85,7 @@ On `start` or `reload`, script `patch-stock-ui.sh`:
 | Command | Action |
 |---------|--------|
 | `start` | Patches stock UI (`patch-stock-ui.sh`) + starts nginx-webui |
-| `stop` | Stops nginx-webui + removes `/tmp/ew-webui` |
+| `stop` | Stops nginx-webui + removes `webui/htdocs-cache` |
 | `restart` | `stop` + `start` |
 | `reload` | Re-patch + `nginx -s reload` (for updates after firmware upgrade) |
 | `check` / `status` | Check status (running/not running) |

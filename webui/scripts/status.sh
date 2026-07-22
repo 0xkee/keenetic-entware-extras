@@ -96,13 +96,13 @@ check_upstream() {
 }
 
 # Check firmware patch state.
-# Reads /tmp/ew-webui/.patch-state written by patch-stock-ui.sh.
+# Reads $SCRIPT_DIR/../htdocs-cache/.patch-state written by patch-stock-ui.sh.
 # Sets: _ck_patch_set ("v1"|"v2"|"v3"|""), _ck_fw_version, _ck_patch_ok ("true"|"false")
 check_patch_compat() {
   _ck_patch_set=""
   _ck_fw_version=""
   _ck_patch_ok="false"
-  local _state="/tmp/ew-webui/.patch-state"
+  local _state="$SCRIPT_DIR/../htdocs-cache/.patch-state"
   if [ -f "$_state" ]; then
     # State file is key=value (PATCH_SET, FW_VERSION, JS_HASH, CSS_HASH)
     # shellcheck source=/dev/null

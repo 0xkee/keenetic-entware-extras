@@ -9,7 +9,7 @@ from the bundle content.
 
 ## How it works
 
-1. `patch-stock-ui.sh` copies stock UI to tmpfs (`/tmp/ew-webui/`)
+1. `patch-stock-ui.sh` copies stock UI bundles to `webui/htdocs-cache/`
 2. Content-based detection: greps the stock bundle for `Xx={INTERNET:"INTERNET"` —
    the DashboardSection enum **definition** (unique across the bundle)
 3. Extracts the enum variable name (e.g. `Po`, `Vo`, `Mo`, `Oo`)
@@ -17,7 +17,7 @@ from the bundle content.
 5. First matching patch file is selected
 6. Sources `<version>.sh` and calls `apply_patches "$BUNDLE"`
 7. Verifies critical patterns in the patched bundle
-8. Writes `/tmp/ew-webui/.patch-state` for `status.sh`
+8. Writes `webui/htdocs-cache/.patch-state` for `status.sh`
 
 ## File structure
 

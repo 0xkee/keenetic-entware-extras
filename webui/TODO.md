@@ -8,6 +8,36 @@
 - [x] **Spike D: Пустой CDK row** ✅ — sub_filter #3 → `{__ew:1}` (truthy), sub_filter #9 → `ngTemplateOutlet: templateMap.has(e)?getTemplate(e):null`. Dashboard: пустой CDK row, inject.js создаёт card DOM. Dialog: Bli template нативно. Скриншот: `docs/screenshots/spike-d-entware-card-visible.png`
 - [x] **Spike E: Dashboard хаки удалены** ✅ — `ewPatchDashboardRow()` создаёт полный card DOM в пустом row. CSS stub hiding удалён. Header patch удалён. Loading skeleton удалён. `ewUnpatchRow()` упрощён.
 
+## 🔴 OOM на 128MB MIPS роутерах (router-4 KN-2310)
+
+> Диагностика 2026-07-21. **214 OOM-kills** nginx workers в error.log (`exited on signal 9`).
+> При работе webui 0.33.2 на 128MB MIPS (router-4, firmware 5.1.1): available RAM падает с 32 MB до 5 MB,
+> io.popen() в Lua порождает sh-процессы → OOM Killer убивает nginx workers → master
+> respawn → повторный OOM = death loop (load 30+, CPU 100%).
+>
+> **Не связано с v4 patch** — патч-код v3/v4 идентичен (`families/signal.sh`).
+> Причина: рост memory footprint прошивки 5.1.1 + webui 0.33.2 (новые API, Lua-эндпоинты)
+> превысил 128MB бюджет. На 512MB (router-2 KN-1011) проблем нет.
+>
+> Бюджет: ndm 23MB + smartdns 11MB + stock_nginx 20MB = 54MB baseline.
+> webui: 5 nginx proc (14MB RSS) + tmpfs (12MB) + io.popen спайки → >128MB → OOM.
+
+- [ ] **F1: `worker_processes 1`** — `nginx.conf:21`, сейчас `auto` = 4 воркера на 4-core MIPS.
+  На 128MB: экономия ~6 MB RSS (убираем 3 × 2MB). Для dashboard 1 пользователя хватает 1 воркера.
+  lua_shared_dict кеш работает с любым числом воркеров. Рассмотреть `worker_processes` из config.conf.
+- [x] **F2: Минимальный кеш** — `patch-stock-ui.sh` копирует только `index.html` + `main-*.js` + `polyfills-*.js` + `styles-*.css` + `.gz`
+  в `webui/htdocs-cache/` (на /opt). Остальное отдаётся nginx `@stock` напрямую с flash. Экономия: ~4 MB I/O.
+- [x] **F3: Fallback-location на flash** — `nginx.conf`: `try_files $uri @stock;` + `location @stock { root /usr/share/htdocs_; }`.
+  Непатченные файлы (`assets/`, `wizards/`, `ndm*.js`, `worker-*.js`) идут напрямую с flash.
+- [ ] **F4: `gzip -1` вместо `-6`** — `patch-stock-ui.sh:149`. Level 6: 1.46MB за 5-8с MIPS.
+  Level 1: ~1.8MB за 1-2с. Разница: +0.3MB размер, −4× время старта. На MIPS критично.
+- [ ] **F5: Объединить 9 sed в 1** — `families/signal.sh` и `families/setter.sh`:
+  9 отдельных `sed -i` на 6.3MB файле = 9 × read+write = ~113MB I/O.
+  Объединить в `sed -i -e '...' -e '...' ...` = 1 pass = ~12MB I/O. Экономия ~8× I/O при старте.
+  Потребуется рефакторинг `patch_sed` → batch-mode (собирать выражения, verify после единого sed).
+
+**F1 = ~6 MB RAM** при переключении на 1 worker.
+
 ## 🔴 Критичные (логи / disk I/O) — ✅ ВЫПОЛНЕНО
 
 - [x] **nginx: access_log conditional** — `map $uri $loggable` + `if=$loggable` фильтрует /rci/, /auth, статику (~85% шума). Результат: access.log ~1.5MB/день вместо ~10MB

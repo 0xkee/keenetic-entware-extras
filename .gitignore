@@ -14,6 +14,7 @@ secrets/
 # === Generated / built ===
 dist/*.ipk
 dist/archive/
+webui/htdocs-cache/
 geo-split-data/lists/ru-subnets.txt
 geo-split-data/lists/domains-resolved.txt
 geo-split-data/lists/geoip/*.zone.gz

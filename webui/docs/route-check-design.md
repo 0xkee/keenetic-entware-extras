@@ -22,7 +22,7 @@
 Пользователь вводит **домен** → система показывает:
 - В какую DNS-группу попадает домен (`ru-group`, `by-group`, `default-group`)
 - Какой upstream DNS отвечает (Yandex DoT? Cloudflare DoH? Google UDP?)
-- Через какой интерфейс идёт DNS-трафик (direct? VPN tunnel?)
+- Через какой интерфейс идёт DNS-трафик (direct? tunnel?)
 - Resolved IP + TTL
 
 **Расположение:** карточка SmartDNS Geo-Config (кастомная страница `/custom/#smartdns`)
@@ -61,7 +61,7 @@
 | **Интернет** | Облачко (cloud shape) с текстом | Конечная точка — куда уходит трафик |
 | **Роутер** | Корпус + 4 антенны + WAN-кабель | Keenetic (центральный элемент) |
 | **Интерфейс ISP** | Провод/порт от роутера → облако (прямая линия) | lte_br1, ppp0, eth3 |
-| **Интерфейс VPN** | Туннель (пунктирная линия) → облако | nwg0, ovpn_br0 |
+| **Туннельный интерфейс** | Туннель (пунктирная линия) → облако | nwg0, ovpn_br0 |
 | **Клиент** | Монитор/ноутбук/телефон | Источник запроса |
 | **DNS** | Мини-облачко с "DNS" | SmartDNS resolver |
 | **Routing table** | Мини-таблица/список | Table 1000/1001/main |
@@ -79,7 +79,7 @@
  └─────┘    └───────┘    │  /|\ /|\ /|\ │                             │
                           └──┼───┼───┼───┘                             │
                              │   │   │                                 │
-                             ╰── VPN (nwg0) ─── default route ─────────╯
+                             ╰── Tunnel (nwg0) ── default route ───────╯
                                  ░░░░ неактивный путь ░░░░
 ```
 
@@ -94,9 +94,9 @@
 | **Неактивные** (no match) | Серая пунктирная, тонкая, приглушённая | Куда трафик НЕ пойдёт |
 
 Примеры:
-- `ozon.ru` → **ISP (зелёный)**, VPN (серый) — "geo-split domain match, трафик через ISP"
-- `github.com` → ISP (серый), **VPN (зелёный)** — "no match, трафик через default route (VPN)"
-- `kaspi.kz` → **ISP (зелёный, subnet)**, VPN (серый) — "geo-split subnet CIDR match"
+- `ozon.ru` → **ISP (зелёный)**, Tunnel (серый) — "geo-split domain match, трафик через ISP"
+- `github.com` → ISP (серый), **Tunnel (зелёный)** — "no match, трафик через default route (tunnel)"
+- `kaspi.kz` → **ISP (зелёный, subnet)**, Tunnel (серый) — "geo-split subnet CIDR match"
 
 ### Трёхслойное отображение результата
 
@@ -237,7 +237,7 @@ set -eu
 Dropdown: [Home LAN (br0) ▾]
            ├── Home LAN (br0)       ← default
            ├── Guest LAN (br1)
-           └── VPN Client (nwg0)
+           └── Tunnel Client (nwg0)
 ```
 
 Человеческие имена берутся из NDM interface labels (уже реализовано в config editor).
@@ -310,7 +310,7 @@ webui/static/app.js              # + 2 кнопки + 2 модала + fetch + l
 | **Upstream** | Yandex DoT + AdGuard DoT |
 | **Resolved IP** | `5.255.255.242` |
 | **Response time** | 14ms |
-| **Interface** | direct (без VPN) |
+| **Interface** | direct (без tunnel) |
 
 ### Визуализация
 
@@ -400,7 +400,7 @@ set -eu
    - Input: `Enter domain or IP (e.g. ozon.ru, 8.8.8.8)`
    - **Source interface selector** (dropdown): из какой сети проверять
      - Значения из `/api/system/interfaces` (уже есть) с человеческими именами:
-       `Home LAN (br0)`, `Guest LAN (br1)`, `VPN Client (nwg0)`, etc.
+       `Home LAN (br0)`, `Guest LAN (br1)`, `Tunnel Client (nwg0)`, etc.
      - Default: первый из конфига `ROUTE_IN` (обычно `br0`)
      - Передаётся как `?iif=br0` в API
    - Кнопка "Check" / Enter
@@ -436,7 +436,7 @@ set -eu
 │  ─── ozon.ru ──────────────────────────────────── [×] ───    │
 │  ┌─ SVG topology diagram ─────────────────────────────┐      │
 │  │  🖥️ → DNS → 📡 Router →→ ISP (green) →→ ☁️       │      │
-│  │                        ░░ VPN (gray)  ░░          │      │
+│  │                        ░░ Tunnel (gray)  ░░       │      │
 │  └────────────────────────────────────────────────────┘      │
 │  ✓ geo-split │ table 1000 (domain) │ lte_br1 │ 12ms         │
 │  ▸ Technical details                                         │
@@ -444,7 +444,7 @@ set -eu
 │  ─── github.com ──────────────────────────────── [×] ───     │
 │  ┌─ SVG topology diagram ─────────────────────────────┐      │
 │  │  🖥️ → DNS → 📡 Router ░░ ISP (gray)  ░░ ☁️       │      │
-│  │                        →→ VPN (green) →→          │      │
+│  │                        →→ Tunnel (green) →→       │      │
 │  └────────────────────────────────────────────────────┘      │
 │  → default │ main table │ nwg0 │ 8ms                         │
 │  ▸ Technical details                                         │

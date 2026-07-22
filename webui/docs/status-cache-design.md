@@ -73,7 +73,7 @@ kee-status и т.д.). Кеширование работает **только н
 | `STALE_TTL` | 30 сек | status endpoints | Fallback при блокировке (dig timeout) |
 | `LOCK_TTL` | 15 сек | status endpoints | Max время ожидания io.popen (dig worst-case) |
 | `STATIC_TTL` | 3600 сек (1 час) | system/zones | Зоны/союзы — статические файлы, парсятся 1 раз |
-| `IFACE_TTL` | 60 сек | system/interfaces | Интерфейсы меняются редко (VPN connect/disconnect) |
+| `IFACE_TTL` | 60 сек | system/interfaces | Интерфейсы меняются редко (tunnel connect/disconnect) |
 | `dict size` | 1 MB | всё | Хватит на ~100 JSON-ответов по 5-10KB |
 
 ### Инвалидация

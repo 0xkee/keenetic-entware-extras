@@ -605,7 +605,7 @@ window.EW = (function() {
     }
 
     /**
-     * Check if a Linux device name is a VPN/tunnel interface.
+     * Check if a Linux device name is a tunnel interface.
      * Matches prefixes: nwg, awg, wg, ovpn, l2tp, pptp, sstp, ipsec,
      * tun[0-9], tap, gre, vti, sit, ip6tnl, xfrm.
      * @param {string} dev - Linux device name

@@ -67,7 +67,7 @@ function _ifaceLabel(dev) {
 
 ### ✅ Status card details — полностью humanized
 
-[`parseDetails()`](../static/shared.js:326) автоматически humanizes device names через [`IFACE_DETAIL_KEYS`](../static/shared.js:33) whitelist:
+[`parseDetails()`](../static/shared.js:326) автоматически humanizes device names через [`IFACE_DETAIL_KEYS`](../static/shared.js:33) allowlist:
 
 | Ключ | Тип | Detail (с dev) | Summary (без dev) |
 |------|-----|----------------|-------------------|

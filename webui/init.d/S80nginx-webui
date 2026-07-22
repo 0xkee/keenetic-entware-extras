@@ -93,8 +93,8 @@ stop() {
     # Kill any orphaned processes still holding port 8080
     kill_port_holders
     rm -f "$PIDFILE"
-    # Clean up patched UI cache (tmpfs — large ephemeral data)
-    rm -rf /tmp/ew-webui
+    # Clean up patched UI cache (htdocs-cache in project dir)
+    rm -rf "$INSTALL_DIR/htdocs-cache"
 }
 
 case "${1:-}" in

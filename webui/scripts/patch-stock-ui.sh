@@ -1,13 +1,14 @@
 #!/opt/bin/sh
-# patch-stock-ui.sh -- copy stock UI to tmpfs and apply version-specific patches.
+# patch-stock-ui.sh -- copy stock UI bundles and apply version-specific patches.
 # Called by S80nginx-webui before starting nginx.
-# Result: /tmp/ew-webui/ with patched index.html + main-*.js bundle.
+# Result: webui/htdocs-cache/ with patched index.html + main-*.js bundle + .gz.
+# Unpatched files served by nginx @stock fallback from /usr/share/htdocs_.
 #
 # Patch detection:
 #   Auto-detects patch set by scanning the stock Angular bundle for the
 #   DashboardSection enum name: Po → v1, Vo → v2, Mo → v3.
 #   Works regardless of firmware version string or architecture.
-#   Writes result to /tmp/ew-webui/.patch-state for status.sh.
+#   Writes result to webui/htdocs-cache/.patch-state for status.sh.
 # shellcheck disable=SC1091  # sourced files resolved at runtime on router
 set -eu
 
@@ -22,7 +23,7 @@ _CONFIG_DIR="$PROJECT_DIR/webui/config"
 [ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
 
 HTDOCS="/usr/share/htdocs_"
-CACHE="/tmp/ew-webui"
+CACHE="$PROJECT_DIR/webui/htdocs-cache"
 
 log() { logger -t "ew-patch" "$*"; printf "%s\n" "$*"; }
 
@@ -34,9 +35,15 @@ trap cleanup EXIT
 [ -d "$HTDOCS" ] || { log "ERROR: stock htdocs not found: $HTDOCS"; exit 1; }
 [ -f "$HTDOCS/index.html" ] || { log "ERROR: index.html not found in $HTDOCS"; exit 1; }
 
-# -- Copy stock UI to tmpfs (cp -a follows symlinks for dynamic JS) ----
+# -- Copy only patched/compressed bundles to cache (not full htdocs_) ---
+# Unpatched files (assets/, wizards/, ndm*.js etc.) served by nginx @stock
+# fallback directly from flash /usr/share/htdocs_ — saves ~4 MB I/O.
 rm -rf "$CACHE"
-cp -a "$HTDOCS" "$CACHE"
+mkdir -p "$CACHE"
+cp "$HTDOCS/index.html" "$CACHE/"
+for _src in "$HTDOCS"/main-*.js "$HTDOCS"/polyfills-*.js "$HTDOCS"/styles-*.css; do
+    [ -f "$_src" ] && cp "$_src" "$CACHE/"
+done
 
 # -- Detect JS bundle hash ---------------------------------------------
 BUNDLE=""

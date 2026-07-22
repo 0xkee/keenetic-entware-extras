@@ -5,6 +5,18 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.34.0] — 2026-07-22
+
+### Changed
+- **Stock UI cache moved from /tmp to /opt** (`webui/htdocs-cache/`): patch-stock-ui.sh
+  now copies only bundle files (`index.html`, `main-*.js`, `polyfills-*.js`, `styles-*.css`)
+  instead of full `cp -a /usr/share/htdocs_` (~10.5 MB → ~6.5 MB). Saves ~4 MB I/O per start.
+- **nginx @stock fallback**: unpatched files (`assets/`, `wizards/`, `ndm*.js`, `worker-*.js`)
+  served directly from flash `/usr/share/htdocs_` via `try_files $uri @stock` + named
+  location `@stock { root /usr/share/htdocs_; }`. Eliminates redundant copy to cache.
+- `gzip_static` .gz companions now stored alongside patched files in htdocs-cache/
+  (previously in /tmp/ew-webui/). Custom dashboard .gz unchanged (already on /opt).
+
 ## [0.33.2] — 2026-07-12
 
 ### Changed
@@ -15,13 +27,13 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 - Patch detection: use content-based enum lookup (`XX={INTERNET:"INTERNET"`) instead of ambiguous `.values(Xx))` grep
-- New patch set v4 for KeeneticOS 5.2+ signal architecture with `Oo` enum (router-4 KN-2310)
+- New patch set v4 for KeeneticOS 5.1.1+ signal architecture with `Oo` enum
 
 ## [0.33.0] — 2026-07-12
 
 ### Changed
 - Patch detection: auto-detect from bundle enum (`PATCH_ENUM` in vN.sh) instead of `hash-map.conf`
-- `status.sh`: reads `/tmp/ew-webui/.patch-state` instead of hash-map lookup
+- `status.sh`: reads `webui/htdocs-cache/.patch-state` instead of hash-map lookup
 
 ### Removed
 - `patches/hash-map.conf`

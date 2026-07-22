@@ -915,7 +915,7 @@ function _loadInterfaces(wrapEl) {
                 var cl = clData.clients[k];
                 var clLabel;
                 if (cl.mark) {
-                    // Client has VPN policy — show tunnel interface or "policy" when down
+                    // Client has tunnel policy — show tunnel interface or "policy" when down
                     var devLabel = cl.dev_label || (window._ewIfaceMap && window._ewIfaceMap[cl.dev]) || cl.dev || '';
                     if (devLabel) {
                         clLabel = cl.name + ' \u2192 ' + devLabel;
@@ -924,7 +924,7 @@ function _loadInterfaces(wrapEl) {
                         clLabel = cl.name + ' \u2192 policy \u2b07';
                     }
                 } else {
-                    // Client without VPN tunnel — uses connection policy
+                    // Client without tunnel — uses connection policy
                     clLabel = cl.name + ' \u2192 Policy';
                 }
                 var item = { value: cl.mac, label: clLabel };

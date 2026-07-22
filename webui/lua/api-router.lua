@@ -15,13 +15,13 @@ local CACHE_TTL = 5       -- default fresh cache lifetime (seconds)
 local STALE_TTL = 30      -- stale fallback while script is running (seconds)
 local LOCK_TTL = 45       -- max time to hold execution lock (seconds)
 local STATIC_TTL = 3600   -- static data cache (zones, unions) — 1 hour
-local IFACE_TTL = 60      -- interfaces list — changes rarely (VPN toggle)
+local IFACE_TTL = 60      -- interfaces list — changes rarely (tunnel toggle)
 
 -- Per-endpoint TTL overrides: heavy scripts get longer cache to reduce CPU.
 -- POST actions (start/stop/config) invalidate cache instantly regardless of TTL.
 local ENDPOINT_TTLS = {
     ["/api/geo-split/status"]        = 10,  -- detect_dns_port inside = 2×dig
-    ["/api/geo-split/wan-paths"]     = 60,  -- ip rule/route scanning (stable between VPN changes)
+    ["/api/geo-split/wan-paths"]     = 60,  -- ip rule/route scanning (stable between tunnel changes)
     ["/api/smartdns/status"]          = 15,  -- collect_dns_tests_json = N×dig +time=3
     ["/api/smartdns-redirect/status"] = 5,   -- iptables -C (fast)
     ["/api/webui/status"]             = 5,   -- netstat + pidof (fast)
@@ -363,7 +363,7 @@ end
 
 --- List network interfaces with UP/DOWN state and human labels.
 -- Enriched with descriptions from Keenetic NDM (matched by IP address).
--- Uses blacklist to exclude infrastructure interfaces (tunnels, radios, VLANs).
+-- Uses exclusion list to skip infrastructure interfaces (tunnels, radios, VLANs).
 -- @return string — JSON array of {name, up, label?}
 local function system_interfaces()
     local output, _, _ = run_cmd("ip -o link show 2>/dev/null")
@@ -374,7 +374,7 @@ local function system_interfaces()
         local name = line:match(":%s+([^:@]+)")
         if name then
             name = name:gsub("%s+$", "")
-            -- Blacklist: exclude loopback, kernel tunnels, radios, VLAN sub-ifaces, infra
+            -- Exclude: loopback, kernel tunnels, radios, VLAN sub-ifaces, infra
             local excluded = (
                 name == "lo" or
                 name:match("^tunl") or name:match("^ip6tnl") or
@@ -410,7 +410,7 @@ local function system_interfaces()
     return '{"ok":true,"interfaces":[' .. table.concat(items, ",") .. ']}'
 end
 
---- List registered clients with their routing policy (fwmark → VPN dev).
+--- List registered clients with their routing policy (fwmark → tunnel dev).
 -- Joins data from: ndmc hotspot (name/mac/ip), iptables mangle (mac→mark),
 -- ip rule (mark→table), ip route (table→dev).
 -- @return string — JSON {ok, clients: [{name, mac, ip?, mark?, dev?}]}
@@ -418,7 +418,7 @@ local function system_clients()
     local labels = get_iface_labels()
 
     -- 1) MAC → fwmark mapping AND MAC → policy type from iptables mangle HOTSPOT chain
-    --    VPN policy: "-j MARK --set-xmark 0xffff..." (VPN fwmark)
+    --    Tunnel policy: "-j MARK --set-xmark 0xffff..." (tunnel fwmark)
     --    Default policy: "CONNNDMMARK --set-xmark" (NDM connection priority)
     --    Segment default (conform): only "-j RETURN" (no MARK, no CONNNDMMARK)
     local chain_out, _, _ = run_cmd(
@@ -427,10 +427,10 @@ local function system_clients()
     local mac_has_connndm = {}
     local mac_has_return = {}
     for line in chain_out:gmatch("[^\n]+") do
-        -- VPN mark: "-j MARK --set-xmark 0xffff..."
-        local mac_vpn, mark = line:match("%-%-mac%-source%s+(%S+).-%s+%-j%s+MARK%s+%-%-set%-xmark%s+(0xffff%x+)")
-        if mac_vpn and mark then
-            mac_to_mark[mac_vpn:upper()] = mark
+        -- Tunnel mark: "-j MARK --set-xmark 0xffff..."
+        local mac_tun, mark = line:match("%-%-mac%-source%s+(%S+).-%s+%-j%s+MARK%s+%-%-set%-xmark%s+(0xffff%x+)")
+        if mac_tun and mark then
+            mac_to_mark[mac_tun:upper()] = mark
         else
             -- NDM connection mark: "CONNNDMMARK --set-xmark"
             local mac_ndm = line:match("%-%-mac%-source%s+(%S+).-%s+CONNNDMMARK")

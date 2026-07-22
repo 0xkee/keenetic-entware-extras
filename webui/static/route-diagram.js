@@ -145,7 +145,7 @@ function _addIconDefs(svg) {
     g.appendChild(_svgEl("line", { x1: -10, y1: 5, x2: 10, y2: 5 }));
     defs.appendChild(g);
 
-    // Shield — VPN/tunnel lock
+    // Shield — tunnel lock icon
     g = _svgEl("g", { id: "ico-shield" });
     g.appendChild(_svgEl("path", {
         d: "M0,-12 L10,-7 L10,2 Q10,8 0,12 Q-10,8 -10,2 L-10,-7 Z"
@@ -292,7 +292,7 @@ function _buildPaths(data) {
         seen[defaultRoute.dev] = true;
     }
 
-    // VPN/tunnel path — shield (client's VPN policy fwmark → policy table default route)
+    // Tunnel path — shield (client's tunnel policy fwmark → policy table default route)
     var vpnDev = tunnelRoute.dev || "";
     if (vpnDev && !seen[vpnDev]) {
         paths.push({ dev: vpnDev, via: "", type: "tunnel", active: !!activeDevs[vpnDev], mixed: isMixed && !!activeDevs[vpnDev] });

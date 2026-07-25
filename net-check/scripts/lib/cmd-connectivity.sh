@@ -25,11 +25,7 @@ cmd_connectivity() {
 
   section_title "$_TITLE_CONN"
   if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
-    printf 'TCP connect + TLS handshake timing per WAN path. Detects unreachable paths.\n'
-    local _zh
-    _zh=$(format_zone_header)
-    [ -n "$_zh" ] && printf '%s\n' "$_zh"
-    printf '\n'
+    printf 'TCP connect + TLS handshake timing per WAN path. Detects unreachable paths.\n\n'
   fi
   if [ "$has_traceroute" = 1 ]; then
     tbl_header "Path:14" "CC:4" "Hops:5" "MTU (OH, Enc):19" "Loss:8" "DNS ms:9" "TCP ms:9" "TLS ms:9" "Total:9" "Status"

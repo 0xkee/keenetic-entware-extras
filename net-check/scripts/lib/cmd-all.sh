@@ -27,6 +27,9 @@ cmd_all() {
   local _json_geo="" _json_conn="" _json_dns=""
   local _json_ipv6="" _json_compare="" _json_cdn="" _json_tls="" _json_speed=""
 
+  # ── Zone header (once before all sections) ──
+  print_zone_header_once
+
   # ── Step 1: Egress Point Verification (special: fail-fast after) ──
   if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
     section_banner 1 "$_steps" "$_TITLE_GEO"

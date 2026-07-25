@@ -12,6 +12,8 @@ _CACHED_WAN_IFACES=""
 
 # Per-run cache for zone context (avoids repeated config reads).
 _ZONE_CTX_LOADED=0
+# Guard for one-time zone header printing.
+_ZONE_HEADER_PRINTED=0
 _ZONE_LABEL=""
 _ZONE_CC_LIST=""
 _ZONE_ROUTE_DEV=""
@@ -260,8 +262,32 @@ route_dev_for_ip() {
 # stdout: formatted line or empty (if no zone detected)
 format_zone_header() {
   [ -z "$_ZONE_LABEL" ] && return 0
-  local _zone_dir="" _default_dir=""
+  local _zone_dir=""
   [ -n "$_ZONE_ROUTE_DEV" ] && _zone_dir=" → ${_ZONE_ROUTE_DEV} (${_ZONE_ROUTE_TYPE:-?})"
-  [ -n "$_DEFAULT_ROUTE_DEV" ] && _default_dir=", default → ${_DEFAULT_ROUTE_DEV} (${_DEFAULT_ROUTE_TYPE:-?})"
-  printf 'Geo zone: %s (%s)%s%s' "$_ZONE_LABEL" "$_ZONE_CC_LIST" "$_zone_dir" "$_default_dir"
+  printf 'Geo zone: %s%s%s (%s)%s' "$C_CYAN" "$_ZONE_LABEL" "$C_RST" "$_ZONE_CC_LIST" "$_zone_dir"
+}
+
+# Print zone context header once (geo zone + resolver info).
+# Safe to call from multiple cmd_* functions — prints only on first invocation.
+# Skipped in JSON or quiet mode.
+# Depends: load_zone_context(), format_zone_header(), detect_dns_port() from lib/ip.sh,
+#   OUTPUT_JSON, VERBOSITY (is_quiet), C_BOLD, C_RST
+print_zone_header_once() {
+  [ "$OUTPUT_JSON" = 1 ] && return 0
+  is_quiet && return 0
+  [ "$_ZONE_HEADER_PRINTED" = 1 ] && return 0
+
+  load_zone_context
+
+  local _zh
+  _zh=$(format_zone_header)
+  if [ -n "$_zh" ]; then
+    printf '%s══════════════════════════════════════════════════════════%s\n' "$C_CYAN" "$C_RST"
+    printf '  %sGeo Config%s\n' "$C_BOLD" "$C_RST"
+    printf '%s══════════════════════════════════════════════════════════%s\n' "$C_CYAN" "$C_RST"
+    printf '%s\n' "$_zh"
+    printf 'DNS zone: %s%s%s (%s)\n\n' "$C_CYAN" "$_ZONE_LABEL" "$C_RST" "$_ZONE_CC_LIST"
+  fi
+
+  _ZONE_HEADER_PRINTED=1
 }

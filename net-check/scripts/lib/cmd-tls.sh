@@ -323,7 +323,7 @@ cmd_tls_check_targets() {
   check_cmd openssl "opkg install openssl-util" || return 1
 
   local targets_file="$_CONFIG_DIR/check-targets.conf"
-  if [ ! -f "$targets_file" ]; then
+  if [ $# -eq 0 ] && [ ! -f "$targets_file" ]; then
     emit_error "Targets file not found: $targets_file"
     return 1
   fi
@@ -335,6 +335,13 @@ cmd_tls_check_targets() {
   command -v dig >/dev/null 2>&1 && has_dig=1
 
   load_zone_context
+
+  # Warm geo cache for accurate CC in comparison table headers
+  if [ -z "$_GEO_EXT_IPS" ]; then
+    local _saved_exit="$_EXIT_CODE"
+    cmd_geo > /dev/null 2>&1 || true
+    _EXIT_CODE="$_saved_exit"
+  fi
 
   section_title "$_TITLE_TLS"
   if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
@@ -353,17 +360,29 @@ cmd_tls_check_targets() {
     _cached_isp_dns=$(_get_isp_dns | awk '{print $1}') || _cached_isp_dns=""
   fi
 
-  # ── Phase 1: Read all HTTPS hosts (preserving categories for group separators) ──
+  # ── Phase 1: Read all HTTPS hosts (from arguments or config) ──
   local _tls_hosts="" url check_type _category _description _expected host
-  while IFS='|' read -r url check_type _category _description _expected; do
-    case "$url" in "#"*|"") continue ;; esac
-    [ "$check_type" = "geo" ] && continue
-    host="${url#https://}"; host="${host#http://}"; host="${host%%/*}"; host="${host%%:*}"
-    [ -z "$host" ] && continue
-    _tls_total=$((_tls_total + 1))
-    _tls_hosts="${_tls_hosts} ${host}"
-    printf '%s' "${_category:-global}" > "${_RUN_DIR}/tls-cat-${host}"
-  done < "$targets_file"
+  if [ $# -gt 0 ]; then
+    # Deep check mode: use passed domains
+    for url in "$@"; do
+      host=$(url_to_host "$url")
+      [ -z "$host" ] && continue
+      _tls_total=$((_tls_total + 1))
+      _tls_hosts="${_tls_hosts} ${host}"
+      printf '%s' "check" > "${_RUN_DIR}/tls-cat-${host}"
+    done
+  else
+    # Default: load from check-targets.conf
+    while IFS='|' read -r url check_type _category _description _expected; do
+      case "$url" in "#"*|"") continue ;; esac
+      [ "$check_type" = "geo" ] && continue
+      host="${url#https://}"; host="${host#http://}"; host="${host%%/*}"; host="${host%%:*}"
+      [ -z "$host" ] && continue
+      _tls_total=$((_tls_total + 1))
+      _tls_hosts="${_tls_hosts} ${host}"
+      printf '%s' "${_category:-global}" > "${_RUN_DIR}/tls-cat-${host}"
+    done < "$targets_file"
+  fi
 
   # ── Phase 2: Batched parallel TLS probes (PARALLEL_BATCH_SIZE hosts at a time) ──
   local _tls_bn=0 _tls_batch=""

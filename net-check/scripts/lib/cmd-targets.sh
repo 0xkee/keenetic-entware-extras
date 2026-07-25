@@ -368,6 +368,12 @@ cmd_compare() {
     local verdict_input="" json_paths=""
     local _target_all_ok=1 _fail_reasons=""
 
+    # Determine active route device for this domain (for cell marker)
+    local _active_route_dev=""
+    local _resolved_ip=""
+    _resolved_ip=$(_resolve_a_cached "$host" 2>/dev/null) || _resolved_ip=""
+    [ -n "$_resolved_ip" ] && _active_route_dev=$(route_dev_for_ip "$_resolved_ip")
+
     cmp_row_start "$host"
 
     for iface in $ifaces; do
@@ -488,7 +494,9 @@ cmd_compare() {
           _cell="${_cell} ${C_GREEN}▲${C_RST}"
         fi
 
-        cmp_cell "$_cell"
+        local _is_active=0
+        [ "$iface" = "$_active_route_dev" ] && _is_active=1
+        cmp_cell "$_cell" "$_is_active"
       fi
     done
 
@@ -505,25 +513,21 @@ cmd_compare() {
       all_fail) _vst="fail" ;;
       *) _vst="warn" ;;
     esac
-    if [ -n "$_ZONE_LABEL" ]; then
-      local _resolved_ip _actual_route_dev _expected_rt _actual_rt _route_st
-      _resolved_ip=$(_resolve_a_cached "$host" 2>/dev/null) || _resolved_ip=""
-      if [ -n "$_resolved_ip" ]; then
-        _actual_route_dev=$(route_dev_for_ip "$_resolved_ip")
-        _expected_rt=$(expected_route_type "${_tgt_category:-global}")
-        if [ "$_expected_rt" != "any" ] && [ -n "$_actual_route_dev" ]; then
-          _actual_rt=$(iface_type "$_actual_route_dev")
-          if [ "$_actual_rt" = "$_expected_rt" ]; then
-            : # route matches expectation — no display noise
-          else
-            _route_info=$(printf ' %s⚠route:%s(exp %s)%s' "$C_YELLOW" "$_actual_route_dev" "$_expected_rt" "$C_RST")
-            [ "$_vst" = "ok" ] && _vst="warn"
-          fi
-          _route_json=$(printf ',%s,%s,%s' \
-            "$(json_kv "route_dev" "$_actual_route_dev")" \
-            "$(json_kv "route_type" "$_actual_rt")" \
-            "$(json_kv "route_expected" "$_expected_rt")")
+    if [ -n "$_ZONE_LABEL" ] && [ -n "$_resolved_ip" ] && [ -n "$_active_route_dev" ]; then
+      local _expected_rt _actual_rt
+      _expected_rt=$(expected_route_type "${_tgt_category:-global}")
+      if [ "$_expected_rt" != "any" ]; then
+        _actual_rt=$(iface_type "$_active_route_dev")
+        if [ "$_actual_rt" = "$_expected_rt" ]; then
+          : # route matches expectation — no display noise
+        else
+          _route_info=$(printf ' %s⚠route:%s(exp %s)%s' "$C_YELLOW" "$_active_route_dev" "$_expected_rt" "$C_RST")
+          [ "$_vst" = "ok" ] && _vst="warn"
         fi
+        _route_json=$(printf ',%s,%s,%s' \
+          "$(json_kv "route_dev" "$_active_route_dev")" \
+          "$(json_kv "route_type" "$_actual_rt")" \
+          "$(json_kv "route_expected" "$_expected_rt")")
       fi
     fi
 

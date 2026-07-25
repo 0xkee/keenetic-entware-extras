@@ -2,8 +2,6 @@
 
 ## CLI / UX
 
-- [ ] **BusyBox traceroute compat** — `cmd-connectivity.sh` uses `traceroute -i` and `-w`,
-  neither supported by BusyBox traceroute. Fix: detect BusyBox and skip hops or run without flags
 - [ ] **Resolver info in cmd_geo** — show `Resolver: SmartDNS (via :53)` like dns does
 - [ ] **Target endpoint in cmd_connectivity** — show tested host for transparency
 

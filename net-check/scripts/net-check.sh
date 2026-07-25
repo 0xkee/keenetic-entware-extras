@@ -104,8 +104,8 @@ _dispatch() {
     ipv6)    cmd_ipv6_leak ;;
     dns)     cmd_dns ;;
     comp)    cmd_compare ;;
-    cdn)     if [ -n "${1:-}" ]; then cmd_cdn "$1"; else cmd_cdn_all; fi ;;
-    tls)     if [ -n "${1:-}" ]; then cmd_tls_check "$1"; else cmd_tls_check_targets; fi ;;
+    cdn)     cmd_cdn_all ;;
+    tls)     cmd_tls_check_targets ;;
     speed)   cmd_speed "$@" ;;
     check)   cmd_check "$@" ;;
     *)       emit_error "unknown command: $_cmd"; usage >&2; return 2 ;;
@@ -224,11 +224,8 @@ main() {
       cmd_all
       ;;
     *)
-      # Print zone header once for commands that show zone context
-      # check mode prints it inside _cmd_check_multi_text after master title
-      case "$cmd" in
-        geo|conn|dns|comp|cdn) print_zone_header_once ;;
-      esac
+      # Zone context header (idempotent via _ZONE_HEADER_PRINTED guard)
+      print_zone_header_once
       local _spin_msg _buf _t_start _elapsed
       _spin_msg=$(_spinner_msg "$cmd")
       _buf="${_RUN_DIR}/single-cmd.tmp"

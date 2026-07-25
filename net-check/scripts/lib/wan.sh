@@ -108,6 +108,16 @@ require_wan_ifaces() {
   printf '%s' "$_ifaces"
 }
 
+# Ensure geo ext_ip cache is populated (runs cmd_geo silently if empty).
+# Preserves _EXIT_CODE from caller.
+# Depends: cmd_geo (from lib/cmd-geo.sh, loaded before this is called)
+ensure_geo_cache() {
+  [ -n "$_GEO_EXT_IPS" ] && return 0
+  local _saved_exit="$_EXIT_CODE"
+  cmd_geo > /dev/null 2>&1 || true
+  _EXIT_CODE="$_saved_exit"
+}
+
 # Lookup cached ext_ip for an interface from _GEO_EXT_IPS.
 # Args: $1 - interface name
 # stdout: ext_ip or empty string

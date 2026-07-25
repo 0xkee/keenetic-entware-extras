@@ -337,11 +337,7 @@ cmd_tls_check_targets() {
   load_zone_context
 
   # Warm geo cache for accurate CC in comparison table headers
-  if [ -z "$_GEO_EXT_IPS" ]; then
-    local _saved_exit="$_EXIT_CODE"
-    cmd_geo > /dev/null 2>&1 || true
-    _EXIT_CODE="$_saved_exit"
-  fi
+  ensure_geo_cache
 
   section_title "$_TITLE_TLS"
   if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
@@ -466,6 +462,27 @@ cmd_tls_check_targets() {
     _resolved_ip=$(_resolve_a_cached "$host" 2>/dev/null) || _resolved_ip=""
     [ -n "$_resolved_ip" ] && _active_route_dev=$(route_dev_for_ip "$_resolved_ip")
 
+    # Pre-scan: pick recommended iface (healthy TLS path, no error/MITM)
+    local _recommended_dev="" _rec_ok_n=0 _ri
+    for _ri in $ifaces; do
+      local _rpf="${_RUN_DIR}/tls-par-${host}-${_ri}"
+      [ -f "$_rpf" ] || continue
+      local _r_line1 _r_issuer _r_fp
+      _r_line1=$(sed -n '1p' "$_rpf")
+      _r_issuer=$(printf '%s' "$_r_line1" | cut -d'|' -f1)
+      _r_fp=$(printf '%s' "$_r_line1" | cut -d'|' -f2)
+      { [ -z "$_r_issuer" ] || [ "$_r_issuer" = "unknown" ]; } && continue
+      { [ -z "$_r_fp" ] || [ "$_r_fp" = "unknown" ]; } && continue
+      # Skip MITM paths
+      _check_mitm_issuer "$_r_issuer" >/dev/null 2>&1 && continue
+      _rec_ok_n=$((_rec_ok_n + 1))
+      _recommended_dev="$_ri"
+    done
+    # No ★ when single iface (no choice to show)
+    local _n_ifc
+    _n_ifc=$(printf '%s' "$ifaces" | wc -w | tr -d ' ')
+    [ "$_n_ifc" -le 1 ] && _recommended_dev=""
+
     cmp_row_start "$host"
 
     for iface in $ifaces; do
@@ -531,31 +548,39 @@ cmd_tls_check_targets() {
         _cell=$(printf '%s %s' \
           "$(tbl_cell 3 "$_short_st" "$_cell_st")" \
           "$(tbl_cell "$_iss_w" "$_iss_s")")
-        local _is_active=0
+        local _is_active=0 _is_recommended=0
         [ "$iface" = "$_active_route_dev" ] && _is_active=1
-        cmp_cell "$_cell" "$_is_active"
+        [ "$iface" = "$_recommended_dev" ] && _is_recommended=1
+        cmp_cell "$_cell" "$_is_active" "$_is_recommended"
       fi
     done
 
     # ── Per-host verdict ──
-    local _unique_fps _verdict="same_cert"
-    _unique_fps=$(printf '%s' "$_host_fps" | grep -v '^$' | sort -u | grep -c '.' 2>/dev/null) || _unique_fps=0
+    # Count unique VALID fingerprints (excluding "unknown" from failed/blocked paths)
+    local _unique_valid_fps _total_paths _verdict="same_cert"
+    _unique_valid_fps=$(printf '%s' "$_host_fps" | grep -v '^$' | grep -v '^unknown$' | sort -u | grep -c '.' 2>/dev/null) || _unique_valid_fps=0
+    _total_paths=$(printf '%s' "$_host_fps" | grep -v '^$' | grep -c '.' 2>/dev/null) || _total_paths=0
 
     if [ "$_host_mitm" = 1 ]; then
       _verdict="mitm_proxy"
       _tls_mitm=$((_tls_mitm + 1))
-    elif [ "$_host_error" -gt 0 ] && [ "$_unique_fps" -le 1 ]; then
-      _verdict="partial_error"
-    elif [ "$_unique_fps" -gt 1 ]; then
+    elif [ "$_total_paths" -gt 0 ] && [ "$_total_paths" -eq "$_host_error" ]; then
+      # All paths failed — no cert data at all
+      _verdict="all_error"
+    elif [ "$_unique_valid_fps" -gt 1 ]; then
+      # Multiple different valid fingerprints — real MITM suspected
       _verdict="different_certs"
       _tls_mitm=$((_tls_mitm + 1))
     else
+      # Same valid FP across working paths (blocked paths don't count as MITM)
       _tls_ok=$((_tls_ok + 1))
     fi
 
     # Build host JSON
     local _host_ok_val=0
-    [ "$_verdict" != "same_cert" ] && _host_ok_val=1
+    case "$_verdict" in
+      different_certs|mitm_proxy) _host_ok_val=1 ;;
+    esac
     local _host_json
     _host_json=$(printf '{%s,%s,%s,"paths":[%s]}' \
       "$(json_kv_bool "ok" "$_host_ok_val")" \
@@ -567,11 +592,15 @@ cmd_tls_check_targets() {
     local _vst="ok"
     local _vtext="same"
     case "$_verdict" in
-      same_cert) _vst="ok"; _vtext="same" ;;
-      mitm_proxy) _vst="warn"; _vtext="MITM" ;;
-      different_certs) _vst="warn"; _vtext="differ" ;;
-      partial_error) _vst="fail"; _vtext="error" ;;
+      same_cert)        _vst="ok";   _vtext="same" ;;
+      mitm_proxy)       _vst="warn"; _vtext="MITM" ;;
+      different_certs)  _vst="warn"; _vtext="differ" ;;
+      all_error)        _vst="fail"; _vtext="error" ;;
     esac
+    # Annotate with blocked path count when some paths failed but cert matches
+    if [ "$_host_error" -gt 0 ] && [ "$_verdict" != "all_error" ]; then
+      _vtext="${_vtext} (${_host_error} blocked)"
+    fi
     cmp_row_end "$(color_status "$_vst" "$_vtext")"
   done
 

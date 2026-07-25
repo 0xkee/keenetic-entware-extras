@@ -410,7 +410,7 @@ tbl_group_reset() {
 # Print comparison table header + separator line.
 # Args: $1 - first column label (e.g., "Resource", "Host", "Domain")
 #       $2 - WAN interfaces list (space-separated)
-#       $3 - column width (optional, default 17)
+#       $3 - column width (optional, default 19)
 # Skips output in JSON or quiet mode.
 cmp_header() {
   [ "$OUTPUT_JSON" = 1 ] && return 0
@@ -422,12 +422,12 @@ cmp_header() {
   for _hdr_iface in $_ifaces; do
     _hdr_cc=$(geo_cached_cc "$_hdr_iface")
     [ -z "$_hdr_cc" ] && _hdr_cc="-"
-    printf ' | %-*s' "$_col_w" "${_hdr_iface} (${_hdr_cc})"
+    printf ' |  %-*s' "$_col_w" "${_hdr_iface} (${_hdr_cc})"
   done
   printf ' | %s\n' "Verdict"
   local _n_ifaces _sep_len
   _n_ifaces=$(printf '%s' "$_ifaces" | wc -w | tr -d ' ')
-  _sep_len=$((20 + (_col_w + 3) * _n_ifaces + 12))
+  _sep_len=$((20 + (_col_w + 4) * _n_ifaces + 12))
   printf '%*s\n' "$_sep_len" "" | tr ' ' '-'
 }
 
@@ -440,20 +440,36 @@ cmp_row_start() {
   printf '%-20s' "$1"
 }
 
-# Print one interface cell (" | content") in the current row.
-# Args: $1 - pre-formatted cell content, $2 - "1" to mark as active route (optional)
+# Print one interface cell in the current row.
+# Args: $1 - pre-formatted cell content,
+#        $2 - "1" to mark as active route (►),
+#        $3 - "1" to mark as recommended/best path (★) (optional)
+# Marker combos: ►★ active+best, ►  active,  ★ best only, (none).
 # Skips output in JSON or quiet mode.
 cmp_cell() {
   [ "$OUTPUT_JSON" = 1 ] && return 0
   is_quiet && return 0
-  if [ "${2:-}" = "1" ]; then
-    if _no_emoji; then
-      printf ' |>%s' "$1"
+  local _active="${2:-0}" _rec="${3:-0}"
+  if _no_emoji; then
+    if [ "$_active" = "1" ] && [ "$_rec" = "1" ]; then
+      printf ' |>*%s' "$1"
+    elif [ "$_active" = "1" ]; then
+      printf ' |> %s' "$1"
+    elif [ "$_rec" = "1" ]; then
+      printf ' | *%s' "$1"
     else
-      printf ' |%s►%s%s' "$C_CYAN" "$C_RST" "$1"
+      printf ' |  %s' "$1"
     fi
   else
-    printf ' | %s' "$1"
+    if [ "$_active" = "1" ] && [ "$_rec" = "1" ]; then
+      printf ' |%s►%s%s★%s%s' "$C_CYAN" "$C_RST" "$C_YELLOW" "$C_RST" "$1"
+    elif [ "$_active" = "1" ]; then
+      printf ' |%s►%s %s' "$C_CYAN" "$C_RST" "$1"
+    elif [ "$_rec" = "1" ]; then
+      printf ' | %s★%s%s' "$C_YELLOW" "$C_RST" "$1"
+    else
+      printf ' |  %s' "$1"
+    fi
   fi
 }
 

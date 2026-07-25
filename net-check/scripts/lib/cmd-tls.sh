@@ -460,6 +460,12 @@ cmd_tls_check_targets() {
     local _host_fps="" _host_mitm=0 _host_error=0
     local _host_json_paths=""
 
+    # Determine active route device for this host (for cell marker)
+    local _active_route_dev=""
+    local _resolved_ip=""
+    _resolved_ip=$(_resolve_a_cached "$host" 2>/dev/null) || _resolved_ip=""
+    [ -n "$_resolved_ip" ] && _active_route_dev=$(route_dev_for_ip "$_resolved_ip")
+
     cmp_row_start "$host"
 
     for iface in $ifaces; do
@@ -525,7 +531,9 @@ cmd_tls_check_targets() {
         _cell=$(printf '%s %s' \
           "$(tbl_cell 3 "$_short_st" "$_cell_st")" \
           "$(tbl_cell "$_iss_w" "$_iss_s")")
-        cmp_cell "$_cell"
+        local _is_active=0
+        [ "$iface" = "$_active_route_dev" ] && _is_active=1
+        cmp_cell "$_cell" "$_is_active"
       fi
     done
 

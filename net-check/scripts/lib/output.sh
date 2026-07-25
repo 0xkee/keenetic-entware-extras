@@ -441,12 +441,20 @@ cmp_row_start() {
 }
 
 # Print one interface cell (" | content") in the current row.
-# Args: $1 - pre-formatted cell content
+# Args: $1 - pre-formatted cell content, $2 - "1" to mark as active route (optional)
 # Skips output in JSON or quiet mode.
 cmp_cell() {
   [ "$OUTPUT_JSON" = 1 ] && return 0
   is_quiet && return 0
-  printf ' | %s' "$1"
+  if [ "${2:-}" = "1" ]; then
+    if _no_emoji; then
+      printf ' |>%s' "$1"
+    else
+      printf ' |%s►%s%s' "$C_CYAN" "$C_RST" "$1"
+    fi
+  else
+    printf ' | %s' "$1"
+  fi
 }
 
 # End row with verdict column + newline.

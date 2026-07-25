@@ -435,6 +435,13 @@ cmd_cdn_all() {
 
     local _all_cc="" _error_reasons="" _warn_reasons="" json_paths=""
     local _has_error=0 _has_warn=0
+
+    # Determine active route device for this domain (for cell marker)
+    local _active_route_dev=""
+    local _resolved_ip=""
+    _resolved_ip=$(_resolve_a_cached "$domain" 2>/dev/null) || _resolved_ip=""
+    [ -n "$_resolved_ip" ] && _active_route_dev=$(route_dev_for_ip "$_resolved_ip")
+
     cmp_row_start "$domain"
 
     for iface in $ifaces; do
@@ -489,7 +496,9 @@ cmd_cdn_all() {
           ;;
       esac
 
-      cmp_cell "$(_cdn_format_cell "$cdn_cc" "$http_code" "$rtt" "$cdn_ip")"
+      local _is_active=0
+      [ "$iface" = "$_active_route_dev" ] && _is_active=1
+      cmp_cell "$(_cdn_format_cell "$cdn_cc" "$http_code" "$rtt" "$cdn_ip")" "$_is_active"
 
       local _itype
       _itype=$(iface_type "$iface")

@@ -12,21 +12,23 @@ with Entware.
 
 ### Commands
 
-- **`all`** — full diagnostics suite (8 steps): geo → connectivity → ipv6-leak
-  → dns → compare → cdn → tls → speed
+- **`all`** — full diagnostics suite (8 steps): geo → conn → ipv6 → dns →
+  comp → cdn → tls → speed
 - **`geo`** — egress point verification via GeoIP per WAN interface
-- **`connectivity`** — ping, TCP :443, traceroute hops, packet loss, MTU
-  discovery, DNS/TCP/TLS/Total timing
+- **`conn`** — ping, TCP :443, traceroute hops, packet loss, MTU discovery,
+  DNS/TCP/TLS/Total timing
 - **`dns`** — DNS resolution & geolocation for all check targets; detects ISP
   DNS filtering (NXDOMAIN/bogon) and split-DNS zone alignment
-- **`compare`** — HTTP reachability matrix across WAN interfaces with TTFB,
+- **`comp`** — HTTP reachability matrix across WAN interfaces with TTFB,
   failure classification, route verification, and historical diff (▲/▼ markers)
-- **`cdn`** / **`cdn-all`** — CDN geo-steering analysis via EDNS Client Subnet;
-  comparison table with per-interface edge country + geo-steering verdict
-- **`tls-check`** / **`tls-check-targets`** — TLS certificate fingerprint
+- **`cdn`** — CDN geo-steering analysis via EDNS Client Subnet; comparison
+  table with per-interface edge country + geo-steering verdict
+- **`tls`** — TLS certificate fingerprint
   comparison across paths; MITM proxy detection via known CA list
 - **`speed`** — download + upload throughput via Cloudflare endpoint
-- **`ipv6-leak`** — detects IPv6 traffic bypassing tunnel via ISP interface
+- **`ipv6`** — detects IPv6 traffic bypassing tunnel via ISP interface
+- **`check`** — deep single/multi-domain check: HTTP + DNS + TLS + CDN with
+  per-interface comparison tables (always uses multi-domain layout)
 
 ### Features
 

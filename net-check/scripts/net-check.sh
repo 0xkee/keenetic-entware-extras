@@ -99,17 +99,16 @@ _dispatch() {
   local _cmd="$1"
   shift
   case "$_cmd" in
-    domains)      cmd_domains ;;
-    geo)          cmd_geo ;;
-    connectivity) cmd_connectivity ;;
-    cdn)          cmd_cdn "${1:-}" ;;
-    cdn-all)      cmd_cdn_all ;;
-    dns)          cmd_dns ;;
-    ipv6-leak)    cmd_ipv6_leak ;;
-    compare)      cmd_compare ;;
-    speed)        cmd_speed "$@" ;;
-    tls|tls-check) if [ -n "${1:-}" ]; then cmd_tls_check "$1"; else cmd_tls_check_targets; fi ;;
-    *)            cmd_check_target "$_cmd" ;;
+    geo)     cmd_geo ;;
+    conn)    cmd_connectivity ;;
+    ipv6)    cmd_ipv6_leak ;;
+    dns)     cmd_dns ;;
+    comp)    cmd_compare ;;
+    cdn)     if [ -n "${1:-}" ]; then cmd_cdn "$1"; else cmd_cdn_all; fi ;;
+    tls)     if [ -n "${1:-}" ]; then cmd_tls_check "$1"; else cmd_tls_check_targets; fi ;;
+    speed)   cmd_speed "$@" ;;
+    check)   cmd_check "$@" ;;
+    *)       emit_error "unknown command: $_cmd"; usage >&2; return 2 ;;
   esac
 }
 
@@ -133,16 +132,16 @@ _priv_run() {
 # stdout: spinner message
 _spinner_msg() {
   case "$1" in
-    geo)          printf 'Checking egress points...' ;;
-    connectivity) printf 'Testing TCP/TLS connectivity...' ;;
-    dns)          printf 'Checking DNS routing...' ;;
-    ipv6-leak)    printf 'Checking IPv6 leaks...' ;;
-    domains)      printf 'Checking HTTP targets...' ;;
-    compare)      printf 'Comparing HTTP targets...' ;;
-    cdn|cdn-all)  printf 'Analyzing CDN steering...' ;;
-    speed)        printf 'Measuring throughput...' ;;
-    tls-check)    printf 'Checking TLS certificates...' ;;
-    *)            printf 'Checking %s...' "$1" ;;
+    geo)     printf 'Checking egress points...' ;;
+    conn)    printf 'Testing TCP/TLS connectivity...' ;;
+    dns)     printf 'Checking DNS routing...' ;;
+    ipv6)    printf 'Checking IPv6 leaks...' ;;
+    comp)    printf 'Checking HTTP targets...' ;;
+    cdn)     printf 'Analyzing CDN steering...' ;;
+    speed)   printf 'Measuring throughput...' ;;
+    tls)     printf 'Checking TLS certificates...' ;;
+    check)   printf 'Checking %s...' "${2:-target}" ;;
+    *)       printf 'Checking %s...' "$1" ;;
   esac
 }
 
@@ -225,6 +224,11 @@ main() {
       cmd_all
       ;;
     *)
+      # Print zone header once for commands that show zone context
+      # check mode prints it inside _cmd_check_multi_text after master title
+      case "$cmd" in
+        geo|conn|dns|comp|cdn) print_zone_header_once ;;
+      esac
       local _spin_msg _buf _t_start _elapsed
       _spin_msg=$(_spinner_msg "$cmd")
       _buf="${_RUN_DIR}/single-cmd.tmp"

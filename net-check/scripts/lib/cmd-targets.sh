@@ -231,7 +231,7 @@ cmd_domains() {
 
 cmd_compare() {
   local targets_file="$_CONFIG_DIR/check-targets.conf"
-  if [ ! -f "$targets_file" ]; then
+  if [ $# -eq 0 ] && [ ! -f "$targets_file" ]; then
     emit_error "Targets file not found: $targets_file"
     return 1
   fi
@@ -245,6 +245,13 @@ cmd_compare() {
   # Load geo-zone context for route verification
   load_zone_context
 
+  # Warm geo cache for accurate CC in comparison table headers
+  if [ -z "$_GEO_EXT_IPS" ]; then
+    local _saved_exit="$_EXIT_CODE"
+    cmd_geo > /dev/null 2>&1 || true
+    _EXIT_CODE="$_saved_exit"
+  fi
+
   # Check if we need body content
   local need_body=0
   [ -f "$ANOMALY_MARKERS_FILE" ] && need_body=1
@@ -252,11 +259,7 @@ cmd_compare() {
   # Build header
   section_title "$_TITLE_COMPARE"
   if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
-    printf 'HTTP reachability across all paths. Detects middlebox anomalies (DPI/SNI), MITM, geo-restrictions.\n'
-    local _zh
-    _zh=$(format_zone_header)
-    [ -n "$_zh" ] && printf '%s\n' "$_zh"
-    printf '\n'
+    printf 'HTTP reachability across all paths. Detects middlebox anomalies (DPI/SNI), MITM, geo-restrictions.\n\n'
   fi
   cmp_header "Resource" "$ifaces"
 
@@ -265,26 +268,42 @@ cmd_compare() {
 
   # ── Phase 1: Read all targets into indexed config files ──
   local _tgt_hosts=""
-  while IFS='|' read -r url check_type _category _description expected_string; do
-    case "$url" in
-      "#"*|"") continue ;;
-    esac
-    [ "$check_type" = "geo" ] && continue
-    case "$url" in
-      http://*|https://*) ;;
-      *) url="https://${url}" ;;
-    esac
-    local host
-    host=$(url_to_host "$url")
-    _total_targets=$((_total_targets + 1))
-    expected_string=$(printf '%s' "${expected_string:-}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-    local target_need_body="$need_body"
-    [ -n "$expected_string" ] && target_need_body=1
-    # Store target config for phase 2+3 (5 fields: url, host, need_body, expected, category)
-    printf '%s\t%s\t%s\t%s\t%s\n' "$url" "$host" "$target_need_body" "$expected_string" "${_category:-global}" \
-      > "${_RUN_DIR}/tgtcfg-${host}"
-    _tgt_hosts="${_tgt_hosts} ${host}"
-  done < "$targets_file"
+  if [ $# -gt 0 ]; then
+    # Deep check mode: use passed domains
+    local _ad
+    for _ad in "$@"; do
+      case "$_ad" in http://*|https://*) ;; *) _ad="https://${_ad}" ;; esac
+      local host
+      host=$(url_to_host "$_ad")
+      _total_targets=$((_total_targets + 1))
+      # Store target config for phase 2+3 (5 fields: url, host, need_body, expected, category)
+      printf '%s\t%s\t%s\t%s\t%s\n' "$_ad" "$host" "$need_body" "" "check" \
+        > "${_RUN_DIR}/tgtcfg-${host}"
+      _tgt_hosts="${_tgt_hosts} ${host}"
+    done
+  else
+    # Default: load from check-targets.conf
+    while IFS='|' read -r url check_type _category _description expected_string; do
+      case "$url" in
+        "#"*|"") continue ;;
+      esac
+      [ "$check_type" = "geo" ] && continue
+      case "$url" in
+        http://*|https://*) ;;
+        *) url="https://${url}" ;;
+      esac
+      local host
+      host=$(url_to_host "$url")
+      _total_targets=$((_total_targets + 1))
+      expected_string=$(printf '%s' "${expected_string:-}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+      local target_need_body="$need_body"
+      [ -n "$expected_string" ] && target_need_body=1
+      # Store target config for phase 2+3 (5 fields: url, host, need_body, expected, category)
+      printf '%s\t%s\t%s\t%s\t%s\n' "$url" "$host" "$target_need_body" "$expected_string" "${_category:-global}" \
+        > "${_RUN_DIR}/tgtcfg-${host}"
+      _tgt_hosts="${_tgt_hosts} ${host}"
+    done < "$targets_file"
+  fi
 
   # ── Phase 2: Batched parallel curls (3 targets at a time to avoid bandwidth contention) ──
   local _batch_n=0 _batch_hosts=""
@@ -540,12 +559,18 @@ cmd_compare() {
     cmp_row_end "$_verdict_text"
   done
 
-  # Save results to cache for status.sh (atomic write for parallel safety)
-  printf '[%s]\n' "$json_results" > "${CACHE_FILE}.$$"
-  mv -f "${CACHE_FILE}.$$" "$CACHE_FILE" 2>/dev/null || true
+  # Save results to cache for status.sh (only for config-based runs)
+  if [ $# -eq 0 ]; then
+    printf '[%s]\n' "$json_results" > "${CACHE_FILE}.$$"
+    mv -f "${CACHE_FILE}.$$" "$CACHE_FILE" 2>/dev/null || true
+  fi
 
   if [ "$OUTPUT_JSON" = 1 ]; then
-    cat "$CACHE_FILE"
+    if [ $# -eq 0 ] && [ -f "$CACHE_FILE" ]; then
+      cat "$CACHE_FILE"
+    else
+      printf '[%s]\n' "$json_results"
+    fi
   else
     if is_quiet; then
       printf 'compare: %s/%s targets all_ok\n' "$_ok_targets" "$_total_targets"

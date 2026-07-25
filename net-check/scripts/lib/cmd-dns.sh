@@ -135,6 +135,7 @@ cmd_dns() {
 
   # ── Detect active DNS zone for auto-classification ──
   load_zone_context
+  # shellcheck disable=SC2153  # _ZONE_LABEL/_ZONE_CC_LIST set by load_zone_context()
   local _zone_label="$_ZONE_LABEL" _zone_cc_list="$_ZONE_CC_LIST"
 
   # ISP DNS for blocking detection
@@ -151,15 +152,26 @@ cmd_dns() {
     fi
   fi
 
-  # Load domains from check-targets.conf (preserving order + categories)
+  # Load domains (from arguments or check-targets.conf)
   local all_domains="" _dline _ddomain _dcat
-  while IFS='|' read -r _ddomain _dcat; do
-    [ -z "$_ddomain" ] && continue
-    all_domains="${all_domains} ${_ddomain}"
-    printf '%s' "${_dcat:-global}" > "${_RUN_DIR}/dns-cat-${_ddomain}"
-  done <<EOF
+  if [ $# -gt 0 ]; then
+    # Deep check mode: use passed domains
+    for _ddomain in "$@"; do
+      _ddomain=$(url_to_host "$_ddomain")
+      [ -z "$_ddomain" ] && continue
+      all_domains="${all_domains} ${_ddomain}"
+      printf '%s' "check" > "${_RUN_DIR}/dns-cat-${_ddomain}"
+    done
+  else
+    # Default: load from check-targets.conf
+    while IFS='|' read -r _ddomain _dcat; do
+      [ -z "$_ddomain" ] && continue
+      all_domains="${all_domains} ${_ddomain}"
+      printf '%s' "${_dcat:-global}" > "${_RUN_DIR}/dns-cat-${_ddomain}"
+    done <<EOF
 $(_load_check_domains)
 EOF
+  fi
   all_domains="${all_domains# }"
   if [ -z "$all_domains" ]; then
     emit_error "No domains in check-targets.conf"
@@ -169,9 +181,6 @@ EOF
   # Header
   if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
     printf 'Resolver: %s%s%s\n' "$C_BOLD" "$dns_source" "$C_RST"
-    if [ -n "$_zone_label" ]; then
-      printf 'DNS zone: %s%s%s (%s)\n' "$C_CYAN" "$_zone_label" "$C_RST" "$_zone_cc_list"
-    fi
     if [ -n "$isp_label" ]; then
       printf 'ISP DNS:  %s\n' "$isp_label"
     fi
@@ -416,5 +425,179 @@ EOF
     fi
 
     printf ',"results":[%s]}\n' "$json_results"
+  fi
+}
+
+# ─── Single-domain DNS check (for deep check mode) ────────────────────────────
+
+# Run DNS resolution check for a single domain.
+# Resolves via system DNS (cached) and ISP DNS, geolocates the result,
+# classifies zone/intl, detects ISP filtering.
+# Used by cmd_check() for deep single-resource analysis.
+# Args: $1 - domain to check
+# Globals: OUTPUT_JSON, C_GREEN, C_YELLOW, C_BOLD, C_CYAN, C_DIM, C_RST,
+#          _EXIT_CODE, _ZONE_LABEL, _ZONE_CC_LIST
+# Returns: 0 on success, 1 on missing argument
+_dns_check_single() {
+  local domain="${1:-}"
+  if [ -z "$domain" ]; then
+    emit_error "_dns_check_single: domain argument required"
+    return 1
+  fi
+
+  require_cmd dig
+
+  # ── Detect resolver ──
+  local dns_source _dns_info
+  _dns_info=$(detect_dns_port 2>/dev/null) || _dns_info=""
+  case "$_dns_info" in
+    6053*|6153*) dns_source="SmartDNS (via :53)" ;;
+    *)           dns_source="system DNS (:53)" ;;
+  esac
+
+  # ── Zone context for auto-classification ──
+  load_zone_context
+  local _zone_label="$_ZONE_LABEL" _zone_cc_list="$_ZONE_CC_LIST"
+
+  # ── ISP DNS for filtering detection ──
+  local isp_dns isp_dns_first="" isp_label=""
+  isp_dns=$(_get_isp_dns)
+  if [ -n "$isp_dns" ]; then
+    isp_dns_first="${isp_dns%% *}"
+    local isp_provider
+    isp_provider=$(identify_dns_provider "$isp_dns_first") || isp_provider=""
+    if [ -n "$isp_provider" ]; then
+      isp_label="$isp_provider ($isp_dns_first)"
+    else
+      isp_label="$isp_dns_first"
+    fi
+  fi
+
+  # ── Resolve via system DNS (cached) ──
+  local resolved_ip resolved_cc
+  resolved_ip=$(_resolve_a_cached "$domain") || resolved_ip=""
+  resolved_cc=""
+  if [ -n "$resolved_ip" ]; then
+    resolved_cc=$(geolocate_ip "$resolved_ip" 2>/dev/null) || resolved_cc="??"
+  fi
+
+  # ── Resolve via ISP DNS (fresh, no cache) ──
+  local isp_ip="" isp_blocked=0
+  if [ -n "$isp_dns_first" ]; then
+    isp_ip=$(_resolve_a "$domain" "$isp_dns_first") || isp_ip=""
+    if [ -z "$isp_ip" ]; then
+      isp_blocked=1
+    elif _is_bogon "$isp_ip"; then
+      isp_blocked=1
+    fi
+  fi
+
+  # ── Classify zone/intl ──
+  local dns_type="" status_val="" status_label="" in_zone="null"
+
+  if [ -n "$resolved_ip" ]; then
+    if [ -n "$_zone_cc_list" ] && [ "$resolved_cc" != "??" ]; then
+      local _cc_lower
+      _cc_lower=$(printf '%s' "$resolved_cc" | tr '[:upper:]' '[:lower:]')
+      case " $_zone_cc_list " in
+        *" $_cc_lower "*) dns_type="zone"; in_zone="true" ;;
+        *)                dns_type="intl"; in_zone="false" ;;
+      esac
+    else
+      dns_type="—"
+    fi
+
+    # Status
+    if [ "$isp_blocked" = 1 ]; then
+      if [ "$dns_type" = "zone" ]; then
+        status_val="warn"; status_label="zone ok, ISP filt"
+      else
+        status_val="warn"; status_label="ISP filtered"
+      fi
+    else
+      if [ "$dns_type" = "zone" ]; then
+        status_val="ok"; status_label="zone ok"
+      else
+        status_val="ok"; status_label="ok"
+      fi
+    fi
+  else
+    # Resolution failed
+    resolved_ip="NXDOMAIN"
+    resolved_cc="—"
+    dns_type="—"
+    if [ "$isp_blocked" = 1 ]; then
+      status_val="warn"; status_label="NXDOMAIN + ISP"
+    else
+      status_val="warn"; status_label="NXDOMAIN"
+    fi
+  fi
+
+  # ── Output ──
+  if [ "$OUTPUT_JSON" = 1 ]; then
+    local _isp_json=""
+    if [ -n "$isp_dns_first" ]; then
+      local _bf=1
+      [ "$isp_blocked" = 1 ] && _bf=0
+      _isp_json=$(printf ',"isp_dns":{%s,%s}' \
+        "$(json_kv "resolved_ip" "${isp_ip:-NXDOMAIN}")" \
+        "$(json_kv_bool "filtered" "$_bf")")
+    fi
+
+    printf '{%s,%s,%s,%s,%s,%s,"in_zone":%s%s}\n' \
+      "$(json_kv_bool "ok" "$([ "$status_val" = "ok" ] && echo 0 || echo 1)")" \
+      "$(json_kv "resolver" "$dns_source")" \
+      "$(json_kv "domain" "$domain")" \
+      "$(json_kv "resolved_ip" "$resolved_ip")" \
+      "$(json_kv "cc" "$resolved_cc")" \
+      "$(json_kv "type" "$dns_type")" \
+      "$in_zone" \
+      "$_isp_json"
+  else
+    section_title "DNS Resolution"
+    if ! is_quiet; then
+      printf 'Resolver: %s%s%s\n' "$C_BOLD" "$dns_source" "$C_RST"
+      if [ -n "$_zone_label" ]; then
+        printf 'DNS zone: %s%s%s (%s)\n' "$C_CYAN" "$_zone_label" "$C_RST" "$_zone_cc_list"
+      fi
+      printf '\n'
+
+      tbl_header "Domain:22" "Resolved IP:18" "CC:4" "Type:8" "Status"
+
+      local _dns_cm=""
+      if [ -f "${_RUN_DIR:-/tmp}/dns-hit-${domain}" ]; then
+        _dns_cm=" $(cache_mark)"
+        rm -f "${_RUN_DIR:-/tmp}/dns-hit-${domain}"
+      fi
+      tbl_row "$domain" \
+        "$(tbl_cell 18 "$resolved_ip" "$status_val")" \
+        "$(tbl_cell 4 "$resolved_cc" "$status_val")" \
+        "$dns_type" \
+        "$(status_mark "$status_val") ${status_label}${_dns_cm}"
+
+      # ISP filtering summary
+      if [ "$isp_blocked" = 1 ]; then
+        printf '→ %s%s ISP DNS filtering detected%s' \
+          "$C_YELLOW" "$(status_mark warn)" "$C_RST"
+        if [ -n "$isp_label" ]; then
+          printf ' %s(%s → %s)%s' \
+            "$C_DIM" "$isp_label" "${isp_ip:-NXDOMAIN}" "$C_RST"
+        fi
+        printf '\n'
+      elif [ -n "$isp_dns_first" ]; then
+        printf '→ %sNo ISP DNS filtering%s %s\n' \
+          "$C_GREEN" "$C_RST" "$(status_mark ok)"
+      fi
+
+      # Flag exit code on failures
+      if [ "$status_val" = "warn" ]; then
+        [ "$_EXIT_CODE" -lt 1 ] && _EXIT_CODE=1
+      fi
+    else
+      # Quiet mode: single-line summary
+      printf 'dns: %s %s → %s (%s) %s\n' \
+        "$(status_mark "$status_val")" \
+        "$domain" "$resolved_ip" "$resolved_cc" "$status_label"
+    fi
   fi
 }

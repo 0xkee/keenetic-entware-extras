@@ -22,11 +22,7 @@ cmd_geo() {
 
   section_title "$_TITLE_GEO"
   if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
-    printf 'External IP, country and ISP per WAN path. Verifies tunnel egress identity.\n'
-    local _zh
-    _zh=$(format_zone_header)
-    [ -n "$_zh" ] && printf '%s\n' "$_zh"
-    printf '\n'
+    printf 'External IP, country and ISP per WAN path. Verifies tunnel egress identity.\n\n'
   fi
   tbl_header "Path:14" "External IP:18" "CC:4" "City:18" "ASN:10" "Org:40" "Status"
 

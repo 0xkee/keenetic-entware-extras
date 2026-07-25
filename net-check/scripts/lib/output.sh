@@ -15,6 +15,7 @@ _TITLE_COMPARE="HTTP Target Comparison (Layers 4–7)"
 _TITLE_CDN="CDN Geo-Steering Analysis (Layers 3+7)"
 _TITLE_TLS="TLS Certificate Check (Layers 5–7)"
 _TITLE_SPEED="Throughput Test (Layers 4+7)"
+_TITLE_CHECK="Deep Resource Check"
 
 # Set up terminal color escape codes.
 # Respects --no-color flag, NO_COLOR env, and non-tty output.
@@ -208,49 +209,41 @@ verbose_timing() {
 
 usage() {
   cat <<EOF
-net-check — Network connectivity diagnostics
+net-check — network diagnostics for multi-WAN routers
 
 Usage:
-  net-check.sh [options] <url>           Check single target via all WAN paths
-  net-check.sh [options] <command>       Run specific test(s)
-  net-check.sh --help                    This message
+  net-check.sh [options] <command> [args]
 
-Commands:
-  all           Run all checks (8 sections): geo → connectivity → ipv6 → dns → http → cdn → tls → speed
-  geo           Egress point verification: external IP, country, ASN per WAN path (L3+7)
-  connectivity  TCP/TLS timing, traceroute hops, packet loss, MTU discovery (L3–7)
-  ipv6-leak     IPv6 leak test: detect IPv6 traffic bypassing tunnel (L3+7)
-  dns           DNS leak detection & ISP filtering for check-targets domains (L7)
-  domains       HTTP reachability for all targets in check-targets.conf (L4–7)
-  compare       Same as domains but in tabular comparison format + cache + diff (L4–7)
-  cdn <domain>  CDN geo-steering: per-interface CDN edge country via ECS (L3+7)
-  cdn-all       CDN edge analysis for all domains in cdn-domains.conf (L3+7)
-  speed         Download/upload throughput test per WAN interface (L4+7)
-  tls           TLS certificate MITM check for all targets from config (L5–7)
-  tls <host>    TLS certificate check for single host (L5–7)
-  <url>         Check a single URL via all WAN paths (L4–7)
+Per-interface diagnostics:
+  geo              External IP, country, ASN per WAN path (L3+7)
+  conn             TCP/TLS timing, traceroute, packet loss, MTU (L3–7)
+  ipv6             Detect IPv6 traffic leaking outside tunnel (L3+7)
+  speed            Download/upload throughput per WAN interface (L4+7)
+
+Bulk checks (all targets from config):
+  comp             HTTP reachability table across WAN paths + diff (L4–7)
+  dns              DNS leak & ISP filtering detection (L7)
+  cdn              CDN edge geo-steering for cdn-domains.conf (L3+7)
+  tls              TLS certificate MITM detection (L5–7)
+
+Single/multi target:
+  check <url> ...  Deep check: HTTP + DNS + TLS + CDN (L3–7)
+
+Full suite:
+  all              Run everything: geo → conn → ipv6 → dns → comp → cdn → tls → speed
 
 Options:
-  --json           Machine-readable JSON output
-  --privacy        Anonymize sensitive data (IPs, ASN, city, org, country)
-  --iface <dev>    Check only via specific WAN interface
-  --no-color       Disable colored output
-  --verbose        Show detailed timing waterfall (DNS→TCP→TLS→TTFB)
-  --quiet          One-line summary per command (pass/fail + count)
+  --json           JSON output
+  --privacy        Mask IPs, ASN, geo, org in output
+  --iface <dev>    Limit to one WAN interface
+  --no-color       Disable ANSI colors
+  --quiet          One-line pass/fail summary per command
 
-Exit Codes:
-  0  All checks passed
-  1  Degraded (some checks failed)
-  2  Critical failure (all checks failed or fatal error)
+Exit codes: 0 = ok, 1 = degraded, 2 = critical
 
-Configuration:
-  ${_CONFIG_DIR}/
-    defaults.conf          Default settings (do not edit)
-    config.conf            User overrides (create if needed)
-    check-targets.conf     Target list (URL|type|category|desc|expected)
-    cdn-domains.conf       CDN domains for steering analysis
-    anomaly-markers.conf   Body content anomaly markers
-    privacy-providers.conf Fake ISP names for --privacy mode
+Config: ${_CONFIG_DIR}/
+  defaults.conf, config.conf, check-targets.conf, cdn-domains.conf,
+  anomaly-markers.conf, mitm-issuers.conf, privacy-providers.conf
 EOF
 }
 
@@ -397,6 +390,7 @@ tbl_group_sep() {
     global) _label="Global" ;;
     zone)   _label="Zone (${_ZONE_LABEL:-})" ;;
     intl)   _label="International" ;;
+    check)  return 0 ;;
     *)      _label="$_cur" ;;
   esac
   printf '%s── %s ──%s\n' "$C_DIM" "$_label" "$C_RST"
@@ -427,7 +421,7 @@ cmp_header() {
   local _hdr_iface _hdr_cc
   for _hdr_iface in $_ifaces; do
     _hdr_cc=$(geo_cached_cc "$_hdr_iface")
-    [ -z "$_hdr_cc" ] && _hdr_cc="—"
+    [ -z "$_hdr_cc" ] && _hdr_cc="-"
     printf ' | %-*s' "$_col_w" "${_hdr_iface} (${_hdr_cc})"
   done
   printf ' | %s\n' "Verdict"

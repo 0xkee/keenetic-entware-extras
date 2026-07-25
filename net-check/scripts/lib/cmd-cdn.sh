@@ -358,11 +358,7 @@ cmd_cdn_all() {
   load_zone_context
 
   # Warm geo cache for accurate CC in comparison table headers
-  if [ -z "$_GEO_EXT_IPS" ]; then
-    local _saved_exit="$_EXIT_CODE"
-    cmd_geo > /dev/null 2>&1 || true
-    _EXIT_CODE="$_saved_exit"
-  fi
+  ensure_geo_cache
 
   section_title "$_TITLE_CDN"
   if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
@@ -371,7 +367,7 @@ cmd_cdn_all() {
   cmp_header "Domain" "$ifaces"
 
   local json_results=""
-  local _cdn_total=0 _cdn_steering=0
+  local _cdn_total=0 _cdn_geo_steer=0 _cdn_same=0 _cdn_error=0
 
   # ── Phase 1: Read all domains + build extra curl flags ──
   local _cdn_domains=""
@@ -434,13 +430,39 @@ cmd_cdn_all() {
     rm -f "${_RUN_DIR}/cdncurl-${domain}" 2>/dev/null
 
     local _all_cc="" _error_reasons="" _warn_reasons="" json_paths=""
-    local _has_error=0 _has_warn=0
+    local _has_error=0 _has_warn=0 _active_reason=""
 
     # Determine active route device for this domain (for cell marker)
     local _active_route_dev=""
     local _resolved_ip=""
     _resolved_ip=$(_resolve_a_cached "$domain" 2>/dev/null) || _resolved_ip=""
     [ -n "$_resolved_ip" ] && _active_route_dev=$(route_dev_for_ip "$_resolved_ip")
+
+    # Pre-scan: pick recommended iface (best OK path by RTT)
+    local _recommended_dev="" _rec_best_rtt=999999 _rec_ok_n=0 _ri
+    for _ri in $ifaces; do
+      local _rpf="${_RUN_DIR}/cdnall-${domain}-${_ri}"
+      [ -f "$_rpf" ] || continue
+      local _r_ip _r_http _r_rtt_raw _r_rtt_ms
+      _r_ip=$(cut -f1 "$_rpf")
+      [ "$_r_ip" = "-" ] && continue
+      _r_http=$(cut -f5 "$_rpf")
+      # Accept any numeric HTTP code or REDIR (server responded);
+      # reject curl failure tags: TMOUT, TLS, ERR, RST, REFSD, etc.
+      case "$_r_http" in [1-9][0-9][0-9]|REDIR) ;; *) continue ;; esac
+      _rec_ok_n=$((_rec_ok_n + 1))
+      _r_rtt_raw=$(cut -f3 "$_rpf")
+      _r_rtt_ms=$(printf '%s' "$_r_rtt_raw" | sed 's/ms$//')
+      case "$_r_rtt_ms" in ''|'-') continue ;; esac
+      if [ "$_r_rtt_ms" -lt "$_rec_best_rtt" ] 2>/dev/null; then
+        _rec_best_rtt="$_r_rtt_ms"
+        _recommended_dev="$_ri"
+      fi
+    done
+    # No ★ when single iface (no choice to show)
+    local _n_ifc
+    _n_ifc=$(printf '%s' "$ifaces" | wc -w | tr -d ' ')
+    [ "$_n_ifc" -le 1 ] && _recommended_dev=""
 
     cmp_row_start "$domain"
 
@@ -468,6 +490,7 @@ cmd_cdn_all() {
           "") _error_reasons="no_resolve" ;;
           *) _error_reasons="${_error_reasons}, no_resolve" ;;
         esac
+        [ "$iface" = "$_active_route_dev" ] && _active_reason="no_resolve"
       fi
 
       # Classify HTTP: non-2xx numeric + REDIR → warn;
@@ -483,6 +506,7 @@ cmd_cdn_all() {
             "") _warn_reasons="$_long_w" ;;
             *) _warn_reasons="${_warn_reasons}, ${_long_w}" ;;
           esac
+          [ "$iface" = "$_active_route_dev" ] && _active_reason="$_long_w"
           ;;
         *)
           _has_error=1
@@ -493,12 +517,14 @@ cmd_cdn_all() {
             "") _error_reasons="$_long_e" ;;
             *) _error_reasons="${_error_reasons}, ${_long_e}" ;;
           esac
+          [ "$iface" = "$_active_route_dev" ] && _active_reason="$_long_e"
           ;;
       esac
 
-      local _is_active=0
+      local _is_active=0 _is_recommended=0
       [ "$iface" = "$_active_route_dev" ] && _is_active=1
-      cmp_cell "$(_cdn_format_cell "$cdn_cc" "$http_code" "$rtt" "$cdn_ip")" "$_is_active"
+      [ "$iface" = "$_recommended_dev" ] && _is_recommended=1
+      cmp_cell "$(_cdn_format_cell "$cdn_cc" "$http_code" "$rtt" "$cdn_ip")" "$_is_active" "$_is_recommended"
 
       local _itype
       _itype=$(iface_type "$iface")
@@ -519,9 +545,15 @@ cmd_cdn_all() {
     local _cc_count _verdict="same_edge" _vst="dim"
     _cc_count=$(printf '%s' "$_all_cc" | wc -w | tr -d ' ')
     _cdn_total=$((_cdn_total + 1))
-    if [ "$_cc_count" -gt 1 ]; then
+    if [ "$_has_error" = 1 ] && [ "$_cc_count" -le 1 ] && [ "$_cc_count" -eq 0 ] 2>/dev/null; then
+      _cdn_error=$((_cdn_error + 1))
+    elif [ "$_cc_count" -gt 1 ]; then
       _verdict="geo_steering"; _vst="ok"
-      _cdn_steering=$((_cdn_steering + 1))
+      _cdn_geo_steer=$((_cdn_geo_steer + 1))
+    elif [ "$_has_error" = 1 ]; then
+      _cdn_error=$((_cdn_error + 1))
+    else
+      _cdn_same=$((_cdn_same + 1))
     fi
     # Keep original verdict colors: same_edge=dim, geo_steering=ok
     # Reasons shown in dim (like HTTP Target Comparison)
@@ -535,15 +567,24 @@ cmd_cdn_all() {
       _reasons_text="$_warn_reasons"
     fi
     if [ -n "$_reasons_text" ]; then
-      _verdict_text=$(printf '%s %s %s(%s)%s' "$(color_status "$_vst" "$_verdict")" "$_cc_list" "$C_DIM" "$_reasons_text" "$C_RST")
+      # Prefix active route's failure reason with grey ► in display
+      local _display_reasons="$_reasons_text"
+      if [ -n "$_active_reason" ]; then
+        local _before="${_display_reasons%%"$_active_reason"*}"
+        local _after="${_display_reasons#*"$_active_reason"}"
+        _display_reasons="${_before}► ${_active_reason}${_after}"
+      fi
+      _verdict_text=$(printf '%s %s %s(%s)%s' "$(color_status "$_vst" "$_verdict")" "$_cc_list" "$C_DIM" "$_display_reasons" "$C_RST")
     else
       _verdict_text=$(printf '%s %s' "$(color_status "$_vst" "$_verdict")" "$_cc_list")
     fi
     cmp_row_end "$_verdict_text"
 
+    local _dom_ok=0
+    [ "$_has_error" = 0 ] && _dom_ok=0 || _dom_ok=1
     local _dj
     _dj=$(printf '{%s,%s,%s,"paths":[%s]}' \
-      "$(json_kv_bool "ok" 0)" \
+      "$(json_kv_bool "ok" "$_dom_ok")" \
       "$(json_kv "domain" "$domain")" \
       "$(json_kv "verdict" "$_verdict")" \
       "$json_paths")
@@ -554,10 +595,28 @@ cmd_cdn_all() {
     printf '[%s]\n' "$json_results"
   else
     if is_quiet; then
-      printf 'cdn-all: %s/%s domains geo-steering\n' "$_cdn_steering" "$_cdn_total"
+      if [ "$_cdn_error" -gt 0 ]; then
+        printf 'cdn-all: %s/%s geo-steering, %s same edge, %s failed\n' \
+          "$_cdn_geo_steer" "$_cdn_total" "$_cdn_same" "$_cdn_error"
+      else
+        printf 'cdn-all: %s/%s geo-steering, %s same edge\n' \
+          "$_cdn_geo_steer" "$_cdn_total" "$_cdn_same"
+      fi
     else
-      summary_line "$_cdn_steering" "$_cdn_total" "domains geo-steering"
+      if [ "$_cdn_error" -gt 0 ]; then
+        printf '→ %s/%s domains geo-steering, %s same edge, %s%s failed%s\n' \
+          "$_cdn_geo_steer" "$_cdn_total" "$_cdn_same" \
+          "$C_RED" "$_cdn_error" "$C_RST"
+      else
+        printf '→ %s/%s domains geo-steering, %s same edge %s\n' \
+          "$_cdn_geo_steer" "$_cdn_total" "$_cdn_same" \
+          "$(status_mark ok)"
+      fi
     fi
+  fi
+  # Only actual errors (DNS fail / HTTP error) affect exit code; same_edge is normal
+  if [ "$_cdn_error" -gt 0 ]; then
+    update_exit_code "$((_cdn_total - _cdn_error))" "$_cdn_total"
   fi
   return 0
 }

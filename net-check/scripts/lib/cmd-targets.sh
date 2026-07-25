@@ -246,11 +246,7 @@ cmd_compare() {
   load_zone_context
 
   # Warm geo cache for accurate CC in comparison table headers
-  if [ -z "$_GEO_EXT_IPS" ]; then
-    local _saved_exit="$_EXIT_CODE"
-    cmd_geo > /dev/null 2>&1 || true
-    _EXIT_CODE="$_saved_exit"
-  fi
+  ensure_geo_cache
 
   # Check if we need body content
   local need_body=0
@@ -366,13 +362,38 @@ cmd_compare() {
     tbl_group_sep "${_tgt_category:-global}"
 
     local verdict_input="" json_paths=""
-    local _target_all_ok=1 _fail_reasons=""
+    local _target_all_ok=1 _fail_reasons="" _active_reason=""
 
     # Determine active route device for this domain (for cell marker)
     local _active_route_dev=""
     local _resolved_ip=""
     _resolved_ip=$(_resolve_a_cached "$host" 2>/dev/null) || _resolved_ip=""
     [ -n "$_resolved_ip" ] && _active_route_dev=$(route_dev_for_ip "$_resolved_ip")
+
+    # Pre-scan: pick recommended iface (best OK path by TTFB)
+    local _recommended_dev="" _rec_best_ttfb=999999 _rec_ok_n=0 _ri
+    for _ri in $ifaces; do
+      local _rpf="${_RUN_DIR}/par-${host}-${_ri}"
+      [ -f "$_rpf" ] || continue
+      local _r_exit _r_out _r_code _r_ttfb_raw _r_ttfb_ms
+      _r_exit=$(sed -n '1p' "$_rpf")
+      [ "$_r_exit" != "0" ] && continue
+      _r_out=$(sed -n '3p' "$_rpf")
+      _r_code=$(printf '%s' "$_r_out" | sed -n 's/.*"code":\([0-9]*\).*/\1/p')
+      _r_code="${_r_code:-0}"
+      case "$_r_code" in [23][0-9][0-9]|403) ;; *) continue ;; esac
+      _rec_ok_n=$((_rec_ok_n + 1))
+      _r_ttfb_raw=$(printf '%s' "$_r_out" | sed -n 's/.*"time_starttfb":\([0-9.]*\).*/\1/p')
+      _r_ttfb_ms=$(to_ms "${_r_ttfb_raw:-0}")
+      if [ "$_r_ttfb_ms" -lt "$_rec_best_ttfb" ]; then
+        _rec_best_ttfb="$_r_ttfb_ms"
+        _recommended_dev="$_ri"
+      fi
+    done
+    # No ★ when single iface (no choice to show)
+    local _n_ifc
+    _n_ifc=$(printf '%s' "$ifaces" | wc -w | tr -d ' ')
+    [ "$_n_ifc" -le 1 ] && _recommended_dev=""
 
     cmp_row_start "$host"
 
@@ -429,12 +450,15 @@ cmd_compare() {
           "") _fail_reasons="$reason" ;;
           *) _fail_reasons="${_fail_reasons}, ${reason}" ;;
         esac
+        # Track active route failure for ► marker in verdict
+        [ "$iface" = "$_active_route_dev" ] && _active_reason="$reason"
       elif [ -n "$_warning" ]; then
         case "$_fail_reasons" in
           *"$_warning"*) ;;
           "") _fail_reasons="$_warning" ;;
           *) _fail_reasons="${_fail_reasons}, ${_warning}" ;;
         esac
+        [ "$iface" = "$_active_route_dev" ] && _active_reason="$_warning"
       fi
 
       verdict_input="${verdict_input}${iface}:${path_ok}:${ttfb_ms}
@@ -494,9 +518,10 @@ cmd_compare() {
           _cell="${_cell} ${C_GREEN}▲${C_RST}"
         fi
 
-        local _is_active=0
+        local _is_active=0 _is_recommended=0
         [ "$iface" = "$_active_route_dev" ] && _is_active=1
-        cmp_cell "$_cell" "$_is_active"
+        [ "$iface" = "$_recommended_dev" ] && _is_recommended=1
+        cmp_cell "$_cell" "$_is_active" "$_is_recommended"
       fi
     done
 
@@ -556,7 +581,14 @@ cmd_compare() {
 
     local _verdict_text
     if [ -n "$_fail_reasons" ]; then
-      _verdict_text=$(printf '%s %s(%s)%s%s' "$(color_status "$_vst" "$verdict")" "$C_DIM" "$_fail_reasons" "$C_RST" "$_route_info")
+      # Prefix active route's failure reason with grey ► in display
+      local _display_reasons="$_fail_reasons"
+      if [ -n "$_active_reason" ]; then
+        local _before="${_display_reasons%%"$_active_reason"*}"
+        local _after="${_display_reasons#*"$_active_reason"}"
+        _display_reasons="${_before}► ${_active_reason}${_after}"
+      fi
+      _verdict_text=$(printf '%s %s(%s)%s%s' "$(color_status "$_vst" "$verdict")" "$C_DIM" "$_display_reasons" "$C_RST" "$_route_info")
     else
       _verdict_text=$(printf '%s%s' "$(color_status "$_vst" "$verdict")" "$_route_info")
     fi

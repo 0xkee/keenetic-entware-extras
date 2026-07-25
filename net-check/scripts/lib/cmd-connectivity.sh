@@ -28,9 +28,9 @@ cmd_connectivity() {
     printf 'TCP connect + TLS handshake timing per WAN path. Detects unreachable paths.\n\n'
   fi
   if [ "$has_traceroute" = 1 ]; then
-    tbl_header "Path:14" "CC:4" "Hops:5" "MTU (OH, Enc):19" "Loss:8" "DNS ms:9" "TCP ms:9" "TLS ms:9" "Total:9" "Status"
+    tbl_header "Path:14" "CC:4" "Hops:5" "MTU (OH, Enc):19" "DNS ms:9" "TCP ms:9" "TLS ms:9" "Total:9" "Loss:8" "Jit ms:7" "Status"
   else
-    tbl_header "Path:14" "CC:4" "MTU (OH, Enc):19" "Loss:8" "DNS ms:9" "TCP ms:9" "TLS ms:9" "Total:9" "Status"
+    tbl_header "Path:14" "CC:4" "MTU (OH, Enc):19" "DNS ms:9" "TCP ms:9" "TLS ms:9" "Total:9" "Loss:8" "Jit ms:7" "Status"
   fi
 
   # Pre-warm SmartDNS cache: resolve connectivity host once before parallel curls.
@@ -94,7 +94,7 @@ cmd_connectivity() {
         _pl="—"; _pj="—"
         if [ -n "$_po" ]; then
           _pl=$(printf '%s' "$_po" | sed -n 's/.* \([0-9]*\)% packet loss.*/\1%/p')
-          _pj=$(printf '%s' "$_po" | sed -n 's|.*/\([0-9.]*\) ms|\1ms|p')
+          _pj=$(printf '%s' "$_po" | sed -n 's|.*/\([0-9.]*\) ms|\1|p')
         fi
         printf '%s\t%s' "${_pl:-—}" "${_pj:-—}" > "${_RUN_DIR}/conn-pl-${iface}"
       ) &
@@ -223,23 +223,35 @@ cmd_connectivity() {
         —)    _mtu_st="" ;;
         *)    _mtu_st="warn" ;;
       esac
+      # Jitter color status
+      local _jit_st=""
+      case "$jitter" in
+        —)                              _jit_st="" ;;
+        [0-9]|[0-9].[0-9]*)            _jit_st="ok" ;;
+        [1-9][0-9]|[1-9][0-9].[0-9]*)  _jit_st="warn" ;;
+        *)                              _jit_st="warn" ;;
+      esac
 
       local _mtu_display="${mtu}${mtu_hint}"
       if [ "$has_traceroute" = 1 ]; then
         tbl_row "$iface" "$cc" \
-          "$hops" "$(tbl_cell 19 "$_mtu_display" "$_mtu_st")" "$(tbl_cell 8 "$loss" "$_loss_st")" \
+          "$hops" "$(tbl_cell 19 "$_mtu_display" "$_mtu_st")" \
           "$(tbl_cell 9 "$dns_ms" "$_st")" \
           "$(tbl_cell 9 "$tcp_ms" "$_st")" \
           "$(tbl_cell 9 "$tls_ms" "$_st")" \
           "$(tbl_cell 9 "$total_ms" "$_st")" \
+          "$(tbl_cell 8 "$loss" "$_loss_st")" \
+          "$(tbl_cell 7 "$jitter" "$_jit_st")" \
           "$(status_mark "$_st")"
       else
         tbl_row "$iface" "$cc" \
-          "$(tbl_cell 19 "$_mtu_display" "$_mtu_st")" "$(tbl_cell 8 "$loss" "$_loss_st")" \
+          "$(tbl_cell 19 "$_mtu_display" "$_mtu_st")" \
           "$(tbl_cell 9 "$dns_ms" "$_st")" \
           "$(tbl_cell 9 "$tcp_ms" "$_st")" \
           "$(tbl_cell 9 "$tls_ms" "$_st")" \
           "$(tbl_cell 9 "$total_ms" "$_st")" \
+          "$(tbl_cell 8 "$loss" "$_loss_st")" \
+          "$(tbl_cell 7 "$jitter" "$_jit_st")" \
           "$(status_mark "$_st")"
       fi
     fi

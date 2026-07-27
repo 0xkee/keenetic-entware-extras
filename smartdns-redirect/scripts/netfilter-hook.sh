@@ -17,6 +17,9 @@ SCRIPT="$HOOK_DIR/dns-redirect.sh"
 . /opt/keenetic-entware-extras/lib/common.sh
 is_service_enabled "S39smartdns-redirect" || exit 0
 
+# Guard: exit if SmartDNS disabled (S38 renamed by S37smartdns-conf disable)
+[ -x /opt/etc/init.d/S38smartdns ] || exit 0
+
 # Skip silently if target script missing / not executable
 [ -x "$SCRIPT" ] || exit 0
 

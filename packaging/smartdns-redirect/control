@@ -1,5 +1,5 @@
 Package: smartdns-redirect
-Version: 0.4.0
+Version: 0.4.2
 Architecture: all
 Maintainer: 0xkee
 Depends: keenetic-entware-extras, iptables

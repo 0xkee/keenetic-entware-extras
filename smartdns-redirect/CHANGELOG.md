@@ -5,6 +5,28 @@ All notable changes to `smartdns-redirect` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.4.2] - 2026-07-27
+
+### Fixed
+- **`status.sh --json` parent-disabled state**: when parent service (smartdns-geo-conf)
+  is disabled, JSON now returns `enabled:false` — prevents webui showing 🔴 "Failed"
+  for a non-failure state
+
+### Changed
+- **`status.sh --json` parent-disabled details**: human-readable `depends_on` and
+  `action` fields (was: raw `parent_disabled: "smartdns-geo-conf"` / CLI command)
+- **`status.sh --json` checks when disabled**: runtime checks (`running`, `upstream`,
+  `rules`) now return `"skip"` instead of `"fail"` when self-disabled or parent-disabled
+
+## [0.4.1] - 2026-07-27
+
+### Added
+- `watchdog.sh`: S38 existence guard — exits early when SmartDNS is disabled
+  (S38 renamed by `S37smartdns-conf disable`), prevents watchdog from fighting
+  intentional shutdown
+- `netfilter-hook.sh`: same S38 existence guard — no iptables rule restoration
+  when SmartDNS is intentionally disabled
+
 ## [0.4.0] - 2026-07-27
 
 ### Added

@@ -136,7 +136,7 @@ function setDetails(id, data) {
     if (!el) return;
     if (!data.details) { el.innerHTML = ""; return; }
 
-    var entries = EW.parseDetails(data.details, { isRunning: data.running, serviceId: id });
+    var entries = EW.parseDetails(data.details, { isRunning: data.running, serviceId: id, checks: data.checks });
     var html = "";
     var summaryKeys = SUMMARY_KEYS[id] || [];
     for (var i = 0; i < entries.length; i++) {
@@ -402,8 +402,9 @@ function fetchStatus(url, id, skipLoading) {
                     setStatus(id, "stopped", "Disabled");
                     updateCardAccent(id, "stopped");
                 } else if (data.running) {
-                    // Check if any detail field is false → caution badge
-                    var hasFail = EW.hasFailField(data.details);
+                    // Check badges: prefer checks map, fallback to detail boolean scan
+                    var cs = EW.checksSummary(data.checks);
+                    var hasFail = cs.hasFail || cs.hasWarn || EW.hasFailField(data.details);
                     var badgeState = hasFail ? "caution" : "ok";
                     var uptimeSecs = data.details && data.details.uptime;
                     if (uptimeSecs) {

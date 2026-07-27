@@ -556,14 +556,15 @@ local config_registry = {
         defaults = base .. "/smartdns-geo-conf/config/defaults.conf",
         config   = base .. "/smartdns-geo-conf/config/config.conf",
         restart  = "/opt/etc/init.d/S37smartdns-conf restart 2>&1",
-        keys     = { "DNS_ZONE", "ZONE_DNS_PROVIDER", "OTHER_DNS_PROVIDER",
-                     "ZONE_DNS_INTERFACE", "OTHER_DNS_INTERFACES", "SMARTDNS_PORT" }
+        keys     = { "DNS_ZONE", "ZONE_DNS_PROVIDER", "ZONE_DNS_INTERFACE",
+                     "ZONE_DNS_STRICT", "OTHER_DNS_PROVIDER", "OTHER_DNS_INTERFACES",
+                     "OTHER_DNS_STRICT", "SMARTDNS_PORT" }
     },
     ["smartdns-redirect"] = {
         defaults = base .. "/smartdns-redirect/config/defaults.conf",
         config   = base .. "/smartdns-redirect/config/config.conf",
         restart  = base .. "/smartdns-redirect/init.d/S39smartdns-redirect restart 2>&1",
-        keys     = { "UPSTREAM_PORT", "INTERFACES", "ENABLE_IPV6", "WATCHDOG_SERVICE", "PRESERVE_FILTER_PROFILES" }
+        keys     = { "UPSTREAM_PORT", "INTERFACES", "WATCHDOG_SERVICE", "PRESERVE_FILTER_PROFILES" }
     },
     ["webui"] = {
         defaults = base .. "/webui/config/defaults.conf",

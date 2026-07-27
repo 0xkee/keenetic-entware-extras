@@ -775,22 +775,6 @@
     }
 
     /**
-     * Determine fail/warn from checks map.
-     * @param {Object} checks - checks map {key: "ok"|"warn"|"fail"}
-     * @returns {{hasFail: boolean, hasWarn: boolean}}
-     */
-    function checksSummary(checks) {
-        var hasFail = false, hasWarn = false;
-        if (!checks) return { hasFail: false, hasWarn: false };
-        var keys = Object.keys(checks);
-        for (var i = 0; i < keys.length; i++) {
-            if (checks[keys[i]] === 'fail') hasFail = true;
-            else if (checks[keys[i]] === 'warn') hasWarn = true;
-        }
-        return { hasFail: hasFail, hasWarn: hasWarn };
-    }
-
-    /**
      * Build status chip text from structured data.
      * Returns "caution" state if running but any check is fail/warn.
      * Uses data.checks if available, falls back to detail field === false.
@@ -817,7 +801,7 @@
         // Determine chip state from checks or fallback
         if (data.running) {
             if (data.checks) {
-                var cs = checksSummary(data.checks);
+                var cs = EW.checksSummary(data.checks);
                 if (cs.hasFail || cs.hasWarn) {
                     state = 'caution';
                 }

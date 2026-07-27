@@ -7,7 +7,7 @@ Recommends: netcat, openssl-util
 Description: Network connectivity diagnostics and degradation control.
  End-to-end reachability verification across WAN interfaces,
  MITM/DPI anomaly detection, CDN geo-steering analysis,
- DNS routing alignment, ISP blocking detection, path quality comparison.
- Measurements per ITU-T Y.1540/Y.1541 methodology.
+ DNS routing alignment, ISP filtering detection, path quality comparison
+ (delay, jitter, loss metrics per WAN path).
 Section: net
 Priority: optional

@@ -213,9 +213,9 @@ EOF
             elif _is_bogon "$_iip"; then _iblk=1
             fi
           fi
-          _rcc=""
-          [ -n "$_rip" ] && _rcc=$(geolocate_ip "$_rip" 2>/dev/null) || _rcc="??"
-          printf '%s\t%s\t%s\t%s\n' "${_rip:-}" "$_rcc" "${_iip:-}" "$_iblk" \
+          # NOTE: geolocate_ip moved to sequential collection phase
+          # to avoid API rate-limits from parallel subshells.
+          printf '%s\t%s\t%s\n' "${_rip:-}" "${_iip:-}" "$_iblk" \
             > "${_RUN_DIR}/dns-${_bd}"
         ) &
       done
@@ -238,9 +238,7 @@ EOF
           elif _is_bogon "$_iip"; then _iblk=1
           fi
         fi
-        _rcc=""
-        [ -n "$_rip" ] && _rcc=$(geolocate_ip "$_rip" 2>/dev/null) || _rcc="??"
-        printf '%s\t%s\t%s\t%s\n' "${_rip:-}" "$_rcc" "${_iip:-}" "$_iblk" \
+        printf '%s\t%s\t%s\n' "${_rip:-}" "${_iip:-}" "$_iblk" \
           > "${_RUN_DIR}/dns-${_bd}"
       ) &
     done
@@ -260,16 +258,24 @@ EOF
 
     local resolved_ip="" resolved_cc="" dns_type=""
     local status_val="" status_label=""
-    local _isp_ip="" _isp_blocked=0
+    local _isp_ip="" _isp_blocked=0 _cc_cached=0
     _dns_total=$((_dns_total + 1))
 
     local _pf="${_RUN_DIR}/dns-${domain}"
     if [ -f "$_pf" ]; then
       resolved_ip=$(cut -f1 "$_pf")
-      resolved_cc=$(cut -f2 "$_pf")
-      _isp_ip=$(cut -f3 "$_pf")
-      _isp_blocked=$(cut -f4 "$_pf")
+      _isp_ip=$(cut -f2 "$_pf")
+      _isp_blocked=$(cut -f3 "$_pf")
       rm -f "$_pf"
+    fi
+
+    # Sequential geolocate (moved out of parallel to avoid API rate-limits;
+    # also maximises cache hits when multiple domains resolve to same IP).
+    if [ -n "$resolved_ip" ]; then
+      if is_cache_fresh "$(ipgeo_cache_file "$resolved_ip")" "${IPGEO_CACHE_TTL:-86400}"; then
+        _cc_cached=1
+      fi
+      resolved_cc=$(geolocate_ip "$resolved_ip" 2>/dev/null) || resolved_cc="??"
     fi
 
     if [ -n "$resolved_ip" ]; then
@@ -350,11 +356,13 @@ EOF
         json_results="${json_results},${ej}"
       fi
     else
-      # Check DNS cache hit marker from parallel phase
+      # Cache marker: DNS resolution cache hit (60s) or GeoIP cache hit (24h)
       local _dns_cm=""
       if [ -f "${_RUN_DIR}/dns-hit-${domain}" ]; then
         _dns_cm=" $(cache_mark)"
         rm -f "${_RUN_DIR}/dns-hit-${domain}"
+      elif [ "$_cc_cached" = 1 ]; then
+        _dns_cm=" $(cache_mark)"
       fi
       tbl_row "$domain" \
         "$(tbl_cell 18 "$resolved_ip" "$status_val")" \
@@ -474,10 +482,13 @@ _dns_check_single() {
   fi
 
   # ── Resolve via system DNS (cached) ──
-  local resolved_ip resolved_cc
+  local resolved_ip resolved_cc _cc_cached=0
   resolved_ip=$(_resolve_a_cached "$domain") || resolved_ip=""
   resolved_cc=""
   if [ -n "$resolved_ip" ]; then
+    if is_cache_fresh "$(ipgeo_cache_file "$resolved_ip")" "${IPGEO_CACHE_TTL:-86400}"; then
+      _cc_cached=1
+    fi
     resolved_cc=$(geolocate_ip "$resolved_ip" 2>/dev/null) || resolved_cc="??"
   fi
 
@@ -568,6 +579,8 @@ _dns_check_single() {
       if [ -f "${_RUN_DIR:-/tmp}/dns-hit-${domain}" ]; then
         _dns_cm=" $(cache_mark)"
         rm -f "${_RUN_DIR:-/tmp}/dns-hit-${domain}"
+      elif [ "$_cc_cached" = 1 ]; then
+        _dns_cm=" $(cache_mark)"
       fi
       tbl_row "$domain" \
         "$(tbl_cell 18 "$resolved_ip" "$status_val")" \

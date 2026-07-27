@@ -1,6 +1,8 @@
 #!/opt/bin/sh
 # smartdns-redirect — DNAT LAN DNS (:53) to local resolver (e.g. SmartDNS :6053).
 # Idempotent: repeated start does not duplicate rules (iptables -C guard).
+# IPv6: fully automatic — DNAT when SmartDNS has IPv6 bind, REJECT otherwise
+#       (instant Happy Eyeballs fallback to IPv4 DNAT).
 # Subcommands: start | stop | reload | restart
 # Config:      $SCRIPT_DIR/../config/defaults.conf (sourced)
 # shellcheck disable=SC3043  # 'local' supported by ash/busybox sh
@@ -12,6 +14,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 _CONFIG_DIR="$(cd "$SCRIPT_DIR/../config" && pwd)"
 . "$_CONFIG_DIR/defaults.conf"
 [ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
+
+# --- backwards compatibility: ignore legacy ENABLE_IPV6 ---
+if [ "${ENABLE_IPV6:-}" = "yes" ]; then
+    log "ENABLE_IPV6 is deprecated and ignored. IPv6 is now automatic."
+fi
 
 # --- config validation ---
 case "${UPSTREAM_PORT:-}" in
@@ -25,7 +32,6 @@ if [ "$UPSTREAM_PORT" -lt 1 ] || [ "$UPSTREAM_PORT" -gt 65535 ]; then
     exit 1
 fi
 : "${INTERFACES:=}"
-: "${ENABLE_IPV6:=no}"
 
 require_cmd iptables
 
@@ -39,11 +45,23 @@ if [ -z "$ROUTER_IP" ]; then
     exit 1
 fi
 
+# IPv6 auto-detection (set ROUTER_IP6 for use by helpers)
 ROUTER_IP6=""
-if [ "$ENABLE_IPV6" = "yes" ] && command -v ip6tables >/dev/null 2>&1; then
-    ROUTER_IP6=$(ip -6 addr show br0 2>/dev/null \
-        | awk '/inet6.*global/ {split($2, a, "/"); print a[1]; exit}')
+if command -v ip6tables >/dev/null 2>&1; then
+    ROUTER_IP6="$(detect_router_ip6)"
 fi
+
+# --- IPv6 auto-detection logic ---
+
+# Check if we can DNAT IPv6 DNS to SmartDNS.
+# Conditions: ip6tables available + global IPv6 on br0 + SmartDNS IPv6 bind.
+can_dnat_ipv6() {
+    command -v ip6tables >/dev/null 2>&1 || return 1
+    [ -n "$ROUTER_IP6" ] || return 1
+    # SmartDNS IPv6 bind (managed by smartdns-geo-conf postinst)
+    grep -q 'bind \[' /opt/etc/smartdns/bind-addrs.conf 2>/dev/null || return 1
+    return 0
+}
 
 # --- rule manipulation helpers (IPv4) ---
 
@@ -60,42 +78,67 @@ add_rule_if_missing() {
     log "added: -i $iface -p $proto --dport 53 -> DNAT ${ROUTER_IP}:${UPSTREAM_PORT}"
 }
 
-# --- rule manipulation helpers (IPv6, when ENABLE_IPV6=yes) ---
+# --- rule manipulation helpers (IPv6 DNAT mode) ---
 
-add_rule_if_missing_v6() {
+# Idempotent IPv6 DNAT rule. Used when SmartDNS listens on IPv6.
+# Args: $1 - interface, $2 - protocol (udp|tcp)
+add_v6_dnat_rule() {
     local iface="$1" proto="$2"
-    if [ -z "$ROUTER_IP6" ]; then
-        return 0
-    fi
     if ip6tables -t nat -C PREROUTING -i "$iface" -p "$proto" --dport 53 \
             -j DNAT --to-destination "[${ROUTER_IP6}]:${UPSTREAM_PORT}" 2>/dev/null; then
         return 0
     fi
     ip6tables -t nat -I PREROUTING 1 -i "$iface" -p "$proto" --dport 53 \
         -j DNAT --to-destination "[${ROUTER_IP6}]:${UPSTREAM_PORT}"
-    log "added (v6): -i $iface -p $proto --dport 53 -> DNAT [${ROUTER_IP6}]:${UPSTREAM_PORT}"
+    log "added (v6 dnat): -i $iface -p $proto --dport 53 -> DNAT [${ROUTER_IP6}]:${UPSTREAM_PORT}"
 }
 
-# True when IPv6 redirect is requested AND ip6tables is available.
-ipv6_enabled() {
-    [ "$ENABLE_IPV6" = "yes" ] || return 1
-    if ! command -v ip6tables >/dev/null 2>&1; then
-        log "ENABLE_IPV6=yes but ip6tables not available, skipping IPv6"
-        return 1
+# --- rule manipulation helpers (IPv6 REJECT mode) ---
+
+# Idempotent IPv6 INPUT REJECT rule. Blocks IPv6 DNS to router → client falls
+# back to IPv4 via Happy Eyeballs (instant, <50ms).
+# Args: $1 - interface, $2 - protocol (udp|tcp)
+add_v6_reject_input() {
+    local iface="$1" proto="$2"
+    if ip6tables -C INPUT -i "$iface" -p "$proto" --dport 53 \
+            -j REJECT --reject-with icmp6-port-unreachable 2>/dev/null; then
+        return 0
     fi
-    return 0
+    ip6tables -I INPUT 1 -i "$iface" -p "$proto" --dport 53 \
+        -j REJECT --reject-with icmp6-port-unreachable
+    log "added (v6 reject): -i $iface -p $proto --dport 53 -> REJECT"
 }
+
+# --- add/remove orchestration ---
 
 add_rules() {
     local iface proto
+
+    # IPv4 DNAT (unchanged)
     for iface in $INTERFACES; do
         for proto in udp tcp; do
             add_rule_if_missing "$iface" "$proto"
-            if ipv6_enabled; then
-                add_rule_if_missing_v6 "$iface" "$proto"
-            fi
         done
     done
+
+    # IPv6 — fully automatic
+    if command -v ip6tables >/dev/null 2>&1; then
+        if can_dnat_ipv6; then
+            for iface in $INTERFACES; do
+                for proto in udp tcp; do
+                    add_v6_dnat_rule "$iface" "$proto"
+                done
+            done
+            log "IPv6 DNS: DNAT to [${ROUTER_IP6}]:${UPSTREAM_PORT}"
+        else
+            for iface in $INTERFACES; do
+                for proto in udp tcp; do
+                    add_v6_reject_input "$iface" "$proto"
+                done
+            done
+            log "IPv6 DNS: REJECT on INPUT (no IPv6 DNAT target)"
+        fi
+    fi
 }
 
 # Remove ALL our DNS DNAT/REDIRECT rules for dport 53 (any port, any iface).
@@ -115,13 +158,24 @@ del_all_rules() {
         done
     # IPv6 (always try if ip6tables available — defensive cleanup)
     if command -v ip6tables >/dev/null 2>&1; then
+        # IPv6 nat PREROUTING (DNAT mode)
         ip6tables -t nat -S PREROUTING 2>/dev/null \
             | grep -E '^-A PREROUTING .*--dport 53 .*-j (DNAT|REDIRECT) ' \
             | while IFS= read -r line; do
                 rest=${line#-A PREROUTING }
                 # shellcheck disable=SC2086
                 if ip6tables -t nat -D PREROUTING $rest 2>/dev/null; then
-                    log "removed (v6): $rest"
+                    log "removed (v6 nat): $rest"
+                fi
+            done
+        # IPv6 filter INPUT (REJECT mode)
+        ip6tables -S INPUT 2>/dev/null \
+            | grep -E '^-A INPUT .*--dport 53 .*-j REJECT' \
+            | while IFS= read -r line; do
+                rest=${line#-A INPUT }
+                # shellcheck disable=SC2086
+                if ip6tables -D INPUT $rest 2>/dev/null; then
+                    log "removed (v6 input): $rest"
                 fi
             done
     fi

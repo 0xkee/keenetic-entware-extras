@@ -5,6 +5,18 @@ All notable changes to `smartdns-geo-conf` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.10.13] — 2026-07-27
+
+### Added
+- `S37smartdns-conf`: `do_bind_addrs()` — regenerates `bind-addrs.conf` (IPv4 +
+  IPv6) on every start/restart/enable/disable. Auto-detects global IPv6 on br0
+  and adds IPv6 bind directives for SmartDNS — enables `smartdns-redirect`
+  IPv6 DNAT mode
+
+### Changed
+- `postinst`: removed inline `bind-addrs.conf` generation — now handled by
+  S37 `do_bind_addrs()` on restart (called from postinst step 6)
+
 ## [0.10.12] — 2026-07-21
 
 ### Fixed

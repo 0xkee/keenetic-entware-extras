@@ -139,11 +139,15 @@ geolocate_ip() {
 
     if [ "$http_code" = "429" ]; then
       if [ -n "$_prov" ]; then
+        # Only warn if we are the first process to discover the rate limit;
+        # parallel subshells may all hit 429 simultaneously — suppress dupes.
+        if [ ! -f "${_RUN_DIR}/.api-blocked-${_prov}" ]; then
+          case "$_prov" in
+            ipapi)  printf '⚠️  ip-api.com rate-limited (429) — switching to fallback\n' >&2 ;;
+            ipinfo) printf '⚠️  ipinfo.io rate-limited (429)\n' >&2 ;;
+          esac
+        fi
         _geoip_mark_blocked "$_prov"
-        case "$_prov" in
-          ipapi)  printf '⚠️  ip-api.com rate-limited (429) — switching to fallback\n' >&2 ;;
-          ipinfo) printf '⚠️  ipinfo.io rate-limited (429)\n' >&2 ;;
-        esac
       fi
       rm -f "$tmp_body" 2>/dev/null
       continue

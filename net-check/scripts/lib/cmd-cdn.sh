@@ -62,10 +62,8 @@ _cdn_probe_iface() {
       +short +tries=1 +time="$DNS_TIMEOUT" 2>/dev/null \
       | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
     _cdn_ip="${_cdn_ip:--}"
-    if [ "$_cdn_ip" != "-" ] && is_cache_fresh "$(ipgeo_cache_file "$_cdn_ip")" "${IPGEO_CACHE_TTL:-86400}"; then
-      _cc_cached=1
-    fi
-    _cdn_cc=$(geolocate_ip "$_cdn_ip")
+    # NOTE: geolocate_ip moved to sequential collection phase (avoids API
+    # rate-limit when many parallel subshells call geoIP simultaneously).
     if [ "$_cdn_ip" != "-" ]; then
       local _ping_out
       _ping_out=$(ping -c 1 -W "$PROBE_TIMEOUT" -I "$_iface" "$_cdn_ip" 2>/dev/null | \
@@ -182,13 +180,19 @@ cmd_cdn() {
     local cdn_ip="-" cdn_cc="??" rtt="-" ext_ip="-" http_code="-" http_size="-" cc_cached="0"
     if [ -f "$_par_f" ]; then
       cdn_ip=$(cut -f1 "$_par_f")
-      cdn_cc=$(cut -f2 "$_par_f")
       rtt=$(cut -f3 "$_par_f")
       ext_ip=$(cut -f4 "$_par_f")
       http_code=$(cut -f5 "$_par_f")
       http_size=$(cut -f6 "$_par_f")
-      cc_cached=$(cut -f7 "$_par_f")
       rm -f "$_par_f"
+    fi
+    # Sequential geolocate (moved out of parallel _cdn_probe_iface to avoid
+    # API rate-limits; also maximises cache hits for duplicate CDN edge IPs).
+    if [ "$cdn_ip" != "-" ]; then
+      if is_cache_fresh "$(ipgeo_cache_file "$cdn_ip")" "${IPGEO_CACHE_TTL:-86400}"; then
+        cc_cached=1
+      fi
+      cdn_cc=$(geolocate_ip "$cdn_ip")
     fi
 
     local itype cc
@@ -472,10 +476,17 @@ cmd_cdn_all() {
       local cdn_ip="-" cdn_cc="??" rtt="-" ext_ip="-"
       local http_code="-" http_size="-" cc_cached="0"
       if [ -f "$_pf" ]; then
-        cdn_ip=$(cut -f1 "$_pf"); cdn_cc=$(cut -f2 "$_pf")
+        cdn_ip=$(cut -f1 "$_pf")
         rtt=$(cut -f3 "$_pf"); ext_ip=$(cut -f4 "$_pf")
         http_code=$(cut -f5 "$_pf"); http_size=$(cut -f6 "$_pf")
-        cc_cached=$(cut -f7 "$_pf"); rm -f "$_pf"
+        rm -f "$_pf"
+      fi
+      # Sequential geolocate (moved out of parallel probe — same reason as cmd_cdn)
+      if [ "$cdn_ip" != "-" ]; then
+        if is_cache_fresh "$(ipgeo_cache_file "$cdn_ip")" "${IPGEO_CACHE_TTL:-86400}"; then
+          cc_cached=1
+        fi
+        cdn_cc=$(geolocate_ip "$cdn_ip")
       fi
 
       case " $_all_cc " in

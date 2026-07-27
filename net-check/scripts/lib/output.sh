@@ -10,7 +10,8 @@
 _TITLE_GEO="Egress Point Verification (Layers 3+7)"
 _TITLE_CONN="Basic Connectivity (Layers 3–7)"
 _TITLE_IPV6="IPv6 Leak Test (Layers 3+7)"
-_TITLE_DNS="DNS Leak & ISP Filtering (Layer 7)"
+_TITLE_DNS="DNS Resolution & ISP Filtering (Layer 7)"
+_TITLE_DNS_LEAK="DNS Leak Test (Layer 7)"
 _TITLE_COMPARE="HTTP Target Comparison (Layers 4–7)"
 _TITLE_CDN="CDN Geo-Steering Analysis (Layers 3+7)"
 _TITLE_TLS="TLS Certificate Check (Layers 5–7)"
@@ -222,7 +223,8 @@ Per-interface diagnostics:
 
 Bulk checks (all targets from config):
   comp             HTTP reachability table across WAN paths + diff (L4–7)
-  dns              DNS leak & ISP filtering detection (L7)
+  dns              DNS resolution & ISP filtering detection (L7)
+  dns-leak         DNS leak test — resolver chain discovery (L7)
   cdn              CDN edge geo-steering for cdn-domains.conf (L3+7)
   tls              TLS certificate MITM detection (L5–7)
 
@@ -230,7 +232,7 @@ Single/multi target:
   check <url> ...  Deep check: HTTP + DNS + TLS + CDN (L3–7)
 
 Full suite:
-  all              Run everything: geo → conn → ipv6 → dns → comp → cdn → tls → speed
+  all              Run everything: geo → conn → ipv6 → dns → dns-leak → comp → cdn → tls → speed
 
 Options:
   --json           JSON output

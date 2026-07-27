@@ -103,6 +103,7 @@ _dispatch() {
     conn)    cmd_connectivity ;;
     ipv6)    cmd_ipv6_leak ;;
     dns)     cmd_dns ;;
+    dns-leak) cmd_dns_leak ;;
     comp)    cmd_compare ;;
     cdn)     cmd_cdn_all ;;
     tls)     cmd_tls_check_targets ;;
@@ -135,6 +136,7 @@ _spinner_msg() {
     geo)     printf 'Checking egress points...' ;;
     conn)    printf 'Testing TCP/TLS connectivity...' ;;
     dns)     printf 'Checking DNS routing...' ;;
+    dns-leak) printf 'Checking DNS resolvers...' ;;
     ipv6)    printf 'Checking IPv6 leaks...' ;;
     comp)    printf 'Checking HTTP targets...' ;;
     cdn)     printf 'Analyzing CDN steering...' ;;

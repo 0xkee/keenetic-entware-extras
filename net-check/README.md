@@ -9,7 +9,7 @@ DNS leak testing, path quality comparison.
 ## Usage
 
 ```sh
-# Full diagnostics (8 steps: geo → conn → ipv6 → dns → comp → cdn → tls → speed)
+# Full diagnostics (9 steps: geo → conn → ipv6 → dns → dns-leak → comp → cdn → tls → speed)
 net-check.sh all
 
 # Deep check — single resource (HTTP + DNS + TLS + CDN)
@@ -27,6 +27,7 @@ net-check.sh speed            # Download/upload throughput
 # Bulk resource checks (all targets from config)
 net-check.sh comp             # HTTP reachability comparison table
 net-check.sh dns              # DNS resolution & ISP filtering
+net-check.sh dns-leak         # DNS leak test (resolver chain discovery)
 net-check.sh cdn              # CDN geo-steering analysis
 net-check.sh tls              # TLS certificate MITM check
 
@@ -65,8 +66,8 @@ All config files are protected from overwrite on package upgrade.
 
 ## Dependencies
 
-- `curl` — HTTP checks, GeoIP services
-- `bind-dig` — DNS/CDN checks, EDNS Client Subnet
+- `curl` — HTTP checks, GeoIP services, dns-leak test APIs
+- `bind-dig` — DNS/CDN checks, EDNS Client Subnet, dns-leak probing
 - `netcat` (recommended) — TCP connect checks
 - `openssl-util` (recommended) — TLS certificate inspection
 - `traceroute` (optional) — path tracing

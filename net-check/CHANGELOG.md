@@ -12,13 +12,15 @@ with Entware.
 
 ### Commands
 
-- **`all`** — full diagnostics suite (8 steps): geo → conn → ipv6 → dns →
-  comp → cdn → tls → speed
+- **`all`** — full diagnostics suite (9 steps): geo → conn → ipv6 → dns →
+  dns-leak → comp → cdn → tls → speed
 - **`geo`** — egress point verification via GeoIP per WAN interface
 - **`conn`** — ping, TCP :443, traceroute hops, packet loss, MTU discovery,
   DNS/TCP/TLS/Total timing
 - **`dns`** — DNS resolution & geolocation for all check targets; detects ISP
   DNS filtering (NXDOMAIN/bogon) and split-DNS zone alignment
+- **`dns-leak`** — DNS leak test via subdomain probing; discovers recursive
+  resolvers; 3-level fallback (dnscheck.tools → bash.ws → whoami)
 - **`comp`** — HTTP reachability matrix across WAN interfaces with TTFB,
   failure classification, route verification, and historical diff (▲/▼ markers)
 - **`cdn`** — CDN geo-steering analysis via EDNS Client Subnet; comparison

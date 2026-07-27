@@ -1,0 +1,435 @@
+# net-check: DNS leak test — discover which recursive DNS resolvers handle queries.
+# 3-level service fallback: dnscheck.tools → bash.ws → whoami queries.
+# Detects leaks when ISP DNS appears in resolver chain while SmartDNS/DoH is configured.
+#
+# Dependencies: lib/output.sh (emit_error, section_title, tbl_header, tbl_row, tbl_cell,
+#     status_mark, color_status, summary_line, is_quiet),
+#   lib/cmd-dns.sh (identify_dns_provider, _get_isp_dns),
+#   lib/geoip.sh (geolocate_ip, geoip_read_full),
+#   lib/ip.sh (detect_dns_port),
+#   lib/common.sh (json_kv, json_kv_bool, json_arr_add, require_cmd)
+# Globals used: OUTPUT_JSON, VERBOSITY, _EXIT_CODE, PRIVACY_MODE,
+#   DNS_LEAK_PROBE_COUNT, DNS_LEAK_WAIT, DNS_LEAK_TIMEOUT, DNS_TIMEOUT,
+#   CURL_UA, _RUN_DIR, DATA_DIR, SMARTDNS_PORT,
+#   C_GREEN, C_RED, C_YELLOW, C_DIM, C_RST, C_BOLD, C_CYAN
+# shellcheck disable=SC3043,SC2154,SC2086
+
+# ─── Helpers ──────────────────────────────────────────────────────────────────
+
+# Deduplicate space-separated IP list, preserve order.
+# Args: stdin or $1 - space-separated IPs
+# stdout: space-separated unique IPs
+_dns_leak_uniq() {
+  printf '%s' "$1" | tr ' ' '\n' | awk '!seen[$0]++ && NF' | tr '\n' ' ' | sed 's/ $//'
+}
+
+# Check if IP is in a space-separated list.
+# Args: $1 - IP, $2 - space-separated list
+# Returns: 0 if found, 1 otherwise
+_dns_leak_ip_in_list() {
+  local _ip="$1" _list="$2" _item
+  for _item in $_list; do
+    [ "$_ip" = "$_item" ] && return 0
+  done
+  return 1
+}
+
+# Check if resolver belongs to a known public DNS provider.
+# Uses IP prefix matching + ASN matching from dns-providers.conf.
+# IP globs match well-known anycast IPs; AS* lines match PoP ASNs.
+# Args: $1 - resolver IP, $2 - resolver ASN (optional, e.g. "AS13335")
+# Returns: 0 if known provider, 1 otherwise
+_is_known_dns_provider() {
+  local _ip="$1" _asn="${2:-}" _prefix _name
+  [ ! -f "${DNS_PROVIDERS_FILE:-}" ] && return 1
+  while IFS='|' read -r _prefix _name; do
+    case "$_prefix" in \#*|"") continue ;; esac
+    case "$_prefix" in
+      AS*)
+        # ASN match (for dns-leak PoP detection)
+        [ -n "$_asn" ] && [ "$_asn" = "$_prefix" ] && return 0
+        ;;
+      *)
+        # IP glob match (well-known anycast IPs)
+        # shellcheck disable=SC2254
+        case "$_ip" in $_prefix) return 0 ;; esac
+        ;;
+    esac
+  done < "$DNS_PROVIDERS_FILE"
+  return 1
+}
+
+# Extract JSON string value by key (simple flat JSON).
+# Args: $1 - key name, stdin - JSON text
+# stdout: value (unquoted)
+_dns_leak_json_val() {
+  sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" | head -1
+}
+
+# Extract JSON array of objects — get field from each object.
+# Handles simple flat JSON arrays like [{"ip":"1.2.3.4","cc":"US"},...]
+# Args: $1 - field name, stdin - JSON text
+# stdout: one value per line
+_dns_leak_json_arr_field() {
+  local _key="$1"
+  sed 's/},{/}\n{/g' | sed -n "s/.*\"${_key}\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p"
+}
+
+# ─── Level 1: dnscheck.tools ─────────────────────────────────────────────────
+
+# DNS leak test via dnscheck.tools API.
+# 1. POST to get test ID
+# 2. dig unique subdomains to trigger resolver discovery
+# 3. GET results with resolver list
+# Sets: _leak_source, _leak_resolvers (newline-separated "ip|provider|cc|asn")
+# Returns: 0 on success, 1 on failure
+_dns_leak_dnscheck() {
+  local _resp _test_id _i _probe_domain _results _http_code
+
+  # Step 1: get test ID
+  _resp=$(curl -sS --max-time "$DNS_LEAK_TIMEOUT" \
+    -H "User-Agent: ${CURL_UA}" \
+    "https://www.dnscheck.tools/api/v1/check" 2>/dev/null) || return 1
+  [ -z "$_resp" ] && return 1
+
+  _test_id=$(printf '%s' "$_resp" | _dns_leak_json_val "id")
+  [ -z "$_test_id" ] && return 1
+
+  # Step 2: send DNS probes (unique subdomains)
+  # Subshell isolates background jobs so `wait` doesn't block on spinner.
+  # $_dns_leak_dig_extra routes probes via SmartDNS when active (set by cmd_dns_leak).
+  (
+    _i=1
+    while [ "$_i" -le "$DNS_LEAK_PROBE_COUNT" ]; do
+      dig +short "${_test_id}-${_i}.dnscheck.tools" +time="$DNS_TIMEOUT" +tries=1 $_dns_leak_dig_extra >/dev/null 2>&1 &
+      _i=$((_i + 1))
+    done
+    wait
+  )
+
+  # Step 3: wait for results to propagate
+  sleep "$DNS_LEAK_WAIT"
+
+  # Step 4: fetch results
+  _results=$(curl -sS --max-time "$DNS_LEAK_TIMEOUT" \
+    -H "User-Agent: ${CURL_UA}" \
+    "https://www.dnscheck.tools/api/v1/check/${_test_id}" 2>/dev/null) || return 1
+  [ -z "$_results" ] && return 1
+
+  # Parse resolver IPs from JSON response
+  # Response format: {"id":"...","resolvers":[{"ip":"8.8.8.8","cc":"US","asn":{"number":15169,"org":"GOOGLE"}},...]}
+  local _resolver_ips
+  _resolver_ips=$(printf '%s' "$_results" | _dns_leak_json_arr_field "ip")
+  [ -z "$_resolver_ips" ] && return 1
+
+  _leak_source="dnscheck.tools"
+  _leak_resolvers=""
+
+  local _rip _rcc _rasn _rprov
+  for _rip in $_resolver_ips; do
+    [ -z "$_rip" ] && continue
+    _rprov=$(identify_dns_provider "$_rip") || _rprov=""
+    _rcc=$(geolocate_ip "$_rip") || _rcc="??"
+    _rasn=""
+    if geoip_read_full "$_rip"; then
+      _rasn="$_enrich_asn"
+      [ -z "$_rprov" ] && [ -n "$_enrich_org" ] && _rprov="$_enrich_org"
+    fi
+    _leak_resolvers="${_leak_resolvers}${_rip}|${_rprov}|${_rcc}|${_rasn}
+"
+  done
+  [ -z "$_leak_resolvers" ] && return 1
+  return 0
+}
+
+# ─── Level 2: bash.ws ─────────────────────────────────────────────────────────
+
+# DNS leak test via bash.ws API.
+# 1. GET test ID (plain text)
+# 2. dig unique subdomains
+# 3. GET JSON results
+# Sets: _leak_source, _leak_resolvers
+# Returns: 0 on success, 1 on failure
+_dns_leak_bashws() {
+  local _test_id _i _probe_domain _results
+
+  # Step 1: get test ID (plain text number)
+  _test_id=$(curl -sS --max-time "$DNS_LEAK_TIMEOUT" \
+    -H "User-Agent: ${CURL_UA}" \
+    "https://bash.ws/id" 2>/dev/null) || return 1
+  _test_id=$(printf '%s' "$_test_id" | tr -cd '0-9')
+  [ -z "$_test_id" ] && return 1
+
+  # Step 2: send DNS probes
+  # Subshell isolates background jobs so `wait` doesn't block on spinner.
+  # $_dns_leak_dig_extra routes probes via SmartDNS when active (set by cmd_dns_leak).
+  (
+    _i=1
+    while [ "$_i" -le 10 ]; do
+      dig +short "${_i}.${_test_id}.bash.ws" +time="$DNS_TIMEOUT" +tries=1 $_dns_leak_dig_extra >/dev/null 2>&1 &
+      _i=$((_i + 1))
+    done
+    wait
+  )
+
+  # Step 3: wait for results
+  sleep "$DNS_LEAK_WAIT"
+
+  # Step 4: fetch results
+  _results=$(curl -sS --max-time "$DNS_LEAK_TIMEOUT" \
+    -H "User-Agent: ${CURL_UA}" \
+    "https://bash.ws/dnsleak/test/${_test_id}?json" 2>/dev/null) || return 1
+  [ -z "$_results" ] && return 1
+
+  # Parse: array of {"ip":"1.2.3.4","country_name":"US","asn":"AS15169","type":"dns",...}
+  # Filter out "type":"conclusion" (summary) and "type":"ip" (client public IP, not a resolver).
+  local _resolver_ips
+  _resolver_ips=$(printf '%s' "$_results" | sed 's/},{/}\n{/g' | \
+    grep -v '"type"[[:space:]]*:[[:space:]]*"conclusion"' | \
+    grep -v '"type"[[:space:]]*:[[:space:]]*"ip"' | \
+    sed -n 's/.*"ip"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+  [ -z "$_resolver_ips" ] && return 1
+
+  _leak_source="bash.ws"
+  _leak_resolvers=""
+
+  local _rip _rcc _rasn _rprov
+  for _rip in $_resolver_ips; do
+    [ -z "$_rip" ] && continue
+    _rprov=$(identify_dns_provider "$_rip") || _rprov=""
+    _rcc=$(geolocate_ip "$_rip") || _rcc="??"
+    _rasn=""
+    if geoip_read_full "$_rip"; then
+      _rasn="$_enrich_asn"
+      [ -z "$_rprov" ] && [ -n "$_enrich_org" ] && _rprov="$_enrich_org"
+    fi
+    _leak_resolvers="${_leak_resolvers}${_rip}|${_rprov}|${_rcc}|${_rasn}
+"
+  done
+  [ -z "$_leak_resolvers" ] && return 1
+  return 0
+}
+
+# ─── Level 3: whoami queries (offline fallback) ──────────────────────────────
+
+# DNS leak test via direct whoami queries (no HTTP needed, dig only).
+# Queries multiple "what is my resolver IP" services.
+# Sets: _leak_source, _leak_resolvers
+# Returns: 0 on success, 1 on failure
+_dns_leak_whoami() {
+  local _ips="" _ip
+
+  # whoami.akamai.net — returns resolver IP (routed via SmartDNS when active)
+  _ip=$(dig +short whoami.akamai.net $_dns_leak_dig_extra +time="$DNS_TIMEOUT" +tries=1 2>/dev/null | \
+    grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+  [ -n "$_ip" ] && _ips="${_ips} ${_ip}"
+
+  # myip.opendns.com via OpenDNS — returns resolver IP
+  _ip=$(dig +short myip.opendns.com @resolver1.opendns.com \
+    +time="$DNS_TIMEOUT" +tries=1 2>/dev/null | \
+    grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+  [ -n "$_ip" ] && _ips="${_ips} ${_ip}"
+
+  # o-o.myaddr.l.google.com via Google NS — returns resolver IP as TXT
+  _ip=$(dig +short -t TXT o-o.myaddr.l.google.com @ns1.google.com \
+    +time="$DNS_TIMEOUT" +tries=1 2>/dev/null | \
+    tr -d '"' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+  [ -n "$_ip" ] && _ips="${_ips} ${_ip}"
+
+  _ips=$(printf '%s' "$_ips" | sed 's/^ //')
+  [ -z "$_ips" ] && return 1
+
+  # Deduplicate
+  _ips=$(_dns_leak_uniq "$_ips")
+
+  _leak_source="whoami queries"
+  _leak_resolvers=""
+
+  local _rip _rcc _rasn _rprov
+  for _rip in $_ips; do
+    [ -z "$_rip" ] && continue
+    _rprov=$(identify_dns_provider "$_rip") || _rprov=""
+    _rcc=$(geolocate_ip "$_rip") || _rcc="??"
+    _rasn=""
+    if geoip_read_full "$_rip"; then
+      _rasn="$_enrich_asn"
+      [ -z "$_rprov" ] && [ -n "$_enrich_org" ] && _rprov="$_enrich_org"
+    fi
+    _leak_resolvers="${_leak_resolvers}${_rip}|${_rprov}|${_rcc}|${_rasn}
+"
+  done
+  [ -z "$_leak_resolvers" ] && return 1
+  return 0
+}
+
+# ─── Command: dns-leak ────────────────────────────────────────────────────────
+
+# DNS leak test: discover which recursive DNS resolvers handle queries.
+# Uses 3-level fallback: dnscheck.tools API → bash.ws API → whoami dig queries.
+# Detects leak when ISP DNS resolvers appear while SmartDNS/DoH is active.
+cmd_dns_leak() {
+  require_cmd dig
+
+  # Detect SmartDNS before probes — determines both dig routing and leak logic.
+  # On the router, port 53 = ndnproxy; iptables DNAT only intercepts LAN (br0)
+  # traffic, not local processes. Without explicit port, dig hits ndnproxy and
+  # tests the wrong resolver chain.
+  local _dns_info _has_smartdns=0 _smartdns_port=""
+  _dns_info=$(detect_dns_port 2>/dev/null) || _dns_info=""
+  case "$_dns_info" in
+    6053*|6153*)
+      _has_smartdns=1
+      _smartdns_port="${_dns_info%% *}"
+      ;;
+  esac
+
+  # When SmartDNS is active, route dig probes through it.
+  # Variable is read by _dns_leak_dnscheck/_bashws/_whoami via dynamic scoping.
+  local _dns_leak_dig_extra=""
+  if [ "$_has_smartdns" = 1 ] && [ -n "$_smartdns_port" ]; then
+    _dns_leak_dig_extra="@127.0.0.1 -p ${_smartdns_port}"
+  fi
+
+  # Shared state set by _dns_leak_* functions
+  local _leak_source="" _leak_resolvers=""
+
+  # Run test with fallback chain
+  _dns_leak_dnscheck || _dns_leak_bashws || _dns_leak_whoami || {
+    emit_error "All DNS leak test services unreachable"
+    return 1
+  }
+
+  # ── Leak detection: check if non-provider DNS leaks through SmartDNS/DoH ──
+  local _isp_dns=""
+  _isp_dns=$(_get_isp_dns)
+
+  # Count resolvers and detect leaks
+  local _resolver_count=0 _leak_count=0 _leak_ips="" _all_expected=1
+  local _rline _rip _rprov _rcc _rasn _is_expected
+  local _json_resolvers=""
+
+  printf '%s' "$_leak_resolvers" | while IFS='|' read -r _rip _rprov _rcc _rasn; do
+    [ -z "$_rip" ] && continue
+    _resolver_count=$((_resolver_count + 1))
+  done
+
+  # Re-count outside subshell
+  _resolver_count=0
+  _leak_count=0
+
+  # Collect results for display
+  local _display_lines=""
+  while IFS='|' read -r _rip _rprov _rcc _rasn; do
+    [ -z "$_rip" ] && continue
+    _resolver_count=$((_resolver_count + 1))
+
+    # Check if this resolver is expected or a leak.
+    # With SmartDNS active: only known DNS providers should appear.
+    # Without SmartDNS: only flag explicitly known ISP DNS IPs.
+    _is_expected=1
+    if [ "$_has_smartdns" = 1 ]; then
+      if ! _is_known_dns_provider "$_rip" "$_rasn"; then
+        _is_expected=0
+        _leak_count=$((_leak_count + 1))
+        _leak_ips="${_leak_ips} ${_rip}"
+        _all_expected=0
+      fi
+    elif [ -n "$_isp_dns" ]; then
+      if _dns_leak_ip_in_list "$_rip" "$_isp_dns"; then
+        _is_expected=0
+        _leak_count=$((_leak_count + 1))
+        _leak_ips="${_leak_ips} ${_rip}"
+        _all_expected=0
+      fi
+    fi
+
+    _display_lines="${_display_lines}${_rip}|${_rprov}|${_rcc}|${_rasn}|${_is_expected}
+"
+
+    # JSON resolver entry
+    if [ "$OUTPUT_JSON" = 1 ]; then
+      local _j_expected="true"
+      [ "$_is_expected" = 0 ] && _j_expected="false"
+      local _entry
+      _entry=$(printf '{%s,%s,%s,%s,"expected":%s}' \
+        "$(json_kv "ip" "$_rip")" \
+        "$(json_kv "provider" "${_rprov:-unknown}")" \
+        "$(json_kv "cc" "$_rcc")" \
+        "$(json_kv "asn" "${_rasn:-}")" \
+        "$_j_expected")
+      json_arr_add _json_resolvers "$_entry"
+    fi
+  done <<EOF
+$(printf '%s' "$_leak_resolvers")
+EOF
+
+  _leak_ips=$(printf '%s' "$_leak_ips" | sed 's/^ //')
+
+  # Determine verdict
+  local _verdict="no_leak"
+  if [ "$_leak_count" -gt 0 ]; then
+    _verdict="leak"
+    [ "$_EXIT_CODE" -lt 1 ] && _EXIT_CODE=1
+  fi
+
+  # ── Text output ──
+  section_title "$_TITLE_DNS_LEAK"
+  if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
+    printf 'Discovers which recursive DNS resolvers handle your queries.\n'
+    printf 'Source: %s%s%s' "$C_BOLD" "$_leak_source" "$C_RST"
+    if [ "$_has_smartdns" = 1 ]; then
+      printf '  (via SmartDNS :%s)' "$_smartdns_port"
+    else
+      printf '  (via system resolver :53)'
+    fi
+    printf '\n\n'
+
+    tbl_header "Resolver IP:18" "CC:5" "ASN:12" "Provider:40" "Status"
+
+    printf '%s' "$_display_lines" | while IFS='|' read -r _rip _rprov _rcc _rasn _is_expected; do
+      [ -z "$_rip" ] && continue
+      local _st="ok" _status_cell
+      if [ "$_is_expected" = 0 ]; then
+        _st="fail"
+        _status_cell="LEAK $(status_mark fail)"
+      else
+        _status_cell="$(status_mark ok)"
+      fi
+      tbl_row "$(tbl_cell 18 "$_rip" "$_st")" "${_rcc:-—}" "${_rasn:-—}" "${_rprov:-—}" "$_status_cell"
+    done
+
+    # Verdict line
+    if [ "$_verdict" = "leak" ]; then
+      printf '→ %s%s DNS leak detected!%s (%s resolver(s), %s ISP DNS leaked: %s)\n' \
+        "$C_RED" "$(status_mark fail)" "$C_RST" \
+        "$_resolver_count" "$_leak_count" "$_leak_ips"
+    else
+      printf '→ %sNo DNS leak%s %s (%s resolver(s), all expected)\n' \
+        "$C_GREEN" "$C_RST" "$(status_mark ok)" "$_resolver_count"
+    fi
+  fi
+
+  if [ "$OUTPUT_JSON" = 0 ] && is_quiet; then
+    if [ "$_verdict" = "leak" ]; then
+      printf 'dns-leak: %s leak (%s ISP resolver(s))\n' "$(status_mark fail)" "$_leak_count"
+    else
+      printf 'dns-leak: no leak %s\n' "$(status_mark ok)"
+    fi
+  fi
+
+  # ── JSON output ──
+  if [ "$OUTPUT_JSON" = 1 ]; then
+    local _ok_val=0
+    [ "$_verdict" = "leak" ] && _ok_val=1
+    local _j_resolver="system:53"
+    [ "$_has_smartdns" = 1 ] && _j_resolver="smartdns:${_smartdns_port}"
+    printf '{%s,%s,%s,%s,"resolvers":[%s],%s,%s}\n' \
+      "$(json_kv_bool "ok" "$_ok_val")" \
+      "$(json_kv "source" "$_leak_source")" \
+      "$(json_kv "probe_resolver" "$_j_resolver")" \
+      "$(json_kv_num "resolver_count" "$_resolver_count")" \
+      "$_json_resolvers" \
+      "$(json_kv "verdict" "$_verdict")" \
+      "$(json_kv "leak_ips" "$_leak_ips")"
+  fi
+}

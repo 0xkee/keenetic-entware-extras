@@ -5,14 +5,19 @@
 1. **geo** — Egress Point Verification (Layers 3+7)
 2. **conn** — Basic Connectivity (Layers 3–7)
 3. **ipv6** — IPv6 Leak Test (Layers 3+7)
-4. **dns** — DNS Leak & ISP Filtering (Layer 7)
-5. **comp** — HTTP Target Comparison (Layers 4–7)
-6. **cdn** — CDN Geo-Steering Analysis (Layers 3+7)
-7. **tls** — TLS Certificate Check (Layers 5–7)
-8. **speed** — Throughput Test (Layers 4+7)
+4. **dns** — DNS Resolution & ISP Filtering (Layer 7)
+5. **dns-leak** — DNS Leak Test (Layer 7)
+6. **comp** — HTTP Target Comparison (Layers 4–7)
+7. **cdn** — CDN Geo-Steering Analysis (Layers 3+7)
+8. **tls** — TLS Certificate Check (Layers 5–7)
+9. **speed** — Throughput Test (Layers 4+7)
 
 ## Future
 
+- [ ] **`dns-providers.conf` unification** — consider merging IP prefix and ASN sections
+  into ASN-only approach; IP globs may become redundant if ASN matching is sufficient
+  for both `identify_dns_provider()` and `_is_known_dns_provider()`.
+- [ ] сделать колонку ip шириной с максимальный ipv6 везде, где он может быть (видимо везде)
 - [ ] **`--as MAC` client perspective** — `net-check comp --as AA:BB:CC:DD:EE:FF` to show
   ► from a specific client's routing perspective (resolves MAC → fwmark via iptables mangle).
   `--as auto` = first tunnel fwmark. Reuses logic from `route-check.sh --from`.

@@ -1,7 +1,7 @@
 # net-check: Full diagnostics orchestrator — runs all checks in sequence.
 # Dependencies: lib/output.sh (emit_error, section_banner, start_spinner, stop_spinner, is_quiet),
 #   lib/wan.sh (get_wan_interfaces), lib/cmd-geo.sh (cmd_geo), lib/cmd-connectivity.sh (cmd_connectivity),
-#   lib/cmd-dns.sh (cmd_dns), lib/cmd-ipv6-leak.sh (cmd_ipv6_leak),
+#   lib/cmd-dns.sh (cmd_dns), lib/cmd-dns-leak.sh (cmd_dns_leak), lib/cmd-ipv6-leak.sh (cmd_ipv6_leak),
 #   lib/cmd-targets.sh (cmd_compare),
 #   lib/cmd-cdn.sh (cmd_cdn_all), lib/cmd-tls.sh (cmd_tls_check_targets),
 #   lib/cmd-speed.sh (cmd_speed), lib/common.sh (json_kv_bool, json_kv_num)
@@ -18,13 +18,13 @@ cmd_all() {
 
   _saved_check_interfaces="$CHECK_INTERFACES"
 
-  local _steps=8 _step_ok=0 _step_fail=0
+  local _steps=9 _step_ok=0 _step_fail=0
   local _t_start _tmpout
   _t_start=$(date +%s)
   _tmpout="${_RUN_DIR}/all-out.tmp"
 
   # JSON mode: collect sub-results into sections
-  local _json_geo="" _json_conn="" _json_dns=""
+  local _json_geo="" _json_conn="" _json_dns="" _json_dns_leak=""
   local _json_ipv6="" _json_compare="" _json_cdn="" _json_tls="" _json_speed=""
 
   # ── Zone header (once before all sections) ──
@@ -84,10 +84,11 @@ cmd_all() {
 2|conn|_TITLE_CONN|Testing TCP/TLS connectivity...|cmd_connectivity
 3|ipv6|_TITLE_IPV6|Checking IPv6 leaks...|cmd_ipv6_leak
 4|dns|_TITLE_DNS|Checking DNS resolution...|cmd_dns
-5|compare|_TITLE_COMPARE|Checking HTTP targets...|cmd_compare
-6|cdn|_TITLE_CDN|Analyzing CDN steering...|cmd_cdn_all
-7|tls|_TITLE_TLS|Checking TLS certificates...|cmd_tls_check_targets
-8|speed|_TITLE_SPEED|Measuring throughput...|cmd_speed
+5|dns_leak|_TITLE_DNS_LEAK|Checking DNS resolvers...|cmd_dns_leak
+6|compare|_TITLE_COMPARE|Checking HTTP targets...|cmd_compare
+7|cdn|_TITLE_CDN|Analyzing CDN steering...|cmd_cdn_all
+8|tls|_TITLE_TLS|Checking TLS certificates...|cmd_tls_check_targets
+9|speed|_TITLE_SPEED|Measuring throughput...|cmd_speed
 _STEPS_EOF
 
   rm -f "$_tmpout"
@@ -109,6 +110,7 @@ _STEPS_EOF
     printf '"geo":%s,' "$_json_geo"
     printf '"connectivity":%s,' "$_json_conn"
     printf '"dns":%s,' "$_json_dns"
+    printf '"dns_leak":%s,' "$_json_dns_leak"
     printf '"ipv6_leak":%s,' "$_json_ipv6"
     printf '"compare":%s,' "$_json_compare"
     printf '"cdn":%s,' "$_json_cdn"

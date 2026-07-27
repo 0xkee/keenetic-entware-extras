@@ -130,7 +130,7 @@ cmd_dns() {
   section_title "$_TITLE_DNS"
   if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
     printf 'DNS resolution & geolocation for all check-targets domains.\n'
-    printf 'Detects DNS leaks (wrong geo) and ISP DNS filtering (middlebox interference).\n\n'
+    printf 'Detects wrong-zone routing and ISP DNS filtering (middlebox interference).\n\n'
   fi
 
   # ── Detect active DNS zone for auto-classification ──

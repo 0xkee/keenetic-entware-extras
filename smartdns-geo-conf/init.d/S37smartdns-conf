@@ -47,11 +47,11 @@ EOF
   if [ -n "$_router_ip6" ]; then
     cat >> "$BIND_ADDRS_CONF" <<EOF
 
-# IPv6 bind (auto-detected)
-bind [::1]:6053
-bind-tcp [::1]:6053
+# IPv6 bind (auto-detected: LAN first, loopback last — mirrors IPv4 order)
 bind [${_router_ip6}]:6053
 bind-tcp [${_router_ip6}]:6053
+bind [::1]:6053
+bind-tcp [::1]:6053
 EOF
   else
     cat >> "$BIND_ADDRS_CONF" <<EOF

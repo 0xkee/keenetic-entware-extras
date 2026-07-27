@@ -5,6 +5,12 @@ All notable changes to `keenetic-entware-extras` (base package) are documented h
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.16.10] - 2026-07-27
+
+### Added
+- `lib/common.sh`: `detect_router_ip6()` — detect global-scope IPv6 address on
+  br0 bridge (used by smartdns-redirect for automatic IPv6 DNS DNAT)
+
 ## [0.16.8] - 2026-07-12
 
 ### Added

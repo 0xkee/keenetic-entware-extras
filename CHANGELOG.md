@@ -5,6 +5,19 @@ All notable changes to `keenetic-entware-extras` (base package) are documented h
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.16.12] - 2026-07-27
+
+### Fixed
+- `lib/status.sh`: `status_check_port()` — normalize IPv6 listen addresses from
+  netstat to RFC 3986 `[addr]:port` format. Previously raw netstat output like
+  `fdce:...:d24c:6053` was ambiguous (port indistinguishable from last IPv6 group).
+  Now displays `[fdce:...:d24c]:6053`. Fixes display in smartdns-redirect
+  "Upstream probe", smartdns-geo-conf "Ports", and webui status JSON.
+  Sort: IPv4 (LAN, loopback) → IPv6 (LAN, loopback).
+
+### Changed
+- `lib/geo.sh`, `lib/ip.sh`, `lib/common.sh`: legal terminology
+
 ## [0.16.10] - 2026-07-27
 
 ### Added
@@ -26,7 +39,7 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 ## [0.16.6] - 2026-07-11
 
 ### Fixed
-- `bug-report.sh`: reachability test false positive when VPN is default route —
+- `bug-report.sh`: reachability test false positive when tunnel is default route —
   `ping -I <dev>` (SO_BINDTODEVICE) conflicts with routing when default goes to
   a different interface. Now uses `ping -I <src_ip>` to leverage policy routing rules.
   Both ICMP and HTTP probes are run for richer diagnostics (ping OK/FAIL + HTTP status code).
@@ -35,7 +48,7 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 - `lib/common.sh`: `get_ms()` millisecond timer, `json_kv`/`json_kv_bool` helpers
-- `lib/ip.sh`: `is_tunnel_iface()` VPN/tunnel interface detection
+- `lib/ip.sh`: `is_tunnel_iface()` tunnel interface detection
 
 ## [0.16.4] - 2026-06-18
 
@@ -62,8 +75,8 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 - `scripts/bug-report.sh`: MTU check no longer crashes script on routers with
-  non-VPN interfaces having MTU >= 1500 (set -e + `&&` chain in while pipeline).
-  Now shows only VPN/tunnel MTU (informational, no ⚠ — reduced MTU is expected).
+  non-tunnel interfaces having MTU >= 1500 (set -e + `&&` chain in while pipeline).
+  Now shows only tunnel MTU (informational, no ⚠ — reduced MTU is expected).
 
 ## [0.16.0] - 2026-06-13
 
@@ -75,7 +88,7 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 - `scripts/bug-report.sh`: routing effectiveness diagnostic — detects when geo-split
-  is ineffective (routes to same interface as default + no Keenetic VPN policy).
+  is ineffective (routes to same interface as default + no Keenetic tunnel policy).
 - `scripts/bug-report.sh`: edge-case diagnostics — IPv6 leak, full ip rule show,
   interface MTU, rp_filter, POSTROUTING NAT, ROUTE_OUT health check, crond status.
 - `scripts/bug-report.sh`: Keenetic policy rules display (fwmark prio 100+).
@@ -101,9 +114,9 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 ### Added
 - `lib/geo.sh`: 15+ new unions — FATF, AIIB, NDB, OPEC/OPEC+ (split), offshore,
   SWIFT-disconnected, Commonwealth, Francophonie, Lusophone, Global South,
-  Mediterranean, Greater China, East Asia+ASEAN, CELAC, US/EU-sanctioned, censored
+  Mediterranean, Greater China, East Asia+ASEAN, CELAC, US/EU-sanctioned, internet_restricted
 - `lib/geo.sh`: new "🚫 Sanctions & restrictions" section (us_sanctioned,
-  eu_sanctioned, swift_cut, censored)
+  eu_sanctioned, swift_cut, internet_restricted)
 
 ### Changed
 - `lib/geo.sh`: UTF emoji icons added to every union comment (displayed as labels
@@ -132,7 +145,7 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
   - New section: service enabled/disabled state (symlink detection)
   - New section: user config.conf existence per package
   - New section: geo-split effective config (ROUTE_OUT, ROUTE_GW, ROUTE_IN, tables)
-  - New section: VPN/tunnel interfaces list (nwg/awg/ovpn/tun/tap)
+  - New section: tunnel interfaces list (nwg/awg/ovpn/tun/tap)
   - Routes section: ISP auto-detection via `detect_out_iface()` + `detect_gateway()`
   - Routes section: shows route type (via gateway vs scope-link) for both tables
   - WebUI upstream (stock httpd) reachability probe in connectivity section

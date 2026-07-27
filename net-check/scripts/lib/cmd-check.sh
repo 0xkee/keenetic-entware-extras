@@ -39,13 +39,13 @@ _cmd_check_text() {
 
   section_title "$host — $_TITLE_CHECK"
 
-  # 1. HTTP reachability
-  cmd_check_target "$url"
-
-  # 2. DNS resolution
+  # 1. DNS resolution (foundation — shows where name resolves)
   _dns_check_single "$host"
 
-  # 3. TLS certificate
+  # 2. HTTP reachability (depends on DNS)
+  cmd_check_target "$url"
+
+  # 3. TLS certificate (security layer)
   cmd_tls_check "$host"
 
   # 4. CDN geo-steering (manual section_title — cmd_cdn "no_header" skips its own)
@@ -61,17 +61,17 @@ _cmd_check_json() {
 
   local _json_http _json_dns _json_tls _json_cdn
 
-  _json_http=$(cmd_check_target "$url" 2>/dev/null) || true
   _json_dns=$(_dns_check_single "$host" 2>/dev/null) || true
+  _json_http=$(cmd_check_target "$url" 2>/dev/null) || true
   _json_tls=$(cmd_tls_check "$host" 2>/dev/null) || true
   _json_cdn=$(cmd_cdn "$host" "" "no_header" 2>/dev/null) || true
 
   # Emit combined JSON
-  printf '{%s,%s,"http":%s,"dns":%s,"tls":%s,"cdn":%s}\n' \
+  printf '{%s,%s,"dns":%s,"http":%s,"tls":%s,"cdn":%s}\n' \
     "$(json_kv "check" "deep")" \
     "$(json_kv "target" "$host")" \
-    "${_json_http:-null}" \
     "${_json_dns:-null}" \
+    "${_json_http:-null}" \
     "${_json_tls:-null}" \
     "${_json_cdn:-null}"
 
@@ -97,8 +97,8 @@ _cmd_check_multi_text() {
   cmd_geo > /dev/null 2>&1 || true
   _EXIT_CODE="$_saved_exit"
 
-  cmd_compare "$@"
   cmd_dns "$@"
+  cmd_compare "$@"
   cmd_tls_check_targets "$@"
   cmd_cdn_all "$@"
 }
@@ -108,15 +108,15 @@ _cmd_check_multi_text() {
 _cmd_check_multi_json() {
   local _j_comp _j_dns _j_tls _j_cdn
 
-  _j_comp=$(cmd_compare "$@" 2>/dev/null) || true
   _j_dns=$(cmd_dns "$@" 2>/dev/null) || true
+  _j_comp=$(cmd_compare "$@" 2>/dev/null) || true
   _j_tls=$(cmd_tls_check_targets "$@" 2>/dev/null) || true
   _j_cdn=$(cmd_cdn_all "$@" 2>/dev/null) || true
 
-  printf '{%s,"http":%s,"dns":%s,"tls":%s,"cdn":%s}\n' \
+  printf '{%s,"dns":%s,"http":%s,"tls":%s,"cdn":%s}\n' \
     "$(json_kv "check" "deep")" \
-    "${_j_comp:-null}" \
     "${_j_dns:-null}" \
+    "${_j_comp:-null}" \
     "${_j_tls:-null}" \
     "${_j_cdn:-null}"
 }

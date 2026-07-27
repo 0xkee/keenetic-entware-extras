@@ -4,7 +4,8 @@
 #   resolve_geo_zone from lib/geo.sh (optional, loaded on demand)
 # Globals used: CHECK_INTERFACES, SCRIPT_DIR, _GEO_EXT_IPS, DATA_DIR, GEO_CACHE_TTL
 # Globals set: _ZONE_LABEL, _ZONE_CC_LIST, _ZONE_ROUTE_DEV, _ZONE_ROUTE_TYPE,
-#   _DEFAULT_ROUTE_DEV, _DEFAULT_ROUTE_TYPE
+#   _DEFAULT_ROUTE_DEV, _DEFAULT_ROUTE_TYPE,
+#   _NON_GEO_SEGMENTS, _NON_GEO_SINGLE, _NON_GEO_COUNT
 # shellcheck disable=SC3043
 
 # Per-run cache for auto-detected WAN interfaces (avoids repeated wan-paths.sh fork).
@@ -20,6 +21,11 @@ _ZONE_ROUTE_DEV=""
 _ZONE_ROUTE_TYPE=""
 _DEFAULT_ROUTE_DEV=""
 _DEFAULT_ROUTE_TYPE=""
+# Non-geo routing segments (tunnel/routing policies + main default).
+# Populated by load_zone_context() section 4.
+_NON_GEO_SEGMENTS=""
+_NON_GEO_SINGLE=""
+_NON_GEO_COUNT=0
 
 # Get interface type label.
 # Args: $1 - interface name
@@ -210,6 +216,34 @@ load_zone_context() {
     _DEFAULT_ROUTE_TYPE=$(iface_type "$_DEFAULT_ROUTE_DEV")
   fi
 
+  # ── 4. Non-geo routing segments (tunnel policies + main default) ──
+  # Enumerate unique egress devices for non-geo traffic across all Keenetic
+  # per-client routing policies. Geo-split rules (prio 50-51) are checked BEFORE
+  # fwmark rules (prio 100+), so geo resources always route the same way
+  # regardless of client policy. Non-geo traffic depends on client fwmark.
+  _NON_GEO_SEGMENTS=""
+  _NON_GEO_SINGLE=""
+  _NON_GEO_COUNT=0
+  local _ngs_seen=""
+  # Start with main table default (clients without tunnel policy)
+  if [ -n "$_DEFAULT_ROUTE_DEV" ]; then
+    _ngs_seen="|${_DEFAULT_ROUTE_DEV}|"
+    _NON_GEO_SEGMENTS="$_DEFAULT_ROUTE_DEV"
+  fi
+  # Collect fwmark→table→dev for each routing policy (from ip rule)
+  local _ngs_table _ngs_dev
+  for _ngs_table in $(ip rule show 2>/dev/null \
+      | sed -n 's/.*fwmark 0x[0-9a-f]* lookup \([0-9]*\).*/\1/p' | sort -u); do
+    _ngs_dev=$(ip route show table "$_ngs_table" 2>/dev/null \
+      | awk '/^default/{for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); exit}}')
+    [ -z "$_ngs_dev" ] && continue
+    case "$_ngs_seen" in *"|${_ngs_dev}|"*) continue ;; esac
+    _ngs_seen="${_ngs_seen}|${_ngs_dev}|"
+    _NON_GEO_SEGMENTS="${_NON_GEO_SEGMENTS:+${_NON_GEO_SEGMENTS} }${_ngs_dev}"
+  done
+  _NON_GEO_COUNT=$(printf '%s' "$_NON_GEO_SEGMENTS" | wc -w | tr -d ' ')
+  [ "$_NON_GEO_COUNT" -eq 1 ] && _NON_GEO_SINGLE="$_NON_GEO_SEGMENTS"
+
   _ZONE_CTX_LOADED=1
 }
 
@@ -243,10 +277,52 @@ expected_route_type() {
         printf '%s' "${_DEFAULT_ROUTE_TYPE:-any}"
       fi ;;
     intl-*|intl)
-      printf '%s' "${_DEFAULT_ROUTE_TYPE:-any}" ;;
+      # Multiple non-geo segments → can't assert a single expected type
+      if [ "$_NON_GEO_COUNT" -gt 1 ]; then
+        printf 'any'
+      else
+        printf '%s' "${_DEFAULT_ROUTE_TYPE:-any}"
+      fi ;;
     *)
       printf 'any' ;;
   esac
+}
+
+# Determine active route device for a target using category + zone context.
+# Category-aware: uses geo-split config for zone resources, enumerated tunnel
+# segments for non-geo resources. Falls back to kernel FIB (route_dev_for_ip)
+# when category is unknown or zone context not loaded.
+# Args: $1 - resolved IP (optional, for FIB fallback)
+#        $2 - category from check-targets.conf (optional)
+# stdout: device name or empty (ambiguous — multiple non-geo segments, no ►)
+active_dev_for_target() {
+  local _ip="${1:-}" _cat="${2:-}"
+
+  # Category-based logic (preferred when zone context loaded)
+  if [ -n "$_cat" ] && [ "$_ZONE_CTX_LOADED" = 1 ]; then
+    case "$_cat" in
+      zone-*)
+        local _cc="${_cat#zone-}"
+        if is_cc_in_zone "$_cc" && [ -n "$_ZONE_ROUTE_DEV" ]; then
+          printf '%s' "$_ZONE_ROUTE_DEV"
+          return 0
+        fi ;;
+    esac
+    case "$_cat" in
+      intl-*|intl|global)
+        # Single non-geo path → unambiguous ►
+        if [ -n "$_NON_GEO_SINGLE" ]; then
+          printf '%s' "$_NON_GEO_SINGLE"
+        else
+          # Multiple paths → show ► on main default (with note in header)
+          printf '%s' "$_DEFAULT_ROUTE_DEV"
+        fi
+        return 0 ;;
+    esac
+  fi
+
+  # Fallback: kernel FIB lookup (no fwmark — correct for default-policy clients)
+  [ -n "$_ip" ] && route_dev_for_ip "$_ip"
 }
 
 # Check where traffic to a given IP actually routes from LAN perspective.
@@ -268,7 +344,7 @@ route_dev_for_ip() {
 }
 
 # Format zone context header line for output.
-# Prints zone label, CC list, and routing direction.
+# Prints zone label, CC list, routing direction, and non-geo segment info.
 # stdout: formatted line or empty (if no zone detected)
 format_zone_header() {
   [ -z "$_ZONE_LABEL" ] && return 0
@@ -277,10 +353,31 @@ format_zone_header() {
   printf 'Geo zone: %s%s%s (%s)%s' "$C_CYAN" "$_ZONE_LABEL" "$C_RST" "$_ZONE_CC_LIST" "$_zone_dir"
 }
 
-# Print zone context header once (geo zone + resolver info).
+# Format non-geo routing segment info for output.
+# Shows where non-geo (intl/global) traffic routes, including multi-policy note.
+# stdout: formatted line or empty (if default route unknown)
+format_nongeo_header() {
+  [ -z "$_DEFAULT_ROUTE_DEV" ] && return 0
+  if [ "$_NON_GEO_COUNT" -le 1 ]; then
+    printf 'Non-geo:  %s%s%s (%s)' \
+      "$C_CYAN" "$_DEFAULT_ROUTE_DEV" "$C_RST" "${_DEFAULT_ROUTE_TYPE:-?}"
+  else
+    local _seg_list="" _s _st
+    for _s in $_NON_GEO_SEGMENTS; do
+      _st=$(iface_type "$_s")
+      _seg_list="${_seg_list:+${_seg_list}, }${_s}(${_st})"
+    done
+    printf 'Non-geo:  %s%s%s (%s) %s[+%d routing policies: %s]%s' \
+      "$C_CYAN" "$_DEFAULT_ROUTE_DEV" "$C_RST" "${_DEFAULT_ROUTE_TYPE:-?}" \
+      "$C_DIM" "$((_NON_GEO_COUNT - 1))" "$_seg_list" "$C_RST"
+  fi
+}
+
+# Print zone context header once (geo zone + resolver info + non-geo segments).
 # Safe to call from multiple cmd_* functions — prints only on first invocation.
 # Skipped in JSON or quiet mode.
-# Depends: load_zone_context(), format_zone_header(), detect_dns_port() from lib/ip.sh,
+# Depends: load_zone_context(), format_zone_header(), format_nongeo_header(),
+#   detect_dns_port() from lib/ip.sh,
 #   OUTPUT_JSON, VERBOSITY (is_quiet), C_BOLD, C_RST
 print_zone_header_once() {
   [ "$OUTPUT_JSON" = 1 ] && return 0
@@ -289,14 +386,19 @@ print_zone_header_once() {
 
   load_zone_context
 
-  local _zh
+  local _zh _ngh
   _zh=$(format_zone_header)
-  if [ -n "$_zh" ]; then
+  _ngh=$(format_nongeo_header)
+  if [ -n "$_zh" ] || [ -n "$_ngh" ]; then
     printf '%s══════════════════════════════════════════════════════════%s\n' "$C_CYAN" "$C_RST"
     printf '  %sGeo Config%s\n' "$C_BOLD" "$C_RST"
     printf '%s══════════════════════════════════════════════════════════%s\n' "$C_CYAN" "$C_RST"
-    printf '%s\n' "$_zh"
-    printf 'DNS zone: %s%s%s (%s)\n\n' "$C_CYAN" "$_ZONE_LABEL" "$C_RST" "$_ZONE_CC_LIST"
+    [ -n "$_zh" ] && printf '%s\n' "$_zh"
+    [ -n "$_ngh" ] && printf '%s\n' "$_ngh"
+    if [ -n "$_ZONE_LABEL" ]; then
+      printf 'DNS zone: %s%s%s (%s)\n' "$C_CYAN" "$_ZONE_LABEL" "$C_RST" "$_ZONE_CC_LIST"
+    fi
+    printf '\n'
   fi
 
   _ZONE_HEADER_PRINTED=1

@@ -1,60 +1,136 @@
 #!/opt/bin/sh
-# lib/geoip.sh — IP address to country code geolocation.
+# lib/geoip.sh — Unified IP geolocation: country code, city, ASN, org.
 # Local library for net-check (no other packages need API-based IP geolocation).
 #
+# Unified per-IP cache: ${DATA_DIR}/ipgeo-<ip>.json
+#   Format: {"cc":"CY","city":"Nicosia","asn":"AS6866","org":"Cyprus Telecom"}
+#   TTL: IPGEO_CACHE_TTL (default 24h) — geo data for a given IP rarely changes.
+#
 # Usage: . "$SCRIPT_DIR/lib/geoip.sh"
-# Requires: CURL_UA, DATA_DIR, CDN_GEO_CACHE_TTL, GEOIP_SERVICES, GEOIP_TIMEOUT from caller.
+# Requires: CURL_UA, DATA_DIR, IPGEO_CACHE_TTL, GEOIP_SERVICES, GEOIP_TIMEOUT from caller.
 # Requires: is_cache_fresh() from lib/common.sh.
 # shellcheck disable=SC3043
 
-# Internal flag: set to 1 when ip-api.com returns 429 (skip further attempts).
-# File-based coordination: ${_RUN_DIR}/.geoip-blocked shared across parallel subshells.
-# Per-run: auto-cleaned with _RUN_DIR on exit (no stale flags between runs).
-_GEOIP_PRIMARY_BLOCKED=0
+# ── Rate-limit tracking (cross-process via file flags) ────────────────────────
+# File flags: ${_RUN_DIR}/.api-blocked-<provider>
+# Process-local flags avoid repeated stat() calls in tight loops.
+_BLOCKED_ipapi=0
+_BLOCKED_ipinfo=0
 
-# Check if ip-api.com is blocked (process-local flag OR cross-process file flag).
+# Check if a provider is rate-limited.
+# Args: $1 - provider key ("ipapi" or "ipinfo")
+# Returns: 0 if blocked, 1 if OK
 _geoip_is_blocked() {
-  [ "$_GEOIP_PRIMARY_BLOCKED" = 1 ] && return 0
-  [ -f "${_RUN_DIR}/.geoip-blocked" ] && { _GEOIP_PRIMARY_BLOCKED=1; return 0; }
+  local _prov="$1"
+  case "$_prov" in
+    ipapi)  [ "$_BLOCKED_ipapi"  = 1 ] && return 0 ;;
+    ipinfo) [ "$_BLOCKED_ipinfo" = 1 ] && return 0 ;;
+  esac
+  if [ -f "${_RUN_DIR}/.api-blocked-${_prov}" ]; then
+    case "$_prov" in
+      ipapi)  _BLOCKED_ipapi=1 ;;
+      ipinfo) _BLOCKED_ipinfo=1 ;;
+    esac
+    return 0
+  fi
   return 1
 }
 
-# Mark ip-api.com as blocked (both process-local and cross-process).
+# Mark a provider as rate-limited (process-local + cross-process file flag).
+# Args: $1 - provider key
 _geoip_mark_blocked() {
-  _GEOIP_PRIMARY_BLOCKED=1
-  touch "${_RUN_DIR}/.geoip-blocked" 2>/dev/null || true
+  local _prov="$1"
+  case "$_prov" in
+    ipapi)  _BLOCKED_ipapi=1 ;;
+    ipinfo) _BLOCKED_ipinfo=1 ;;
+  esac
+  touch "${_RUN_DIR}/.api-blocked-${_prov}" 2>/dev/null || true
 }
 
+# Detect provider key from URL for rate-limit tracking.
+# Args: $1 - URL
+# stdout: provider key or empty
+_geoip_provider() {
+  case "$1" in
+    *ip-api.com*) printf 'ipapi' ;;
+    *ipinfo.io*)  printf 'ipinfo' ;;
+  esac
+}
+
+# ── Unified per-IP cache ──────────────────────────────────────────────────────
+
+# Get unified cache file path for an IP.
+# Args: $1 - IP address
+# stdout: file path
+ipgeo_cache_file() {
+  printf '%s/ipgeo-%s.json' "$DATA_DIR" "$1"
+}
+
+# Read full geo data from unified per-IP cache (any age, for enrichment).
+# Args: $1 - IP address
+# Sets: _enrich_cc, _enrich_city, _enrich_asn, _enrich_org
+# Returns: 0 if cache has data, 1 if miss
+geoip_read_full() {
+  local _cf
+  _cf=$(ipgeo_cache_file "$1")
+  [ ! -s "$_cf" ] && return 1
+  local _j
+  _j=$(cat "$_cf" 2>/dev/null) || return 1
+  _enrich_cc=$(printf '%s' "$_j" | sed -n 's/.*"cc":"\([^"]*\)".*/\1/p')
+  _enrich_city=$(printf '%s' "$_j" | sed -n 's/.*"city":"\([^"]*\)".*/\1/p')
+  _enrich_asn=$(printf '%s' "$_j" | sed -n 's/.*"asn":"\([^"]*\)".*/\1/p')
+  _enrich_org=$(printf '%s' "$_j" | sed 's/\\"/§/g' | sed -n 's/.*"org":"\([^"]*\)".*/\1/p' | sed 's/§/"/g')
+  [ -n "$_enrich_cc" ]
+}
+
+# Write full geo data to unified per-IP cache (atomic write).
+# Args: $1 - IP, $2 - cc, $3 - city, $4 - asn, $5 - org
+_ipgeo_write_cache() {
+  local _ip="$1" _cc="$2" _city="${3:-}" _asn="${4:-}" _org="${5:-}"
+  [ -z "$_cc" ] && return 0
+  local _cf
+  _cf=$(ipgeo_cache_file "$_ip")
+  printf '{"cc":"%s","city":"%s","asn":"%s","org":"%s"}' \
+    "$_cc" "$_city" "$_asn" \
+    "$(printf '%s' "$_org" | sed 's/"/\\"/g')" \
+    > "${_cf}.$$"
+  mv -f "${_cf}.$$" "$_cf" 2>/dev/null || true
+}
+
+# ── Main: geolocate IP → CC (with full enrichment side-cache) ────────────────
+
 # Geolocate an IP address to country code.
-# Primary: ip-api.com (free, 45 req/min, no key, HTTP).
-# Fallback: ipinfo.io (separate from cmd_geo to avoid shared rate-limit).
-# File cache: ${DATA_DIR}/cdngeo-<ip> with TTL from CDN_GEO_CACHE_TTL.
-# Cross-process 429 coordination: file flag ${DATA_DIR}/.geoip-blocked
-# prevents parallel subshells from all hitting rate-limited API.
+# Primary: ip-api.com/json (free, 45 req/min, HTTP, returns full data).
+# Fallback: ipinfo.io/{ip}/json (full) or ipinfo.io/{ip}/country (CC only).
+# Unified file cache: ${DATA_DIR}/ipgeo-<ip>.json with all geo fields.
+# Cross-process 429 coordination via provider-specific rate-limit tracking.
 # Args: $1 - IPv4 address
 # stdout: two-letter country code (e.g. "NL") or "??"
 geolocate_ip() {
   local ip="$1"
-  [ -z "$ip" ] || [ "$ip" = "—" ] && { printf '??'; return 0; }
+  [ -z "$ip" ] || [ "$ip" = "—" ] || [ "$ip" = "-" ] && { printf '??'; return 0; }
 
-  local cache_f="${DATA_DIR}/cdngeo-${ip}"
-  if is_cache_fresh "$cache_f" "$CDN_GEO_CACHE_TTL"; then
-    cat "$cache_f"
+  # Check unified cache (fresh)
+  local cache_f
+  cache_f=$(ipgeo_cache_file "$ip")
+  if is_cache_fresh "$cache_f" "$IPGEO_CACHE_TTL"; then
+    sed -n 's/.*"cc":"\([^"]*\)".*/\1/p' "$cache_f"
     return 0
   fi
 
-  local cc="" http_code="" tmp_body="${_RUN_DIR}/geoip-resp-${ip}.tmp"
+  local cc="" city="" asn="" org=""
+  local http_code="" tmp_body="${_RUN_DIR}/geoip-resp-${ip}.tmp"
 
   # Try each GeoIP service in order
   for _svc in $GEOIP_SERVICES; do
     _url="${_svc%%|*}"
-    # Replace {ip} placeholder with actual IP
+    _type="${_svc##*|}"
     _url=$(printf '%s' "$_url" | sed "s/{ip}/${ip}/g")
 
-    # Skip ip-api.com if rate-limited
-    case "$_url" in *ip-api.com*)
-      if _geoip_is_blocked; then continue; fi
-    ;; esac
+    # Skip rate-limited providers
+    local _prov
+    _prov=$(_geoip_provider "$_url")
+    if [ -n "$_prov" ] && _geoip_is_blocked "$_prov"; then continue; fi
 
     http_code=$(curl -sS --max-time "$GEOIP_TIMEOUT" \
       -o "$tmp_body" -w '%{http_code}' \
@@ -62,20 +138,48 @@ geolocate_ip() {
       "$_url" 2>/dev/null) || http_code="000"
 
     if [ "$http_code" = "429" ]; then
-      case "$_url" in *ip-api.com*)
-        _geoip_mark_blocked
-        printf '⚠️  ip-api.com rate-limited (429) — switching to fallback\n' >&2
-      ;; *)
-        printf '⚠️  %s rate-limited (429)\n' "$_url" >&2
-      ;; esac
-    elif [ "$http_code" = "200" ]; then
-      cc=$(cat "$tmp_body" 2>/dev/null) || cc=""
-      case "$cc" in
-        [A-Z][A-Z]) ;;
-        *) cc="" ;;
-      esac
+      if [ -n "$_prov" ]; then
+        _geoip_mark_blocked "$_prov"
+        case "$_prov" in
+          ipapi)  printf '⚠️  ip-api.com rate-limited (429) — switching to fallback\n' >&2 ;;
+          ipinfo) printf '⚠️  ipinfo.io rate-limited (429)\n' >&2 ;;
+        esac
+      fi
+      rm -f "$tmp_body" 2>/dev/null
+      continue
     fi
+
+    if [ "$http_code" != "200" ]; then rm -f "$tmp_body" 2>/dev/null; continue; fi
+
+    local _resp
+    _resp=$(cat "$tmp_body" 2>/dev/null | tr -d '\n\r') || _resp=""
     rm -f "$tmp_body" 2>/dev/null
+    [ -z "$_resp" ] && continue
+
+    case "$_type" in
+      ipapi_json)
+        # ip-api.com/json: {"countryCode":"CY","city":"Nicosia","as":"AS6866 Name"}
+        cc=$(printf '%s' "$_resp" | sed -n 's/.*"countryCode"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+        city=$(printf '%s' "$_resp" | sed -n 's/.*"city"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+        local _raw_as
+        _raw_as=$(printf '%s' "$_resp" | sed -n 's/.*"as"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+        asn=$(printf '%s' "$_raw_as" | sed -n 's/^\(AS[0-9]*\).*/\1/p')
+        org=$(printf '%s' "$_raw_as" | sed 's/^AS[0-9]* *//')
+        ;;
+      ipinfo_json)
+        # ipinfo.io/{ip}/json: {"country":"CY","city":"Nicosia","org":"AS6866 Name"}
+        cc=$(printf '%s' "$_resp" | sed -n 's/.*"country"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+        city=$(printf '%s' "$_resp" | sed -n 's/.*"city"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+        local _raw_org
+        _raw_org=$(printf '%s' "$_resp" | sed 's/\\"/§/g' | sed -n 's/.*"org"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | sed 's/§/"/g')
+        asn=$(printf '%s' "$_raw_org" | sed -n 's/^\(AS[0-9]*\).*/\1/p')
+        org=$(printf '%s' "$_raw_org" | sed 's/^AS[0-9]* *//')
+        ;;
+      plain)
+        cc=$(printf '%s' "$_resp")
+        case "$cc" in [A-Z][A-Z]) ;; *) cc="" ;; esac
+        ;;
+    esac
 
     # Break on first successful result
     [ -n "$cc" ] && break
@@ -85,12 +189,11 @@ geolocate_ip() {
     # Atomic write: temp+mv. In parallel subshells $$ is the parent PID,
     # so two subshells may race on the same temp file — suppress mv error
     # (loser is safe: winner already wrote the same correct data).
-    printf '%s' "$cc" > "${cache_f}.$$"
-    mv -f "${cache_f}.$$" "$cache_f" 2>/dev/null || true
+    _ipgeo_write_cache "$ip" "$cc" "$city" "$asn" "$org"
   else
     # Stale cache fallback
     if [ -s "$cache_f" ]; then
-      cat "$cache_f"
+      sed -n 's/.*"cc":"\([^"]*\)".*/\1/p' "$cache_f"
       return 0
     fi
     cc="??"

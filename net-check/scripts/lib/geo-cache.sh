@@ -1,4 +1,6 @@
 # net-check: File-based geo-location cache (read/write/stale).
+# Per-interface cache: geo-<iface>.json with GEO_CACHE_TTL — full result per WAN path.
+# Per-IP unified cache moved to lib/geoip.sh (ipgeo-<ip>.json).
 # Dependencies: is_cache_fresh from lib/common.sh
 # Globals used: DATA_DIR, GEO_CACHE_TTL
 # shellcheck disable=SC3043

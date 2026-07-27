@@ -2,6 +2,7 @@
 # Dependencies: lib/output.sh (emit_error, emit_warn, color_status, status_mark, summary_line, is_quiet),
 #   lib/wan.sh (get_wan_interfaces, iface_type),
 #   lib/geo-cache.sh (geo_read_cache, geo_write_cache, geo_read_stale),
+#   lib/geoip.sh (geolocate_ip, geoip_read_full),
 #   lib/common.sh (json_kv, json_kv_bool)
 # Globals used: OUTPUT_JSON, VERBOSITY, _GEO_EXT_IPS, _EXIT_CODE,
 #   GEO_SERVICES, CONNECT_TIMEOUT, HTTP_TIMEOUT, CURL_UA, DATA_DIR,
@@ -80,6 +81,12 @@ cmd_geo() {
             json_full)
               _jip=$(printf '%s' "$_resp" | sed -n 's/.*"ip"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
               if [ -n "$_jip" ]; then
+                # If plain service already got a per-interface IP, only use
+                # json_full geo data when IPs match (ipinfo.io/json may route
+                # through a different path and return the wrong egress IP).
+                if [ -n "$_ext_ip" ] && [ "$_jip" != "$_ext_ip" ]; then
+                  continue
+                fi
                 _ext_ip="$_jip"
                 _country=$(printf '%s' "$_resp" | sed -n 's/.*"country"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
                 _city=$(printf '%s' "$_resp" | sed -n 's/.*"city"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
@@ -91,10 +98,22 @@ cmd_geo() {
           esac
           [ "$_geo_ok" = 1 ] && break
         done
-        [ "$_geo_ok" = 0 ] && [ -n "$_ext_ip" ] && _geo_ok=1
 
-        # Write geo cache
-        if [ "$_geo_ok" = 1 ] && [ -n "$_ext_ip" ]; then
+        # Fallback: geolocate_ip() for CC + unified cache enrichment
+        if [ "$_geo_ok" = 0 ] && [ -n "$_ext_ip" ]; then
+          # geolocate_ip uses ip-api.com/json → caches CC+city+ASN+org
+          _country=$(geolocate_ip "$_ext_ip" 2>/dev/null) || _country=""
+          _geo_ok=1
+          # Read enrichment from unified ipgeo cache (populated by geolocate_ip)
+          if geoip_read_full "$_ext_ip" 2>/dev/null; then
+            [ -z "$_city" ] && _city="$_enrich_city"
+            [ -z "$_asn" ] && _asn="$_enrich_asn"
+            [ -z "$_org" ] && _org="$_enrich_org"
+          fi
+        fi
+
+        # Write per-interface geo cache only with complete data (city non-empty)
+        if [ "$_geo_ok" = 1 ] && [ -n "$_ext_ip" ] && [ -n "$_city" ]; then
           _cj=$(printf '{"ip":"%s","country":"%s","city":"%s","asn":"%s","org":"%s"}' \
             "$_ext_ip" "${_country:-}" "${_city:-}" "${_asn:-}" \
             "$(printf '%s' "${_org:-}" | sed 's/"/\\"/g')")

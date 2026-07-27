@@ -62,7 +62,7 @@ _cdn_probe_iface() {
       +short +tries=1 +time="$DNS_TIMEOUT" 2>/dev/null \
       | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
     _cdn_ip="${_cdn_ip:--}"
-    if [ "$_cdn_ip" != "-" ] && is_cache_fresh "${DATA_DIR}/cdngeo-${_cdn_ip}" "${CDN_GEO_CACHE_TTL:-3600}"; then
+    if [ "$_cdn_ip" != "-" ] && is_cache_fresh "$(ipgeo_cache_file "$_cdn_ip")" "${IPGEO_CACHE_TTL:-86400}"; then
       _cc_cached=1
     fi
     _cdn_cc=$(geolocate_ip "$_cdn_ip")
@@ -432,11 +432,12 @@ cmd_cdn_all() {
     local _all_cc="" _error_reasons="" _warn_reasons="" json_paths=""
     local _has_error=0 _has_warn=0 _active_reason=""
 
-    # Determine active route device for this domain (for cell marker)
+    # Determine active route device for this domain (for cell marker).
+    # CDN domains don't carry check-targets category — falls back to kernel FIB.
     local _active_route_dev=""
     local _resolved_ip=""
     _resolved_ip=$(_resolve_a_cached "$domain" 2>/dev/null) || _resolved_ip=""
-    [ -n "$_resolved_ip" ] && _active_route_dev=$(route_dev_for_ip "$_resolved_ip")
+    _active_route_dev=$(active_dev_for_target "$_resolved_ip" "")
 
     # Pre-scan: pick recommended iface (best OK path by RTT)
     local _recommended_dev="" _rec_best_rtt=999999 _rec_ok_n=0 _ri

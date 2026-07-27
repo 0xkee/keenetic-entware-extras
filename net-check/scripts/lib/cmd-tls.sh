@@ -456,14 +456,15 @@ cmd_tls_check_targets() {
     local _host_fps="" _host_mitm=0 _host_error=0
     local _host_json_paths=""
 
-    # Determine active route device for this host (for cell marker)
+    # Determine active route device for this host (for cell marker).
+    # TLS targets don't carry check-targets category — falls back to kernel FIB.
     local _active_route_dev=""
     local _resolved_ip=""
     _resolved_ip=$(_resolve_a_cached "$host" 2>/dev/null) || _resolved_ip=""
-    [ -n "$_resolved_ip" ] && _active_route_dev=$(route_dev_for_ip "$_resolved_ip")
+    _active_route_dev=$(active_dev_for_target "$_resolved_ip" "")
 
-    # Pre-scan: pick recommended iface (healthy TLS path, no error/MITM)
-    local _recommended_dev="" _rec_ok_n=0 _ri
+    # Pre-scan: collect healthy fingerprints and pick recommended iface
+    local _recommended_dev="" _rec_ok_n=0 _ri _pre_fps=""
     for _ri in $ifaces; do
       local _rpf="${_RUN_DIR}/tls-par-${host}-${_ri}"
       [ -f "$_rpf" ] || continue
@@ -476,12 +477,18 @@ cmd_tls_check_targets() {
       # Skip MITM paths
       _check_mitm_issuer "$_r_issuer" >/dev/null 2>&1 && continue
       _rec_ok_n=$((_rec_ok_n + 1))
+      _pre_fps="${_pre_fps}${_r_fp}
+"
       _recommended_dev="$_ri"
     done
     # No ★ when single iface (no choice to show)
     local _n_ifc
     _n_ifc=$(printf '%s' "$ifaces" | wc -w | tr -d ' ')
     [ "$_n_ifc" -le 1 ] && _recommended_dev=""
+    # No ★ when all fingerprints identical (nothing to recommend)
+    local _pre_unique_fps
+    _pre_unique_fps=$(printf '%s' "$_pre_fps" | grep -v '^$' | sort -u | grep -c '.' 2>/dev/null) || _pre_unique_fps=0
+    [ "$_pre_unique_fps" -le 1 ] && _recommended_dev=""
 
     cmp_row_start "$host"
 

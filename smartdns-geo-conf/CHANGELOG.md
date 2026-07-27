@@ -5,6 +5,12 @@ All notable changes to `smartdns-geo-conf` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.10.14] — 2026-07-27
+
+### Fixed
+- `S37smartdns-conf`: `do_bind_addrs()` — IPv6 bind order: LAN address first,
+  loopback last (mirrors IPv4 order for consistent port listing in status)
+
 ## [0.10.13] — 2026-07-27
 
 ### Added

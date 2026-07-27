@@ -17,7 +17,7 @@
 |------|--------|------|------------|
 | **A: Packaging + Init** | ✅ Готово | 2026-04-16 | `.ipk` собирается, деплой через `opkg install` работает |
 | **B: Конфиг улучшения** | ✅ Готово | 2026-04-16 | DoH вместо DoT для international, TLS verify, кэш |
-| **C: VPN-интеграция** | ⏳ Pending | — | Ждёт настройки VPN на роутере |
+| **C: Tunnel-интеграция** | ⏳ Pending | — | Ждёт настройки tunnel на роутере |
 
 ### Отклонения от плана
 
@@ -63,7 +63,7 @@
 ```
 Этап A: Packaging + Init     ← минимальный viable для .ipk
 Этап B: Конфиг улучшения     ← best practices DNS
-Этап C: VPN-интеграция        ← опционально, если VPN настроен
+Этап C: Tunnel-интеграция        ← опционально, если tunnel настроен
 ```
 
 Каждый этап — отдельный коммит/PR, тестируемый независимо.
@@ -344,9 +344,9 @@ flowchart TD
 
 ### 4.1 Изменения в `smartdns-geo-conf/config/smartdns.conf`
 
-Полностью заменить содержимое. Два режима foreign DNS (A: без VPN, B: через VPN) — оба в одном файле, Mode B закомментирован.
+Полностью заменить содержимое. Два режима foreign DNS (A: без tunnel, B: через tunnel) — оба в одном файле, Mode B закомментирован.
 
-**Финальный конфиг (базовый, Mode A — без VPN):**
+**Финальный конфиг (базовый, Mode A — без tunnel):**
 
 ```conf
 ############################################
@@ -449,11 +449,11 @@ server 77.88.8.1 -group ru -exclude-default-group
 # ===========================================================================
 # 🌍 International DNS — Google + Cloudflare (default group)
 #
-# Mode A: Direct (без VPN) — для non-RKN доменов этого достаточно.
-# Mode B: VPN-protected — раскомментировать ниже, закомментировать Mode A.
+# Mode A: Direct (без tunnel) — для non-RKN доменов этого достаточно.
+# Mode B: tunnel-protected — раскомментировать ниже, закомментировать Mode A.
 # ===========================================================================
 
-# --- Mode A: Direct (без VPN) ---
+# --- Mode A: Direct (без tunnel) ---
 
 # Google UDP (primary — most reliable from RU)
 server 8.8.8.8
@@ -463,15 +463,15 @@ server 8.8.4.4
 server 1.1.1.1
 server 1.0.0.1
 
-# Cloudflare DoH (additional — may bypass DPI better than DoT)
+# Cloudflare DoH (additional — better DPI protection than DoT)
 server-https https://cloudflare-dns.com/dns-query \
     -host-name cloudflare-dns.com \
     -http-host cloudflare-dns.com \
     -host-ip 1.1.1.1 \
     -tls-host-verify cloudflare-dns.com
 
-# --- Mode B: VPN-protected (раскомментировать если VPN настроен) ---
-# Замените nwg0 на имя вашего VPN-интерфейса.
+# --- Mode B: tunnel-protected (раскомментировать если tunnel настроен) ---
+# Замените nwg0 на имя вашего туннельный интерфейса.
 # Проверить: ip link show | grep -E 'nwg|ovpn|l2tp'
 #
 # server 8.8.8.8 -interface nwg0
@@ -479,7 +479,7 @@ server-https https://cloudflare-dns.com/dns-query \
 # server 1.1.1.1 -interface nwg0
 # server 1.0.0.1 -interface nwg0
 #
-# Fallback без VPN (если VPN down — DNS всё равно работает)
+# Fallback без tunnel (если tunnel down — DNS всё равно работает)
 # server 8.8.8.8 -fallback
 # server 8.8.4.4 -fallback
 
@@ -525,7 +525,7 @@ nameserver /tinkoff.com/ru
 | 18 | Убраны AdGuard UDP fallback | ❌ | Yandex UDP достаточно для ru-группы |
 | 19 | Убраны gov.ru/nalog.ru/etc | ❌ | Покрыты /.ru/ru |
 | 20 | Добавлены vk.com/sberbank.com/etc | ➕ | CDN geo-optimization |
-| 21 | Mode B (VPN) закомментирован | ➕ | Готов к Этапу C |
+| 21 | Mode B (tunnel) закомментирован | ➕ | Готов к Этапу C |
 
 ### 4.3 Порядок действий Этапа B
 
@@ -536,50 +536,50 @@ nameserver /tinkoff.com/ru
 
 ---
 
-## 5. Этап C: VPN-интеграция (опционально)
+## 5. Этап C: Tunnel-интеграция (опционально)
 
-**Цель:** foreign DNS запросы идут через VPN-туннель, обходя ТСПУ-спуфинг.
+**Цель:** foreign DNS запросы идут через шифрованный канал, минуя ТСПУ-спуфинг.
 
 **Оценка времени:** ~0.5ч (конфиг) + тестирование
 
 ### 5.1 Когда нужен
 
-- VPN (WireGuard/OpenVPN) настроен на роутере
-- Нужен доступ к заблокированным `.com` доменам с правильным DNS
+- Tunnel (WireGuard/OpenVPN) настроен на роутере
+- Нужен доступ к фильтруемым `.com` доменам с правильным DNS
 - ISP применяет DNS-спуфинг (ТСПУ подменяет ответы для доменов из реестра РКН)
 
 ### 5.2 Что делать
 
 В `smartdns.conf`:
 1. Закомментировать блок `Mode A: Direct`
-2. Раскомментировать блок `Mode B: VPN-protected`
-3. Заменить `nwg0` на имя VPN-интерфейса
+2. Раскомментировать блок `Mode B: tunnel-protected`
+3. Заменить `nwg0` на имя туннельный интерфейса
 
 Проверить имя интерфейса:
 ```sh
 ip link show | grep -E 'nwg|ovpn|l2tp'
 ```
 
-### 5.3 Тестирование VPN-режима
+### 5.3 Тестирование tunnel-режима
 
 ```sh
-# 1. Проверить что VPN поднят
+# 1. Проверить что tunnel поднят
 ip link show nwg0
 
-# 2. Тест DNS через VPN
+# 2. Тест DNS через tunnel
 dig google.com @127.0.0.1 -p 6053 +short
 
-# 3. Тест заблокированного домена (если есть)
-dig <blocked-domain.com> @127.0.0.1 -p 6053 +short
+# 3. Тест фильтруемого домена (если есть)
+dig <filtered-domain.com> @127.0.0.1 -p 6053 +short
 # Должен вернуть реальный IP, не IP-заглушку РКН
 
-# 4. Тест RU домена (должен идти напрямую, не через VPN)
+# 4. Тест RU домена (должен идти напрямую, не через tunnel)
 dig yandex.ru @127.0.0.1 -p 6053 +short
 ```
 
 ### 5.4 Rollback
 
-Если VPN нестабилен — закомментировать Mode B, раскомментировать Mode A. Fallback-серверы без `-interface` гарантируют что DNS работает даже при упавшем VPN.
+Если tunnel нестабилен — закомментировать Mode B, раскомментировать Mode A. Fallback-серверы без `-interface` гарантируют что DNS работает даже при упавшем tunnel.
 
 ---
 
@@ -625,7 +625,7 @@ dig yandex.ru @127.0.0.1 -p 6053 +short
 |------|--------|-------|-------------|
 | **A: Packaging + Init** | 6 новых + 2 изменённых файла | ~3ч | Ничем |
 | **B: Конфиг** | 1 файл (smartdns.conf) | ~1.5ч | Этап A (нужен .ipk для деплоя) |
-| **C: VPN** | Раскомментировать 6 строк | ~0.5ч | Этап B + VPN на роутере |
+| **C: Tunnel** | Раскомментировать 6 строк | ~0.5ч | Этап B + tunnel на роутере |
 | **Итого** | | **~5ч** | |
 
 ---
@@ -636,7 +636,7 @@ dig yandex.ru @127.0.0.1 -p 6053 +short
 |------|------------|---------|-----------|
 | TLS verify без `-k` не работает | Средняя | DNS не резолвится через DoT | `ca-certificates` в Depends; fallback на UDP |
 | S38 обновляется при opkg upgrade smartdns | Низкая | SmartDNS перезапустится с новым S38 | Наш конфиг остаётся (conffiles), S38 штатный |
-| VPN down → foreign DNS не работает | Низкая (Mode B) | Зарубежные домены не резолвятся | Fallback-серверы без `-interface` |
+| tunnel down → foreign DNS не работает | Низкая (Mode B) | Зарубежные домены не резолвятся | Fallback-серверы без `-interface` |
 | `cache-persist` на flash → износ | Очень низкая | Уменьшение ресурса flash | Кэш ~2MB, запись 1 раз при shutdown |
 | Конфиг drift после ручных правок | Средняя | Рассинхронизация | `conffiles` — opkg предупредит |
 
@@ -666,5 +666,5 @@ dig yandex.ru @127.0.0.1 -p 6053 +short
 
 ### Этап C ⏳
 
-- [ ] `dig google.com @127.0.0.1 -p 6053` через VPN — возвращает правильный IP
-- [ ] При VPN down — fallback серверы отвечают
+- [ ] `dig google.com @127.0.0.1 -p 6053` через tunnel — возвращает правильный IP
+- [ ] При tunnel down — fallback серверы отвечают

@@ -90,7 +90,7 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
   2s for local SmartDNS queries, added `+tries=1` everywhere. Added early-exit
   logic: if 2+ DNS tests fail (timeout), remaining tests are skipped with
   "SKIPPED" result instead of blocking CPU for 3s×N. Prevents cascade CPU
-  overload on routers with blocked/slow uplinks (e.g., RKN blocking).
+  overload on routers with filtered/slow uplinks (e.g., middlebox filtering).
 - `collect_dns_server_checks_json()`: same early-exit for upstream reachability
   checks — if 2+ upstreams timeout, skip remaining (network is clearly down).
 
@@ -192,8 +192,8 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 ### Added
 - **Multi-zone DNS routing** — configurable `DNS_ZONE` in `config/config.conf`:
   single country (`ru`, `by`, `kz`, `am`, `kg`) or union (`eas`, `cis`, `brics`, etc.)
-- **VPN interface binding** for international DNS (`OTHER_DNS_INTERFACES`) and
-  zone DNS (`ZONE_DNS_INTERFACE`) — bypass MITM
+- **Tunnel interface binding** for international DNS (`OTHER_DNS_INTERFACES`) and
+  zone DNS (`ZONE_DNS_INTERFACE`) — MITM protection
 - `config/config.conf` — user configuration file (preserved on opkg upgrade)
 - `config/unions.conf` — 35+ geo-political unions reference (EAEU, CIS, BRICS,
   NATO, EU, Schengen, ASEAN, GCC, etc.)

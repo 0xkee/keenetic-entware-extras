@@ -380,7 +380,7 @@ text_output() {
     status_line "Zone DNS" "$_ck_zone_provider"
     status_line "Other DNS" "$_ck_other_provider"
     if [ -n "$_ck_other_ifaces" ]; then
-      status_line "Other VPN" "$_ck_other_ifaces"
+      status_line "Other tunnels" "$_ck_other_ifaces"
     fi
   else
     status_line "Mode" "default (simple forwarder)"

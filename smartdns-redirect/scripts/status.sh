@@ -301,6 +301,10 @@ show_version() {
 json_output() {
   local running="false" uptime_seconds_val=0
 
+  # Detect parent disabled (spec §4.3) — same logic as text_output
+  local _parent_disabled="false"
+  [ ! -x /opt/etc/init.d/S38smartdns ] && [ -f /opt/etc/init.d/S38smartdns.disabled ] && _parent_disabled="true"
+
   # Running: PIDFILE exists = rules attached
   if [ "$_st_running" = "true" ]; then
     running="true"
@@ -311,6 +315,17 @@ json_output() {
   local enabled_val=1
   is_service_enabled "S39smartdns-redirect" && enabled_val=0
 
+  # Parent disabled overrides enabled → false (spec §4.3)
+  # Prevents webui showing 🔴 "Failed" for a non-failure state
+  if [ "$_parent_disabled" = "true" ]; then
+    enabled_val=1
+    STATUS_OK=0
+  fi
+
+  # Determine if service is effectively disabled (self or parent)
+  local _disabled="false"
+  [ "$enabled_val" -ne 0 ] && _disabled="true"
+
   # Details — Redirect chain
   status_detail "interfaces" "$INTERFACES"
   status_detail "ipv6" "$IPV6_MODE"
@@ -318,27 +333,50 @@ json_output() {
   if [ "$IPV6_MODE" = "dnat" ]; then
     status_detail "dnat_target_v6" "[${ROUTER_IP6}]:${UPSTREAM_PORT}"
   fi
-  status_detail "rules" "$_ck_rules_ok" "bool"
+  # Runtime details — skip when disabled (no red ✗ noise)
+  if [ "$_disabled" = "false" ]; then
+    status_detail "rules" "$_ck_rules_ok" "bool"
+  fi
   # Details — Upstream resolver
   status_detail "upstream" "127.0.0.1:${UPSTREAM_PORT}"
   status_detail "name" "$_ck_upstream_name"
-  status_detail "status" "$_ck_upstream_ok" "bool"
-  # Details — Infrastructure
-  status_detail "ndm_hook" "$_ck_ndm_hook_ok" "bool"
-  status_detail "init" "$_ck_init_ok" "bool"
+  if [ "$_disabled" = "false" ]; then
+    status_detail "status" "$_ck_upstream_ok" "bool"
+    # Details — Infrastructure (only shown when enabled — no ✓ noise when off)
+    status_detail "ndm_hook" "$_ck_ndm_hook_ok" "bool"
+    status_detail "init" "$_ck_init_ok" "bool"
+  fi
   # Details — System
   status_detail "uptime" "$uptime_seconds_val" "num"
   status_detail "version" "${_st_version:-unknown}"
+  # Parent-disabled hint (spec §4.3) — human-readable values for webui
+  if [ "$_parent_disabled" = "true" ]; then
+    status_detail "depends_on" "SmartDNS Geo-Config (disabled)"
+    status_detail "action" "Enable SmartDNS Geo-Config"
+  fi
 
-  # Per-interface rule detail (pre-serialized JSON array)
-  status_extra "rules_detail" "[${_ck_rules_json}]"
+  # Per-interface rule detail — empty when disabled (no noise)
+  if [ "$_disabled" = "true" ]; then
+    status_extra "rules_detail" "[]"
+  else
+    status_extra "rules_detail" "[${_ck_rules_json}]"
+  fi
 
-  # Checks
-  status_check_result "running" "$(if [ "$running" = "true" ]; then printf ok; else printf fail; fi)"
-  status_check_result "upstream" "$(if [ "$_ck_upstream_ok" = 0 ]; then printf ok; else printf fail; fi)"
+  # Checks — runtime checks → "skip" when disabled (spec §4.2/4.3)
+  if [ "$_disabled" = "true" ]; then
+    status_check_result "running" "skip"
+    status_check_result "upstream" "skip"
+  else
+    status_check_result "running" "$(if [ "$running" = "true" ]; then printf ok; else printf fail; fi)"
+    status_check_result "upstream" "$(if [ "$_ck_upstream_ok" = 0 ]; then printf ok; else printf fail; fi)"
+  fi
   status_check_result "ndm_hook" "$(if [ "$_ck_ndm_hook_ok" = 0 ]; then printf ok; else printf fail; fi)"
   status_check_result "init" "$(if [ "$_ck_init_ok" = 0 ]; then printf ok; else printf fail; fi)"
-  status_check_result "rules" "$(if [ "$_ck_rules_ok" = 0 ]; then printf ok; else printf fail; fi)"
+  if [ "$_disabled" = "true" ]; then
+    status_check_result "rules" "skip"
+  else
+    status_check_result "rules" "$(if [ "$_ck_rules_ok" = 0 ]; then printf ok; else printf fail; fi)"
+  fi
 
   # Emit
   status_emit_json "$enabled_val" "$([ "$running" = "true" ] && echo 0 || echo 1)" "$STATUS_OK"
@@ -363,7 +401,12 @@ _st_running="false"
 
 text_output() {
   local _status_word="✓ Alive"
-  if ! is_service_enabled "S39smartdns-redirect"; then
+  local _parent_disabled="false"
+  # Check if parent service (SmartDNS) is intentionally disabled
+  [ ! -x /opt/etc/init.d/S38smartdns ] && [ -f /opt/etc/init.d/S38smartdns.disabled ] && _parent_disabled="true"
+  if [ "$_parent_disabled" = "true" ]; then
+    _status_word="⏸ Pending (smartdns-geo-conf disabled)"
+  elif ! is_service_enabled "S39smartdns-redirect"; then
     _status_word="⚠ Disabled"
   elif [ "$STATUS_OK" -ne 0 ]; then
     _status_word="✗ Fail"
@@ -371,17 +414,30 @@ text_output() {
 
   _text_buf="smartdns-redirect status: ${_status_word}
 "
-  show_mode
-  status_blank
-  show_rules
-  status_blank
-  show_upstream
-  status_blank
-  status_section "System"
-  show_uptime
-  show_init
-  show_ndm_hook
-  show_version
+
+  if [ "$_parent_disabled" = "true" ]; then
+    # Simplified output: parent disabled, no point showing failed rules/upstream
+    status_section "Service"
+    status_line "Upstream" "SmartDNS (stopped by smartdns-geo-conf disable)"
+    status_line "Action" "run: /opt/etc/init.d/S37smartdns-conf enable"
+    status_blank
+    status_section "System"
+    show_init
+    show_ndm_hook
+    show_version
+  else
+    show_mode
+    status_blank
+    show_rules
+    status_blank
+    show_upstream
+    status_blank
+    status_section "System"
+    show_uptime
+    show_init
+    show_ndm_hook
+    show_version
+  fi
 
   status_emit_text
 }

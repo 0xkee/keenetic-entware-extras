@@ -257,8 +257,8 @@ UNION_eu_sanctioned="ru by ir kp sy ve"
 # 🚫 SWIFT-disconnected (countries cut from SWIFT, 2024)
 UNION_swift_cut="ru by ir kp cu sy"
 
-# 🔒 Internet-restricted (heavy censorship / firewall)
-UNION_censored="cn ir kp ru tm"
+# 🔒 Internet-restricted (heavy network filtering / firewall)
+UNION_internet_restricted="cn ir kp ru tm"
 
 # ===================================================================
 # Functions

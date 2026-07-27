@@ -131,7 +131,7 @@ detect_dns_port() {
   echo "0 system resolver"
 }
 
-# Check if an interface name is a VPN/tunnel device.
+# Check if an interface name is a tunnel device.
 # Standard Keenetic: nwg*, awg*, ovpn*, l2tp*, pptp*, sstp*, ipsec*
 # Kernel tunnel:     tun[0-9]*, tap*, gre*, vti*, sit*, ip6tnl*, xfrm*
 # Third-party pkgs:  wg* (standalone WireGuard)
@@ -147,9 +147,9 @@ is_tunnel_iface() {
 
 # Detect outgoing ISP interface for geo-split routes.
 # Priority: main table default route (most reliable, reflects actual connectivity).
-# Fallback: scan all routing tables (handles "VPN = default policy" where ISP
+# Fallback: scan all routing tables (handles "tunnel = default policy" where ISP
 # is only reachable via Keenetic policy tables 4096+).
-# Excludes VPN interfaces (nwg*, ovpn*, l2tp*, etc.) and LAN bridges (br*).
+# Excludes tunnel interfaces (nwg*, ovpn*, l2tp*, etc.) and LAN bridges (br*).
 detect_out_iface() {
   local iface
 
@@ -158,7 +158,7 @@ detect_out_iface() {
     grep -v "dev nwg\|dev awg\|dev ovpn\|dev l2tp\|dev pptp\|dev sstp\|dev ipsec\|dev tun\|dev tap" | \
     sed -n 's/.*dev \([^ ]*\).*/\1/p' | grep -v '^br' | head -1)
 
-  # Fallback: all tables (VPN is default policy, ISP only in policy tables)
+  # Fallback: all tables (tunnel is default policy, ISP only in policy tables)
   if [ -z "$iface" ]; then
     iface=$(ip route show table all | grep "^default" | \
       grep -v "dev nwg\|dev awg\|dev ovpn\|dev l2tp\|dev pptp\|dev sstp\|dev ipsec\|dev tun\|dev tap" | \

@@ -124,7 +124,24 @@ status_check_port() {
 
   if [ -n "$output" ]; then
     _st_port_ok="true"
-    _st_port_addrs="$(echo "$output" | awk '{print $4}' | sort -u | tr '\n' ' ' | sed 's/ $//')"
+    # Normalize IPv6 addresses to RFC 3986 [addr]:port format.
+    # netstat outputs IPv6 as "::1:6053" which is ambiguous; we convert
+    # to "[::1]:6053". IPv4 "10.0.0.1:6053" passes through unchanged.
+    # Sort: IPv4 (LAN then loopback), IPv6 (LAN then loopback).
+    _st_port_addrs="$(echo "$output" | awk '{
+      a = $4; n = split(a, p, ":")
+      if (n > 2) {
+        addr = ""
+        for (i = 1; i < n; i++) addr = (i > 1 ? addr ":" : "") p[i]
+        printf "[%s]:%s\n", addr, p[n]
+      } else { print a }
+    }' | awk '!seen[$0]++ {
+      if (/^\[::1\]/) v6lb[++a]=$0; else if (/^\[/) v6[++b]=$0
+      else if (/^127\./) v4lb[++c]=$0; else v4[++d]=$0
+    } END {
+      for(i=1;i<=d;i++) print v4[i]; for(i=1;i<=c;i++) print v4lb[i]
+      for(i=1;i<=b;i++) print v6[i]; for(i=1;i<=a;i++) print v6lb[i]
+    }' | tr '\n' ' ' | sed 's/ $//')"
   fi
 }
 

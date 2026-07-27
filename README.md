@@ -3,7 +3,7 @@
 > 📖 **[User Manual (RU)](user-manual.ru.md)** — installation, kee-status, bug-report.
 
 Shell scripts and `.ipk` packages for Keenetic routers with Entware.
-Includes subprojects: **geo-split** (GeoIP/domain split routing), **smartdns-geo-conf** (DNS split), **smartdns-redirect** (DNAT LAN :53 → local DNS), **webui** (dashboard).
+Includes subprojects: **geo-split** (GeoIP/domain split routing), **smartdns-geo-conf** (DNS split), **smartdns-redirect** (DNAT LAN :53 → local DNS), **net-check** (network diagnostics), **webui** (dashboard).
 
 ## Packages
 
@@ -11,9 +11,10 @@ Includes subprojects: **geo-split** (GeoIP/domain split routing), **smartdns-geo
 |---------|-------------|
 | `keenetic-entware-extras` | Base package — shared libraries (`lib/common.sh`, `lib/ip.sh`, `lib/lists.sh`, `lib/status.sh`, `lib/geo.sh`, `lib/zones.sh`) + CLI `kee-status` |
 | `geo-split` | GeoIP + domain split routing. Depends on `keenetic-entware-extras` |
-| `geo-split-data` | Data: domain lists, GeoIP zones, whitelist. Conffiles — preserved on upgrade |
+| `geo-split-data` | Data: domain lists, GeoIP zones, allowlist. Conffiles — preserved on upgrade |
 | `smartdns-geo-conf` | Multi-zone split DNS: route queries by GeoIP zones (RU, EAEU, BRICS, 40+ alliances) to configurable providers with zone-routing-rules |
 | `smartdns-redirect` | Universal DNS DNAT: intercept LAN `:53` → local DNS |
+| `net-check` | Network connectivity diagnostics: reachability verification, anomaly detection, CDN geo-steering, DNS leak testing |
 | `webui` | Custom dashboard for Keenetic/Entware services on :8080 + Config Editor, Route Check, DNS Check, stock WebUI integration |
 
 ## Installation via opkg
@@ -53,15 +54,23 @@ Exit code: `0` if all `Alive`, `1` if any `FAIL`.
 
 ### [geo-split](geo-split/README.md)
 
-Split routing for Keenetic: route traffic by GeoIP subnets and domain lists through different network interfaces (ISP/VPN). Supports bypass, vpn, auto modes.
+Split routing for Keenetic: route traffic by GeoIP subnets and domain lists through different network interfaces (ISP/tunnel). Supports direct, tunnel, auto routing modes.
 
 ### [smartdns-geo-conf](smartdns-geo-conf/README.md)
 
-Multi-zone split DNS: route domain queries by configurable GeoIP zones (RU, EAEU, CIS, BRICS, EU, 40+ alliances) to regional DNS providers (Yandex/AdGuard DoT), everything else → Google/Cloudflare DoH. Supports custom zone-routing-rules, multiple DNS provider profiles, and VPN-bypass binding.
+Multi-zone split DNS: route domain queries by configurable GeoIP zones (RU, EAEU, CIS, BRICS, EU, 40+ alliances) to regional DNS providers (Yandex/AdGuard DoT), everything else → Google/Cloudflare DoH. Supports custom zone-routing-rules, multiple DNS provider profiles, and tunnel interface binding.
 
 ### [smartdns-redirect](smartdns-redirect/README.md)
 
-Universal DNS DNAT: `iptables PREROUTING REDIRECT` for LAN clients (`br0`) — bypass Keenetic ndnproxy, direct resolution through local DNS (SmartDNS/AdGuard Home/Unbound/dnsmasq). Persistence via NDM `netfilter.d` hook, watchdog via cron. Measured latency improvement: `~130ms → <80ms`.
+Universal DNS DNAT: `iptables PREROUTING REDIRECT` for LAN clients (`br0`) — redirects past Keenetic ndnproxy, direct resolution through local DNS (SmartDNS/AdGuard Home/Unbound/dnsmasq). Persistence via NDM `netfilter.d` hook, watchdog via cron. Measured latency improvement: `~130ms → <80ms`.
+
+### [net-check](net-check/README.md)
+
+Network connectivity diagnostics and degradation control. End-to-end reachability verification across WAN interfaces, MITM/DPI anomaly detection, CDN geo-steering analysis, DNS leak testing, path quality comparison.
+
+### [webui](webui/README.md)
+
+Custom dashboard for Keenetic/Entware services on `:8080`. Config Editor, Route Check, DNS Check, stock WebUI sidebar integration via Lua patches.
 
 ## Project structure
 
@@ -93,6 +102,10 @@ keenetic-entware-extras/
 │   ├── scripts/          # dns-redirect, watchdog, status, netfilter-hook
 │   ├── init.d/           # S39smartdns-redirect
 │   └── docs/             # user-manual.ru.md
+├── net-check/            # network diagnostics
+│   ├── config/           # check-targets, dns-providers, cdn-domains
+│   ├── scripts/          # net-check.sh, domain-check.sh, status.sh
+│   └── scripts/lib/      # cmd modules (geo, dns, cdn, tls, speed, ipv6-leak)
 ├── webui/                # custom dashboard (nginx + lua)
 │   ├── config/           # nginx.conf, logrotate.conf
 │   ├── scripts/          # status.sh, patch-stock-ui.sh
@@ -104,6 +117,7 @@ keenetic-entware-extras/
 │   ├── geo-split-data/
 │   ├── smartdns-geo-conf/
 │   ├── smartdns-redirect/
+│   ├── net-check/
 │   └── webui/
 ├── scripts/              # build-ipk.sh, kee-status.sh (aggregated status CLI)
 └── LICENSE               # MIT
@@ -112,11 +126,11 @@ keenetic-entware-extras/
 ## Requirements
 
 - Keenetic with Entware installed
-- Dependencies are installed automatically via opkg:
-  - `ip-full` — iproute2 for policy routing
-  - `curl` — GeoIP data download
-  - `bind-dig` — DNS resolution of domains
-  - `aggregate` — CIDR subnet aggregation
+- All dependencies are installed automatically via `opkg install <pkg>.ipk`
+
+**Base** (`keenetic-entware-extras`): `cron`
+
+**Per sub-package** - see related packages.
 
 ## Development
 

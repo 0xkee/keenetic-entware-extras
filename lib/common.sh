@@ -46,7 +46,7 @@ is_service_enabled() {
 
 # Detect router LAN IP address (Keenetic br0 bridge).
 # Method: br0 is the standard LAN bridge on Keenetic routers.
-# Fallback: ip route get → source IP (may return VPN/WAN on tunneled setups).
+# Fallback: ip route get → source IP (may return tunnel/WAN IP on tunneled setups).
 # stdout: IP address or empty string
 detect_router_ip() {
   local ip=""

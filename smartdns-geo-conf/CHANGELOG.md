@@ -5,6 +5,44 @@ All notable changes to `smartdns-geo-conf` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.11.1] — 2026-07-27
+
+### Fixed
+- **`status.sh --json` disabled state**: runtime values (uptime, pid, memory, ports)
+  now reset to empty/zero when service is disabled — prevents phantom uptime from
+  stale pidfile
+- **`status.sh --json` dns_tests when disabled**: skip DNS dig tests when service is
+  disabled — prevents raw dig error strings (`;; communications error...`) in JSON
+- **`status.sh --json` checks when disabled**: runtime checks (`process`, `ports`)
+  now return `"skip"` instead of `"fail"` when disabled — prevents false caution
+  state in webui
+- **`status.sh --json` disabled marker**: added `disabled: true` detail field when
+  service is fully disabled
+
+## [0.11.0] — 2026-07-27
+
+### Added
+- **Strict tunnel mode** (`OTHER_DNS_STRICT`, `ZONE_DNS_STRICT`): when `"yes"`,
+  direct (no-tunnel) fallback servers are not generated — DNS fails if all tunnels
+  are down (privacy over availability). Only meaningful when tunnel interfaces are set.
+- **Disable = full shutdown**: `S37smartdns-conf disable` now fully stops SmartDNS
+  (renames S38 init script) and stops smartdns-redirect. DNS reverts to system
+  (ndnproxy). `enable` restores everything.
+- `S37smartdns-conf`: `do_restore_s38()`, `do_disable_s38()`, `do_stop_redirect()`,
+  `do_start_redirect()` — service lifecycle helpers
+
+### Fixed
+- **Zone UDP fallback missing `-interface`**: when `ZONE_DNS_INTERFACE` is set,
+  UDP fallback servers now also get `-interface` binding. Previously plain UDP
+  went through ISP directly — potential privacy leak.
+
+### Changed
+- `S37smartdns-conf start`: when disabled, renames S38 to prevent boot auto-start
+  (S37 runs before S38 in rc.unslung boot sequence)
+- `S37smartdns-conf disable`: no longer switches to "default forwarder" mode —
+  performs full shutdown instead
+- `do_activate()`: simplified — always copies split config (default mode removed)
+
 ## [0.10.14] — 2026-07-27
 
 ### Fixed

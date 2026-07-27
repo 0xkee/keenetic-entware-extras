@@ -52,9 +52,11 @@ check_cache() {
 }
 
 # Check split-DNS enabled state.
-# Sets: _ck_enabled ("true"|"false"), _ck_zone, _ck_active_zones, _ck_other_ifaces
+# Sets: _ck_enabled ("true"|"false"), _ck_disabled ("true"|"false"),
+#        _ck_zone, _ck_active_zones, _ck_other_ifaces
 check_enabled() {
   _ck_enabled="false"
+  _ck_disabled="false"
   _ck_zone="${DNS_ZONE:-ru}"
   _ck_active_zones=""
   _ck_other_ifaces="${OTHER_DNS_INTERFACES:-}"
@@ -62,6 +64,9 @@ check_enabled() {
   _ck_zone_provider="${ZONE_DNS_PROVIDER:-yandex adguard}"
   if [ -f "$STATE_FILE" ]; then
     _ck_enabled="true"
+  elif [ -f "${S38}.disabled" ] && [ ! -x "$S38" ]; then
+    # Fully disabled: S38 renamed by S37smartdns-conf disable
+    _ck_disabled="true"
   fi
   _ck_active_zones="$(resolve_geo_zone "$_ck_zone")"
 }
@@ -170,6 +175,11 @@ show_dns_tests() {
 # Run DNS tests and collect results for JSON.
 # Sets: _json_dns_tests (JSON array string)
 collect_dns_tests_json() {
+  # Skip DNS tests when service is disabled (no port listening) — spec §4.2
+  if [ "$_ck_disabled" = "true" ]; then
+    _json_dns_tests="[]"
+    return
+  fi
   _json_dns_tests="["
   local first=1
   local _dns_failed=0
@@ -231,6 +241,11 @@ _status_get_first_isp_ip() {
 # Check direct reachability of configured upstream DNS providers.
 # Sets: _json_dns_server_checks (JSON array string)
 collect_dns_server_checks_json() {
+  # Skip upstream checks when service is disabled (no SmartDNS running)
+  if [ "$_ck_disabled" = "true" ]; then
+    _json_dns_server_checks="[]"
+    return
+  fi
   _json_dns_server_checks="["
   local first=1
   local _upstream_fails=0
@@ -314,6 +329,15 @@ json_output() {
   local enabled_val=1
   [ "$_ck_enabled" = "true" ] && enabled_val=0
 
+  # When disabled: reset runtime values per spec §4.2
+  # Prevents stale pidfile → phantom uptime/pid/memory
+  if [ "$_ck_disabled" = "true" ]; then
+    _st_uptime_seconds=0
+    _st_pid=""
+    _st_mem_kb="0"
+    _st_port_addrs=""
+  fi
+
   # Details
   status_detail "dns_zone" "$_ck_zone"
   status_detail "active_zones" "$_ck_active_zones"
@@ -334,9 +358,14 @@ json_output() {
   status_extra "dns_tests" "$_json_dns_tests"
   status_extra "dns_server_checks" "$_json_dns_server_checks"
 
-  # Checks
-  status_check_result "process" "$(if [ "$_st_running" = "true" ]; then printf ok; else printf fail; fi)"
-  status_check_result "ports" "$(if [ "$_st_port_ok" = "true" ]; then printf ok; else printf fail; fi)"
+  # Checks — runtime checks → "skip" when disabled (spec §4.2)
+  if [ "$_ck_disabled" = "true" ]; then
+    status_check_result "process" "skip"
+    status_check_result "ports" "skip"
+  else
+    status_check_result "process" "$(if [ "$_st_running" = "true" ]; then printf ok; else printf fail; fi)"
+    status_check_result "ports" "$(if [ "$_st_port_ok" = "true" ]; then printf ok; else printf fail; fi)"
+  fi
   status_check_result "config" "$(if [ "$_ck_config_ok" = "true" ]; then printf ok; else printf fail; fi)"
 
   # Emit
@@ -356,25 +385,34 @@ check_cache
 check_enabled
 check_custom_providers
 
-# Set STATUS_OK based on critical checks
-[ "$_st_running" = "false" ] && STATUS_OK=1
-[ "$_st_port_ok" = "false" ] && STATUS_OK=1
-[ "$_ck_config_ok" = "false" ] && STATUS_OK=1
+# Set STATUS_OK based on critical checks (disabled state is not a failure)
+if [ "$_ck_disabled" != "true" ]; then
+  [ "$_st_running" = "false" ] && STATUS_OK=1
+  [ "$_st_port_ok" = "false" ] && STATUS_OK=1
+  [ "$_ck_config_ok" = "false" ] && STATUS_OK=1
+fi
 
 # --- Text output (declarative, parallel to json_output) ---
 
 text_output() {
-  # Note: smartdns init (S38smartdns) is a regular file from opkg, not our symlink;
-  # this package has no standalone "disabled" state — it's always either running or failed.
   local _status_word="✓ Alive"
-  if [ "$STATUS_OK" -ne 0 ]; then
+  if [ "$_ck_disabled" = "true" ]; then
+    _status_word="⚠ Disabled"
+  elif [ "$STATUS_OK" -ne 0 ]; then
     _status_word="✗ Fail"
   fi
 
   _text_buf="smartdns-geo-conf status: ${_status_word}
 "
   status_section "Service"
-  if [ "$_ck_enabled" = "true" ]; then
+  if [ "$_ck_disabled" = "true" ]; then
+    status_line "Mode" "disabled (fully stopped, system DNS via ndnproxy)"
+    status_line "SmartDNS" "S38 init renamed → not running"
+    show_cache
+    status_blank
+    status_section "System"
+    status_show_version
+  elif [ "$_ck_enabled" = "true" ]; then
     status_line "Mode" "split-DNS (enabled)" "ok"
     status_line "Zone" "$_ck_zone → [$_ck_active_zones]"
     status_line "Zone DNS" "$_ck_zone_provider"
@@ -382,20 +420,31 @@ text_output() {
     if [ -n "$_ck_other_ifaces" ]; then
       status_line "Other tunnels" "$_ck_other_ifaces"
     fi
+    status_show_process
+    show_ports
+    show_config
+    show_cache
+    status_blank
+    status_section "System"
+    status_show_uptime
+    status_show_version
+    status_blank
+    status_section "DNS Tests"
+    show_dns_tests
   else
     status_line "Mode" "default (simple forwarder)"
+    status_show_process
+    show_ports
+    show_config
+    show_cache
+    status_blank
+    status_section "System"
+    status_show_uptime
+    status_show_version
+    status_blank
+    status_section "DNS Tests"
+    show_dns_tests
   fi
-  status_show_process
-  show_ports
-  show_config
-  show_cache
-  status_blank
-  status_section "System"
-  status_show_uptime
-  status_show_version
-  status_blank
-  status_section "DNS Tests"
-  show_dns_tests
 
   status_emit_text
 }

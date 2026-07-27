@@ -49,9 +49,10 @@ File: `/opt/keenetic-entware-extras/smartdns-redirect/config/config.conf`
 ```sh
 UPSTREAM_PORT=6053         # SmartDNS=6053, AGH=5353, Unbound=5335
 INTERFACES="br0"           # LAN interfaces (space-separated)
-ENABLE_IPV6=no             # IPv6 DNAT (experimental)
 WATCHDOG_SERVICE="S38smartdns"   # init script to restart on failure
 PRESERVE_FILTER_PROFILES=no      # Phase 5 (not implemented)
+# IPv6 DNS handling is fully automatic — no configuration needed.
+# DNAT when SmartDNS has IPv6 bind, REJECT otherwise (Happy Eyeballs fallback).
 ```
 
 After changing config:

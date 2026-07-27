@@ -26,9 +26,19 @@
 ### Phase 3 — Resilience
 
 - [x] `scripts/watchdog.sh` — проверка (1) rules presence, (2) upstream responsiveness
-- [x] IPv6 поддержка (`ENABLE_IPV6=yes` + `ip6tables`)
+- [x] ~~IPv6 поддержка (`ENABLE_IPV6=yes` + `ip6tables`)~~ — заменено Phase 3b
 - [x] Multi-interface (br0 + br1 через `INTERFACES="br0 br1"`)
 - [x] Recovery: missing rule → `dns-redirect.sh reload`; upstream down → `$WATCHDOG_SERVICE restart`
+
+### Phase 3b — IPv6 DNS Leak Prevention (v0.4.0)
+
+- [x] `lib/common.sh` — `detect_router_ip6()` helper
+- [x] `dns-redirect.sh` — auto-detect IPv6: DNAT when SmartDNS has IPv6 bind, REJECT otherwise
+- [x] `watchdog.sh` — check IPv6 rules (DNAT or REJECT) based on auto-detected mode
+- [x] `status.sh` — display IPv6 mode (dnat/reject/none) in text + JSON
+- [x] `defaults.conf` — removed `ENABLE_IPV6` (now fully automatic)
+- [x] Backwards compat: `ENABLE_IPV6=yes` in config.conf → deprecation warning, ignored
+- [x] Design doc: [`smartdns-redirect/docs/ipv6-dns-leak-fix.md`](docs/ipv6-dns-leak-fix.md)
 
 ### Phase 4 — Packaging
 

@@ -16,10 +16,33 @@ CONFIG_FILE="$_CONFIG_DIR/defaults.conf"
 # Detect router LAN IP for DNAT rule check (must match dns-redirect.sh).
 ROUTER_IP="$(detect_router_ip)"
 ROUTER_IP6=""
-if [ "${ENABLE_IPV6:-no}" = "yes" ] && command -v ip6tables >/dev/null 2>&1; then
-    ROUTER_IP6=$(ip -6 addr show br0 2>/dev/null \
-        | awk '/inet6.*global/ {split($2, a, "/"); print a[1]; exit}')
+if command -v ip6tables >/dev/null 2>&1; then
+    ROUTER_IP6="$(detect_router_ip6)"
 fi
+
+# --- IPv6 auto-detection (same logic as dns-redirect.sh) ---
+
+# Check if we can DNAT IPv6 DNS to SmartDNS.
+can_dnat_ipv6() {
+    command -v ip6tables >/dev/null 2>&1 || return 1
+    [ -n "$ROUTER_IP6" ] || return 1
+    grep -q 'bind \[' /opt/etc/smartdns/bind-addrs.conf 2>/dev/null || return 1
+    return 0
+}
+
+# Detect current IPv6 mode: "dnat", "reject", or "none".
+# stdout: mode string
+detect_ipv6_mode() {
+    if ! command -v ip6tables >/dev/null 2>&1; then
+        printf 'none'
+    elif can_dnat_ipv6; then
+        printf 'dnat'
+    else
+        printf 'reject'
+    fi
+}
+
+IPV6_MODE="$(detect_ipv6_mode)"
 
 STATUS_OK=0
 
@@ -57,7 +80,8 @@ check_upstream() {
   [ -z "$_ck_upstream_name" ] && _ck_upstream_name="unknown" || true
 }
 
-# Verify iptables DNAT rules for all interfaces × protos.
+# Verify iptables rules for all interfaces × protos.
+# IPv6 rules checked based on auto-detected mode (dnat or reject).
 # Sets: _ck_rules_ok (0=all present, 1=some missing),
 #        _ck_rules_json (JSON array of per-iface/proto results)
 check_rules() {
@@ -67,6 +91,7 @@ check_rules() {
   if [ -z "$INTERFACES" ]; then
     return
   fi
+  # IPv4 DNAT rules
   for _iface in $INTERFACES; do
     for _proto in udp tcp; do
       _ok="true"
@@ -75,13 +100,23 @@ check_rules() {
       _ck_rules_json="${_ck_rules_json:+${_ck_rules_json},}{\"iface\":\"${_iface}\",\"family\":\"v4\",\"proto\":\"${_proto}\",\"ok\":${_ok}}"
     done
   done
-  if [ "$ENABLE_IPV6" = "yes" ] && command -v ip6tables >/dev/null 2>&1; then
+  # IPv6 rules (based on detected mode)
+  if [ "$IPV6_MODE" = "dnat" ]; then
     for _iface in $INTERFACES; do
       for _proto in udp tcp; do
         _ok="true"
         ip6tables -t nat -C PREROUTING -i "$_iface" -p "$_proto" --dport 53 \
           -j DNAT --to-destination "[${ROUTER_IP6}]:${UPSTREAM_PORT}" 2>/dev/null || { _ck_rules_ok=1; _ok="false"; }
-        _ck_rules_json="${_ck_rules_json:+${_ck_rules_json},}{\"iface\":\"${_iface}\",\"family\":\"v6\",\"proto\":\"${_proto}\",\"ok\":${_ok}}"
+        _ck_rules_json="${_ck_rules_json:+${_ck_rules_json},}{\"iface\":\"${_iface}\",\"family\":\"v6\",\"proto\":\"${_proto}\",\"type\":\"dnat\",\"ok\":${_ok}}"
+      done
+    done
+  elif [ "$IPV6_MODE" = "reject" ]; then
+    for _iface in $INTERFACES; do
+      for _proto in udp tcp; do
+        _ok="true"
+        ip6tables -C INPUT -i "$_iface" -p "$_proto" --dport 53 \
+          -j REJECT --reject-with icmp6-port-unreachable 2>/dev/null || { _ck_rules_ok=1; _ok="false"; }
+        _ck_rules_json="${_ck_rules_json:+${_ck_rules_json},}{\"iface\":\"${_iface}\",\"family\":\"v6\",\"proto\":\"${_proto}\",\"type\":\"reject\",\"ok\":${_ok}}"
       done
     done
   fi
@@ -119,29 +154,59 @@ show_mode() {
   else
     status_line "Interfaces" "— (empty → disabled)"
   fi
-  status_line "IPv6" "$ENABLE_IPV6"
+  # IPv6 mode display
+  case "$IPV6_MODE" in
+    dnat)   status_line "IPv6" "auto-dnat [${ROUTER_IP6}]:${UPSTREAM_PORT}" ;;
+    reject) status_line "IPv6" "auto-reject (Happy Eyeballs → IPv4)" ;;
+    none)   status_line "IPv6" "unavailable (no ip6tables)" ;;
+  esac
   status_line "DNAT to" "${ROUTER_IP}:${UPSTREAM_PORT}"
 }
 
-# Check a single iptables DNAT rule for (family, iface, proto).
-# Args: $1 - "v4"|"v6", $2 - iface, $3 - proto (udp|tcp)
+# Check a single iptables/ip6tables rule for display.
+# Args: $1 - "v4"|"v6_dnat"|"v6_reject", $2 - iface, $3 - proto (udp|tcp)
 check_rule() {
-  local family="$1" iface="$2" proto="$3" bin target display_target
-  case "$family" in
-    v4) bin="iptables"; target="${ROUTER_IP}:${UPSTREAM_PORT}" ;;
-    v6) bin="ip6tables"; target="[${ROUTER_IP6}]:${UPSTREAM_PORT}" ;;
-    *)  return 1 ;;
+  local rtype="$1" iface="$2" proto="$3" label target
+  case "$rtype" in
+    v4)
+      label="v4"
+      target="${ROUTER_IP}:${UPSTREAM_PORT}"
+      if iptables -t nat -C PREROUTING -i "$iface" -p "$proto" --dport 53 \
+          -j DNAT --to-destination "$target" 2>/dev/null; then
+        _text_buf="${_text_buf}$(printf '    %-10s %-6s %s → DNAT %s ✓\n' "$label" "$proto" "$iface" "$target")
+"
+      else
+        _text_buf="${_text_buf}$(printf '    %-10s %-6s %s → DNAT %s ✗\n' "$label" "$proto" "$iface" "$target")
+"
+        STATUS_OK=1
+      fi
+      ;;
+    v6_dnat)
+      label="v6-dnat"
+      target="[${ROUTER_IP6}]:${UPSTREAM_PORT}"
+      if ip6tables -t nat -C PREROUTING -i "$iface" -p "$proto" --dport 53 \
+          -j DNAT --to-destination "$target" 2>/dev/null; then
+        _text_buf="${_text_buf}$(printf '    %-10s %-6s %s → DNAT %s ✓\n' "$label" "$proto" "$iface" "$target")
+"
+      else
+        _text_buf="${_text_buf}$(printf '    %-10s %-6s %s → DNAT %s ✗\n' "$label" "$proto" "$iface" "$target")
+"
+        STATUS_OK=1
+      fi
+      ;;
+    v6_reject)
+      label="v6-reject"
+      if ip6tables -C INPUT -i "$iface" -p "$proto" --dport 53 \
+          -j REJECT --reject-with icmp6-port-unreachable 2>/dev/null; then
+        _text_buf="${_text_buf}$(printf '    %-10s %-6s %s → REJECT ✓\n' "$label" "$proto" "$iface")
+"
+      else
+        _text_buf="${_text_buf}$(printf '    %-10s %-6s %s → REJECT ✗\n' "$label" "$proto" "$iface")
+"
+        STATUS_OK=1
+      fi
+      ;;
   esac
-  display_target="$target"
-  if "$bin" -t nat -C PREROUTING -i "$iface" -p "$proto" --dport 53 \
-      -j DNAT --to-destination "$target" 2>/dev/null; then
-    _text_buf="${_text_buf}$(printf '    %-4s %-6s %s → %s ✓\n' "$family" "$proto" "$iface" "$display_target")
-"
-  else
-    _text_buf="${_text_buf}$(printf '    %-4s %-6s %s → %s ✗\n' "$family" "$proto" "$iface" "$display_target")
-"
-    STATUS_OK=1
-  fi
 }
 
 # Report expected rules (per configured iface × proto); mark missing as ✗.
@@ -157,18 +222,23 @@ show_rules() {
       check_rule "v4" "$iface" "$proto"
     done
   done
-  if [ "$ENABLE_IPV6" = "yes" ]; then
-    if ! command -v ip6tables >/dev/null 2>&1; then
-      status_line "IPv6" "enabled but ip6tables not available" "fail"
-      STATUS_OK=1
-    else
+  # IPv6 rules based on detected mode
+  case "$IPV6_MODE" in
+    dnat)
       for iface in $INTERFACES; do
         for proto in udp tcp; do
-          check_rule "v6" "$iface" "$proto"
+          check_rule "v6_dnat" "$iface" "$proto"
         done
       done
-    fi
-  fi
+      ;;
+    reject)
+      for iface in $INTERFACES; do
+        for proto in udp tcp; do
+          check_rule "v6_reject" "$iface" "$proto"
+        done
+      done
+      ;;
+  esac
 }
 
 # Display upstream probe result.
@@ -243,8 +313,11 @@ json_output() {
 
   # Details — Redirect chain
   status_detail "interfaces" "$INTERFACES"
-  status_detail "ipv6" "$ENABLE_IPV6"
+  status_detail "ipv6" "$IPV6_MODE"
   status_detail "dnat_target" "${ROUTER_IP}:${UPSTREAM_PORT}"
+  if [ "$IPV6_MODE" = "dnat" ]; then
+    status_detail "dnat_target_v6" "[${ROUTER_IP6}]:${UPSTREAM_PORT}"
+  fi
   status_detail "rules" "$_ck_rules_ok" "bool"
   # Details — Upstream resolver
   status_detail "upstream" "127.0.0.1:${UPSTREAM_PORT}"

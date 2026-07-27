@@ -101,7 +101,6 @@ opkg install smartdns-redirect_<версия>_all.ipk
 |----------|-----------|----------|
 | `UPSTREAM_PORT` | `6053` | Порт локального DNS (SmartDNS=6053, AGH=5353, Unbound=5335) |
 | `INTERFACES` | `"br0"` | LAN-интерфейсы для перехвата (через пробел) |
-| `ENABLE_IPV6` | `no` | IPv6 DNAT (экспериментально, требует ip6tables) |
 | `WATCHDOG_SERVICE` | `"S38smartdns"` | Init-скрипт для рестарта при падении upstream |
 
 ### Примеры конфигурации
@@ -245,7 +244,7 @@ dig ya.ru @<IP-роутера> +short
 |---------|---------|---------|
 | Правила отсутствуют | NDM flush или ребут | Watchdog восстановит через ≤5 мин; или `restart` |
 | Upstream not listening | DNS-резолвер не запущен | Запустить SmartDNS: `/opt/etc/init.d/S38smartdns start` |
-| IPv6 DNS не перехватывается | `ENABLE_IPV6=no` | Включить (экспериментально) |
+| IPv6 DNS не перехватывается | SmartDNS не имеет IPv6 bind или нет IPv6 на br0 | Автоматический REJECT → Happy Eyeballs fallback на IPv4 |
 | Клиенты не получают DNS | Неверный INTERFACES | Проверить имя LAN-интерфейса: `ip link show` |
 
 ### Логи

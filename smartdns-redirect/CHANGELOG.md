@@ -5,6 +5,32 @@ All notable changes to `smartdns-redirect` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.4.0] - 2026-07-27
+
+### Added
+- Automatic IPv6 DNS leak prevention: no user configuration needed
+  - Auto-DNAT: when SmartDNS has IPv6 bind + br0 has global IPv6 →
+    ip6tables DNAT to SmartDNS (full IPv6 DNS through SmartDNS)
+  - Auto-REJECT: otherwise → ip6tables INPUT REJECT with
+    icmp6-port-unreachable (instant Happy Eyeballs fallback to IPv4 DNAT)
+- `can_dnat_ipv6()` auto-detection: checks ip6tables, br0 IPv6, SmartDNS bind
+- `status.sh`: IPv6 mode display — `dnat`, `reject`, or `none` (text + JSON)
+- `status.sh`: `dnat_target_v6` field in JSON output when in DNAT mode
+- `watchdog.sh`: checks IPv6 rules (DNAT or REJECT) based on auto-detected mode
+
+### Changed
+- `ENABLE_IPV6` config option removed — IPv6 handling is fully automatic
+- Legacy `ENABLE_IPV6=yes` in user config.conf produces deprecation warning
+- `del_all_rules()` now cleans up IPv6 filter INPUT REJECT rules in addition
+  to nat PREROUTING rules
+- `status.sh` JSON: `ipv6` field changed from `"yes"/"no"` to
+  `"dnat"/"reject"/"none"`
+
+### Removed
+- `ENABLE_IPV6` option from `defaults.conf`
+- `ipv6_enabled()` helper (replaced by `can_dnat_ipv6()`)
+- `add_rule_if_missing_v6()` (replaced by `add_v6_dnat_rule()`)
+
 ## [0.3.7] - 2026-07-12
 
 ### Changed

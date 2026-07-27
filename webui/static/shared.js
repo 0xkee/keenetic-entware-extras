@@ -477,6 +477,23 @@ window.EW = (function() {
     }
 
     /**
+     * Summarize check results: detect any fail or warn values.
+     * Shared between inject.js (stock card) and app.js (custom dashboard).
+     * @param {Object} checks - checks map {key: "ok"|"warn"|"fail"|"skip"}
+     * @returns {{hasFail: boolean, hasWarn: boolean}}
+     */
+    function checksSummary(checks) {
+        var hasFail = false, hasWarn = false;
+        if (!checks) return { hasFail: false, hasWarn: false };
+        var keys = Object.keys(checks);
+        for (var i = 0; i < keys.length; i++) {
+            if (checks[keys[i]] === 'fail') hasFail = true;
+            else if (checks[keys[i]] === 'warn') hasWarn = true;
+        }
+        return { hasFail: hasFail, hasWarn: hasWarn };
+    }
+
+    /**
      * Get inline style attribute for error/warning coloring.
      * @param {Object} e - parsed entry from parseDetails
      * @returns {string} style attribute string (includes leading space) or empty
@@ -626,6 +643,7 @@ window.EW = (function() {
         escapeHtml: escapeHtml,
         getService: getService,
         hasFailField: hasFailField,
+        checksSummary: checksSummary,
         formatUptimeStock: formatUptimeStock,
         formatKey: formatKey,
         formatBool: formatBool,

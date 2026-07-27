@@ -5,6 +5,37 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.35.1] — 2026-07-27
+
+### Fixed
+- **Custom dashboard badge state**: `app.js` now uses `data.checks` via shared
+  `checksSummary()` before `hasFailField()` fallback — matches inject.js behavior.
+  Previously, warn-only checks (e.g. `subnet_freshness: "warn"`) did not trigger
+  caution badge on custom dashboard while stock card showed it correctly.
+- **Custom dashboard detail coloring**: `app.js` now passes `data.checks` to
+  `parseDetails()` for check-based coloring (was using boolean fallback only)
+
+### Changed
+- `checksSummary()` extracted from inject.js to shared.js (DRY — used by both UIs)
+
+## [0.35.0] — 2026-07-27
+
+### Added
+- SmartDNS config editor: `ZONE_DNS_STRICT` toggle — strict tunnel mode for zone DNS
+  (no UDP fallback without tunnel, privacy over availability)
+- SmartDNS config editor: `OTHER_DNS_STRICT` toggle — strict tunnel mode for international DNS
+  (no direct fallback, fails if all tunnels down)
+
+### Changed
+- SmartDNS config editor: field order unified with `defaults.conf` — Zone group
+  (provider → interface → strict) before Other group, then SmartDNS Port last
+- API keys whitelist: `ZONE_DNS_STRICT`, `OTHER_DNS_STRICT` added to smartdns config registry
+
+### Removed
+- DNS Redirect config editor: removed `ENABLE_IPV6` toggle — IPv6 handling is now
+  fully automatic (dnat/reject/none), removed in `smartdns-redirect` v0.4.0
+- API keys whitelist: `ENABLE_IPV6` removed from smartdns-redirect config registry
+
 ## [0.34.0] — 2026-07-22
 
 ### Changed

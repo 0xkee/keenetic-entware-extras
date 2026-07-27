@@ -364,11 +364,13 @@ cmd_compare() {
     local verdict_input="" json_paths=""
     local _target_all_ok=1 _fail_reasons="" _active_reason=""
 
-    # Determine active route device for this domain (for cell marker)
+    # Determine active route device for this domain (for cell marker).
+    # Uses category-aware logic: zone resources → geo-split dev,
+    # non-geo → enumerated VPN segments (falling back to kernel FIB).
     local _active_route_dev=""
     local _resolved_ip=""
     _resolved_ip=$(_resolve_a_cached "$host" 2>/dev/null) || _resolved_ip=""
-    [ -n "$_resolved_ip" ] && _active_route_dev=$(route_dev_for_ip "$_resolved_ip")
+    _active_route_dev=$(active_dev_for_target "$_resolved_ip" "${_tgt_category:-}")
 
     # Pre-scan: pick recommended iface (best OK path by TTFB)
     local _recommended_dev="" _rec_best_ttfb=999999 _rec_ok_n=0 _ri

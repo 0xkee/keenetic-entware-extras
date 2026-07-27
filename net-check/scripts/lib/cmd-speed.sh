@@ -37,20 +37,60 @@ format_speed_pair() {
   }"
 }
 
+# Render speed bar using Unicode block characters with percentage.
+# DL and UL bars separated by "/", scaled to a single shared maximum
+# so bars are visually comparable within each row.
+# Block levels: ▂ ▄ ▆ █ (4 levels, 4-char width per bar).
+# Empty positions use · (middle dot) as filler.
+# NOTE: Output is NOT printf %-Ns safe (multi-byte Unicode chars).
+#   Use raw output, not tbl_cell with padding.
+# Args: $1 - dl bytes/sec, $2 - ul bytes/sec, $3 - shared max speed
+# stdout: "▂▄▆█ 100% / ▂▄·· 57%" (21 visual chars)
+speed_bar() {
+  local _dl="${1:-0}" _ul="${2:-0}" _max="${3:-0}"
+  local _dlbar _ulbar
+  _dlbar=$(_speed_half_bar "$_dl" "$_max")
+  _ulbar=$(_speed_half_bar "$_ul" "$_max")
+  printf '%s / %s' "$_dlbar" "$_ulbar"
+}
+
+# Render one half (DL or UL) bar: "▂▄▆█ 100%" (9 visual chars).
+# Args: $1 - speed bytes/sec, $2 - max speed bytes/sec
+# stdout: bar + space + right-aligned percentage (9 visual chars)
+_speed_half_bar() {
+  local _s="${1:-0}" _m="${2:-0}"
+  if [ "$_m" = "0" ] || [ "$_s" = "0" ]; then
+    printf '····  ---'
+    return 0
+  fi
+  # Compute bar blocks and percentage
+  awk "BEGIN {
+    s = ${_s}; m = ${_m}; w = 4
+    split(\"▂ ▄ ▆ █\", blk, \" \")
+    pct = int(s / m * 100 + 0.5)
+    filled = int((s / m) * w + 0.5)
+    if (filled < 1) filled = 1
+    if (filled > w) filled = w
+    bar = \"\"
+    for (i = 1; i <= w; i++) {
+      if (i <= filled) {
+        lvl = int((i / w) * 4 + 0.5)
+        if (lvl < 1) lvl = 1; if (lvl > 4) lvl = 4
+        bar = bar blk[lvl]
+      } else { bar = bar \"·\" }
+    }
+    printf \"%s %3d%%\", bar, pct
+  }"
+}
+
 # ─── Command: speed (throughput test) ─────────────────────────────────────────
 
 cmd_speed() {
-  local mode="both"
-  # Parse subcommand: "speed --download-only" to skip upload
-  while [ $# -gt 0 ]; do
-    case "$1" in
-      --download-only|download-only) mode="download"; shift ;;
-      *) shift ;;
-    esac
-  done
-
   local ifaces
   ifaces=$(require_wan_ifaces) || return 1
+
+  # Ensure geo cache is populated for CC column
+  ensure_geo_cache
 
   local json_results=""
   local _ok_count=0 _total_count=0
@@ -63,16 +103,11 @@ cmd_speed() {
   if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
     printf 'Download/upload speed per WAN interface via Cloudflare (%s payload).\n\n' "$size_label"
   fi
-  if [ "$mode" = "both" ]; then
-    tbl_header "Path:14" "CC:4" "Down / Up:20" "Time, ms:14" "Status"
-  else
-    tbl_header "Path:14" "CC:4" "Speed:12" "Time, ms:10" "Status"
-  fi
 
-  # Sequential speed test per interface (parallel would skew throughput measurements)
+  # ── Phase 1: Sequential speed tests (parallel would skew throughput) ──
   local iface
   for iface in $ifaces; do
-    local dl_speed="0" dl_label="—" dl_time="—" dl_status="fail"
+    local dl_speed="0" dl_time="—" dl_status="fail"
     local ul_speed="0" ul_time="—" ul_status="skip"
     local itype cc
     itype=$(iface_type "$iface")
@@ -98,12 +133,11 @@ cmd_speed() {
         dl_status="ok"
         dl_speed="$_speed"
         dl_time=$(to_ms "$_time")
-        dl_label=$(format_speed "$_speed")
       fi
     fi
 
-    # Upload test (only if mode=both)
-    if [ "$mode" = "both" ] && [ "$dl_status" = "ok" ]; then
+    # Upload test (only if download succeeded)
+    if [ "$dl_status" = "ok" ]; then
       local ul_out
       ul_out=$(dd if=/dev/zero bs=1024 count=$((SPEED_TEST_BYTES / 1024)) 2>/dev/null | \
         curl -sS --interface "$iface" \
@@ -132,6 +166,46 @@ cmd_speed() {
 
     [ "$dl_status" = "ok" ] && _ok_count=$((_ok_count + 1))
 
+    # Save result to temp file for 2-pass rendering
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$dl_status" "$dl_speed" "$dl_time" \
+      "$ul_status" "$ul_speed" "$ul_time" \
+      "$itype" "$cc" "$iface" \
+      > "${_RUN_DIR}/speed-${iface}"
+  done
+
+  # ── Phase 2: Find single max speed across all DL+UL for bar scaling ──
+  local _max_speed=0
+  for iface in $ifaces; do
+    local _sf="${_RUN_DIR}/speed-${iface}"
+    [ -f "$_sf" ] || continue
+    local _ds _us
+    _ds=$(cut -f2 "$_sf")
+    _us=$(cut -f5 "$_sf")
+    _max_speed=$(awk "BEGIN { m=${_max_speed}; d=${_ds:-0}; u=${_us:-0}; if(d>m) m=d; if(u>m) m=u; print m }")
+  done
+
+  # ── Phase 3: Render table with bars ──
+  tbl_header "Path:14" "CC:4" "Down / Up:20" "Time, ms:14" "Speed:21" "Status"
+
+  for iface in $ifaces; do
+    local _sf="${_RUN_DIR}/speed-${iface}"
+    local dl_status="fail" dl_speed="0" dl_time="—"
+    local ul_status="skip" ul_speed="0" ul_time="—"
+    local itype="" cc="—"
+
+    if [ -f "$_sf" ]; then
+      dl_status=$(cut -f1 "$_sf")
+      dl_speed=$(cut -f2 "$_sf")
+      dl_time=$(cut -f3 "$_sf")
+      ul_status=$(cut -f4 "$_sf")
+      ul_speed=$(cut -f5 "$_sf")
+      ul_time=$(cut -f6 "$_sf")
+      itype=$(cut -f7 "$_sf")
+      cc=$(cut -f8 "$_sf")
+      rm -f "$_sf"
+    fi
+
     if [ "$OUTPUT_JSON" = 1 ]; then
       local entry_json
       entry_json=$(printf '{%s,%s,%s,%s,%s,%s,%s,%s}' \
@@ -149,40 +223,38 @@ cmd_speed() {
     else
       local _st="fail"
       [ "$dl_status" = "ok" ] && _st="ok"
-      if [ "$mode" = "both" ]; then
-        local _ul_st="fail" _combined_st _speed_pair _time_pair
-        [ "$ul_status" = "ok" ] && _ul_st="ok"
-        # Combined status: ok only if both ok; warn if mixed; fail if both fail
-        if [ "$_st" = "ok" ] && [ "$_ul_st" = "ok" ]; then
-          _combined_st="ok"
-        elif [ "$_st" = "fail" ] && [ "$_ul_st" = "fail" ]; then
-          _combined_st="fail"
-        else
-          _combined_st="warn"
-        fi
-        if [ "$_st" = "ok" ]; then
-          _speed_pair=$(format_speed_pair "$dl_speed" "$ul_speed")
-          _time_pair="${dl_time} / ${ul_time}"
-        else
-          _speed_pair="— / —"
-          _time_pair="— / —"
-        fi
-        tbl_row "$iface" "$cc" \
-          "$(tbl_cell 20 "$_speed_pair" "$_combined_st")" \
-          "$(tbl_cell 14 "$_time_pair" "$_combined_st")" \
-          "$(status_mark "$_combined_st")"
+      local _ul_st="fail" _combined_st _speed_pair _time_pair _bar
+      [ "$ul_status" = "ok" ] && _ul_st="ok"
+      # Combined status: ok only if both ok; warn if mixed; fail if both fail
+      if [ "$_st" = "ok" ] && [ "$_ul_st" = "ok" ]; then
+        _combined_st="ok"
+      elif [ "$_st" = "fail" ] && [ "$_ul_st" = "fail" ]; then
+        _combined_st="fail"
       else
-        tbl_row "$iface" "$cc" \
-          "$(tbl_cell 12 "$dl_label" "$_st")" \
-          "$dl_time" \
-          "$(status_mark "$_st")"
+        _combined_st="warn"
       fi
+      if [ "$_st" = "ok" ]; then
+        _speed_pair=$(format_speed_pair "$dl_speed" "$ul_speed")
+        _time_pair="${dl_time} / ${ul_time}"
+        _bar=$(speed_bar "$dl_speed" "$ul_speed" "$_max_speed")
+      else
+        _speed_pair="— / —"
+        _time_pair="— / —"
+        _bar=$(speed_bar 0 0 0)
+      fi
+      tbl_row "$iface" "$cc" \
+        "$(tbl_cell 20 "$_speed_pair" "$_combined_st")" \
+        "$(tbl_cell 14 "$_time_pair" "$_combined_st")" \
+        "$(tbl_cell 21 "$_bar" "$_combined_st")" \
+        "$(status_mark "$_combined_st")"
     fi
   done
 
   if [ "$OUTPUT_JSON" = 1 ]; then
+    local _spd_ok_val=0
+    [ "$_ok_count" -lt "$_total_count" ] && _spd_ok_val=1
     printf '{%s,%s,"results":[%s]}\n' \
-      "$(json_kv_bool "ok" 0)" \
+      "$(json_kv_bool "ok" "$_spd_ok_val")" \
       "$(json_kv_num "test_bytes" "$SPEED_TEST_BYTES")" \
       "$json_results"
   else

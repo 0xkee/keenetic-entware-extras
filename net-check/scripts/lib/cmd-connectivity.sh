@@ -17,6 +17,9 @@ cmd_connectivity() {
   # Load geo-zone context for zone header
   load_zone_context
 
+  # Ensure geo cache is populated for CC column
+  ensure_geo_cache
+
   local json_results=""
   local has_traceroute=0 has_ping=0
   local _ok_count=0 _total_count=0
@@ -25,12 +28,13 @@ cmd_connectivity() {
 
   section_title "$_TITLE_CONN"
   if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
-    printf 'TCP connect + TLS handshake timing per WAN path. Detects unreachable paths.\n\n'
+    printf 'TCP connect + TLS handshake timing per WAN path. Detects unreachable paths.\n'
+    printf 'Target: %s%s%s\n\n' "$C_DIM" "$CONNECTIVITY_URL" "$C_RST"
   fi
   if [ "$has_traceroute" = 1 ]; then
-    tbl_header "Path:14" "CC:4" "Hops:5" "MTU (OH, Enc):19" "DNS ms:9" "TCP ms:9" "TLS ms:9" "Total:9" "Loss:8" "Jit ms:7" "Status"
+    tbl_header "Path:14" "CC:4" "Hops:5" "MTU (OH, Enc):19" "DNS ms:9" "TCP ms:9" "TLS ms:9" "Total ms:9" "Loss:8" "Jit ms:7" "Status"
   else
-    tbl_header "Path:14" "CC:4" "MTU (OH, Enc):19" "DNS ms:9" "TCP ms:9" "TLS ms:9" "Total:9" "Loss:8" "Jit ms:7" "Status"
+    tbl_header "Path:14" "CC:4" "MTU (OH, Enc):19" "DNS ms:9" "TCP ms:9" "TLS ms:9" "Total ms:9" "Loss:8" "Jit ms:7" "Status"
   fi
 
   # Pre-warm SmartDNS cache: resolve connectivity host once before parallel curls.

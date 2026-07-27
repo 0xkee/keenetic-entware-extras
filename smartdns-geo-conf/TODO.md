@@ -68,6 +68,7 @@
 
 ### Улучшения (backlog)
 
+- [x] ~~**WebUI: обновить под disable=full shutdown + STRICT опции**~~ — (a) ⚠ Disabled / ⏸ Pending уже работают через status.sh enabled/running + existing app.js logic; (c) CONFIG_SCHEMAS: `ZONE_DNS_STRICT`, `OTHER_DNS_STRICT` добавлены (webui 0.35.0); (d) toggle → `toggle.sh enable/disable` (существующий механизм). Также удалён устаревший `ENABLE_IPV6` из smartdns-redirect schema.
 - [ ] - когда сервис выключен checker всё равно показывает разные пути - очевидно баг (нужно проверять фактичесткое положение вещей!)
 - [x] ~~**Конфигурируемые international DNS-серверы**~~ — **Сделано (v0.8.0, 2026-06-09):** `OTHER_DNS_PROVIDER` / `ZONE_DNS_PROVIDER` в `config.conf`. Каталог 15 провайдеров в `dns-providers.conf`. Динамическая генерация зон из `zone-routing-rules.conf` (заменено 235 статических zone-файлов).
 - [x] ~~**`default` (ISP DNS) провайдер**~~ — **Сделано (v0.9.0, 2026-06-15):** `default` в обоих провайдер-списках. Proto `udp` в generate-conf.sh, динамическое чтение из `/tmp/ndnproxymain.conf`. WebUI, README, user-manual обновлены.

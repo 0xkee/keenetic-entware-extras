@@ -73,18 +73,26 @@ do_generate() {
   fi
 }
 
-# Activate the correct static config (split or default) as active smartdns.conf
+# Activate split-DNS config as active smartdns.conf
 do_activate() {
-  if [ -f "$STATE_FILE" ]; then
-    # Split-DNS enabled
-    if [ -f "$CONF_SPLIT" ]; then
-      cp "$CONF_SPLIT" "$CONF"
-    fi
-  else
-    # Default mode
-    if [ -f "$CONF_DEFAULT" ]; then
-      cp "$CONF_DEFAULT" "$CONF"
-    fi
+  if [ -f "$CONF_SPLIT" ]; then
+    cp "$CONF_SPLIT" "$CONF"
+  fi
+}
+
+# Restore S38 init script if it was renamed (disabled).
+# Returns 0 if S38 is available after restore, 1 otherwise.
+do_restore_s38() {
+  if [ -f "${S38}.disabled" ] && [ ! -f "$S38" ]; then
+    mv "${S38}.disabled" "$S38"
+  fi
+  [ -x "$S38" ]
+}
+
+# Rename S38 init script so it won't auto-start on boot.
+do_disable_s38() {
+  if [ -f "$S38" ]; then
+    mv "$S38" "${S38}.disabled"
   fi
 }
 
@@ -95,11 +103,31 @@ do_restart_s38() {
   fi
 }
 
+# Stop smartdns-redirect (S39) if present
+do_stop_redirect() {
+  local _s39="/opt/etc/init.d/S39smartdns-redirect"
+  [ -x "$_s39" ] && "$_s39" stop 2>/dev/null || true
+}
+
+# Start smartdns-redirect (S39) if present (background, non-blocking)
+do_start_redirect() {
+  local _s39="/opt/etc/init.d/S39smartdns-redirect"
+  [ -x "$_s39" ] && ("$_s39" start >/dev/null 2>&1 &) || true
+}
+
 case "${1:-}" in
   start)
-    do_bind_addrs
-    do_generate
-    do_activate
+    if [ -f "$STATE_FILE" ]; then
+      # Enabled: restore S38 (may have been re-created by opkg upgrade),
+      # generate configs, activate split-DNS config.
+      do_restore_s38
+      do_bind_addrs
+      do_generate
+      do_activate
+    else
+      # Disabled: ensure S38 won't start (rename before rc.unslung reaches S38)
+      do_disable_s38
+    fi
     ;;
   stop)
     # No-op: S38smartdns manages daemon stop
@@ -113,19 +141,20 @@ case "${1:-}" in
   enable)
     mkdir -p "$(dirname "$STATE_FILE")"
     echo "enabled" > "$STATE_FILE"
+    do_restore_s38
     do_bind_addrs
     do_generate
     do_activate
     do_restart_s38
+    do_start_redirect
     echo "SmartDNS: split-DNS enabled (zone: $DNS_ZONE)"
     ;;
   disable)
     rm -f "$STATE_FILE"
-    do_bind_addrs
-    do_generate
-    do_activate
-    do_restart_s38
-    echo "SmartDNS: switched to default (simple forwarder)"
+    do_stop_redirect
+    [ -x "$S38" ] && "$S38" stop 2>/dev/null || true
+    do_disable_s38
+    echo "SmartDNS: fully disabled (system DNS via ndnproxy)"
     ;;
   flush-cache)
     if [ -x "$S38" ]; then
@@ -133,6 +162,9 @@ case "${1:-}" in
       rm -f "$CACHE_FILE"
       "$S38" start 2>/dev/null || true
       echo "SmartDNS: DNS cache flushed, daemon restarted"
+    elif [ -f "${S38}.disabled" ]; then
+      rm -f "$CACHE_FILE"
+      echo "SmartDNS: DNS cache deleted (daemon disabled, not restarted)"
     else
       echo "ERROR: S38smartdns not found" >&2
       exit 1

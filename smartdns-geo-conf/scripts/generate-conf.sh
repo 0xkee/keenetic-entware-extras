@@ -110,10 +110,12 @@ HEADER
             fi
           done
         fi
-        # Fallback / direct (always present)
-        _emit_doh_server "$out" "$provider" "$doh_url" "$ip1" "$tls_host" ""
-        if [ -n "$ip2" ]; then
-          _emit_doh_server "$out" "$provider" "$doh_url" "$ip2" "$tls_host" ""
+        # Fallback / direct (skipped in strict tunnel mode)
+        if [ "$OTHER_DNS_STRICT" != "yes" ] || [ -z "$iface_list" ]; then
+          _emit_doh_server "$out" "$provider" "$doh_url" "$ip1" "$tls_host" ""
+          if [ -n "$ip2" ]; then
+            _emit_doh_server "$out" "$provider" "$doh_url" "$ip2" "$tls_host" ""
+          fi
         fi
         ;;
       dot)
@@ -127,10 +129,12 @@ HEADER
             fi
           done
         fi
-        # Fallback / direct
-        _emit_dot_server "$out" "$provider" "$ip1" "$tls_host" "" ""
-        if [ -n "$ip2" ]; then
-          _emit_dot_server "$out" "$provider" "$ip2" "$tls_host" "" ""
+        # Fallback / direct (skipped in strict tunnel mode)
+        if [ "$OTHER_DNS_STRICT" != "yes" ] || [ -z "$iface_list" ]; then
+          _emit_dot_server "$out" "$provider" "$ip1" "$tls_host" "" ""
+          if [ -n "$ip2" ]; then
+            _emit_dot_server "$out" "$provider" "$ip2" "$tls_host" "" ""
+          fi
         fi
         ;;
     esac
@@ -271,14 +275,18 @@ _generate_zone_servers() {
         ;;
     esac
 
-    # UDP fallback for this provider
+    # UDP fallback for this provider (with interface if configured)
     if [ "$udp_fb" = "yes" ]; then
-      printf '# %s UDP fallback (group %s)\n' "$provider" "$_cc" >> "$_out"
-      printf 'server %s %s\n' "$ip1" "$_group_flags" >> "$_out"
-      if [ -n "$ip2" ]; then
-        printf 'server %s %s\n' "$ip2" "$_group_flags" >> "$_out"
+      if [ "$ZONE_DNS_STRICT" = "yes" ] && [ -n "$_iface_flag" ]; then
+        printf '# %s UDP fallback SKIPPED (strict tunnel mode, group %s)\n\n' "$provider" "$_cc" >> "$_out"
+      else
+        printf '# %s UDP fallback (group %s)\n' "$provider" "$_cc" >> "$_out"
+        printf 'server %s %s %s\n' "$ip1" "$_group_flags" "$_extra" >> "$_out"
+        if [ -n "$ip2" ]; then
+          printf 'server %s %s %s\n' "$ip2" "$_group_flags" "$_extra" >> "$_out"
+        fi
+        printf '\n' >> "$_out"
       fi
-      printf '\n' >> "$_out"
     fi
   done
 }

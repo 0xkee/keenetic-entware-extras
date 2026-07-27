@@ -1,10 +1,5 @@
 # TODO — net-check
 
-## CLI / UX
-
-- [ ] **Resolver info in cmd_geo** — show `Resolver: SmartDNS (via :53)` like dns does
-- [ ] **Target endpoint in cmd_connectivity** — show tested host for transparency
-
 ## `all` command — section order
 
 1. **geo** — Egress Point Verification (Layers 3+7)
@@ -18,6 +13,9 @@
 
 ## Future
 
+- [ ] **`--as MAC` client perspective** — `net-check comp --as AA:BB:CC:DD:EE:FF` to show
+  ► from a specific client's routing perspective (resolves MAC → fwmark via iptables mangle).
+  `--as auto` = first tunnel fwmark. Reuses logic from `route-check.sh --from`.
 - [ ] **`tls` true per-interface binding** — `openssl s_client` ignores interface routing.
   Options: `socat` TCP relay, curl with `--with-ssl-details`, iptables PREROUTING
 - [ ] geo-split integration: auto-recommend domains for split routing
@@ -25,4 +23,3 @@
 - [ ] Caching of results for WebUI dashboard
 - [ ] History of check results (trending)
 - [ ] Connectivity: detect encapsulated tunnels by MTU jumps
-- [ ] Throughput: pseudo-graph of tunnel speeds (min-max)

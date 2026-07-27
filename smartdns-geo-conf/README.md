@@ -10,11 +10,11 @@ Split DNS: routing DNS queries by geo-zones.
 
 - **Zones** (configurable: RU, EAEU, CIS, BRICS, EU…) → regional DNS (Yandex DoT, AdGuard DoT)
 - **Everything else** → international DNS (Google DoH, Cloudflare DoH)
-- **VPN-bypass** — optional binding of DNS queries to VPN interfaces to bypass MITM
+- **MITM protection** — optional binding of DNS queries to tunnel interfaces for MITM protection
 
 **Why:**
 - Speed for in-zone domains — nearest CDN nodes via regional DNS
-- Bypass DNS manipulation for foreign domains — DoH via HTTPS/443
+- DNS integrity protection for foreign domains — DoH via HTTPS/443
 - Flexibility — any combination of countries or geo-alliances
 
 ## Requirements
@@ -90,10 +90,10 @@ OTHER_DNS_PROVIDER="google cloudflare"
 # Default: "yandex alidns system" (see defaults.conf)
 ZONE_DNS_PROVIDER="yandex adguard"
 
-# VPN interfaces for international DNS (MITM bypass)
+# Tunnel interfaces for international DNS (MITM protection)
 OTHER_DNS_INTERFACES=""
 
-# VPN interface for zone DNS (usually not needed)
+# Tunnel interface for zone DNS (usually not needed)
 ZONE_DNS_INTERFACE=""
 ```
 
@@ -195,7 +195,7 @@ DNS_ZONE="cn"
 ZONE_DNS_PROVIDER="alidns tencent"
 ```
 
-**International DNS via VPN (MITM bypass):**
+**International DNS via tunnel (MITM protection):**
 ```sh
 OTHER_DNS_INTERFACES="nwg3 nwg4"
 ```

@@ -39,7 +39,7 @@
 
 ## В работе / Pending ⏳
 
-### Multi-zone DNS + VPN interfaces (Этап C) ✅
+### Multi-zone DNS + tunnel interfaces (Этап C) ✅
 
 **Реализовано (v0.5.0, 2026-06-06):**
 
@@ -72,9 +72,9 @@
 - [x] ~~**Конфигурируемые international DNS-серверы**~~ — **Сделано (v0.8.0, 2026-06-09):** `OTHER_DNS_PROVIDER` / `ZONE_DNS_PROVIDER` в `config.conf`. Каталог 15 провайдеров в `dns-providers.conf`. Динамическая генерация зон из `zone-routing-rules.conf` (заменено 235 статических zone-файлов).
 - [x] ~~**`default` (ISP DNS) провайдер**~~ — **Сделано (v0.9.0, 2026-06-15):** `default` в обоих провайдер-списках. Proto `udp` в generate-conf.sh, динамическое чтение из `/tmp/ndnproxymain.conf`. WebUI, README, user-manual обновлены.
 - [ ] **Exclude-список для зонового DNS-роутинга** — возможность исключить домен из обработки зоны (`nameserver /specific-host.ru/default`). Реализация: файл `config/dns-zone-exclude.conf` с правилами, include в конец zone-конфига. Документировать в user-manual.
-- [ ] **FAQ: ECS (EDNS Client Subnet) не передаётся** — добавить в user-manual пояснение что SmartDNS не отправляет подсеть клиента upstream-серверам. Google/Cloudflare видят только IP роутера (WAN или VPN-выхода). Фидбэк: cryoPanda.
+- [ ] **FAQ: ECS (EDNS Client Subnet) не передаётся** — добавить в user-manual пояснение что SmartDNS не отправляет подсеть клиента upstream-серверам. Google/Cloudflare видят только IP роутера (WAN или tunnel egress). Фидбэк: cryoPanda.
 - [ ] **dns-check.sh: bootstrap resolution marker** — для DoH провайдеров с пустыми IP1/IP2 (v0.10.8) `UP_SERVERS` пуст, SmartDNS резолвит hostname через bootstrap/UDP. Добавить `"resolution": "bootstrap"` маркер в JSON-вывод `get_upstream_info()`, чтобы webui-диаграмма визуально отличала bootstrap-resolved от IP-pinned путей.
-- [x] ~~DNS DNAT redirect: `iptables PREROUTING` br0:53 → SmartDNS:6053 (обход ndnproxy)~~ — реализовано в отдельном пакете [`smartdns-redirect`](../smartdns-redirect/) v0.1.1 (deployed на router-1, latency ~130ms → <80ms)
+- [x] ~~DNS DNAT redirect: `iptables PREROUTING` br0:53 → SmartDNS:6053 (минуя ndnproxy)~~ — реализовано в отдельном пакете [`smartdns-redirect`](../smartdns-redirect/) v0.1.1 (deployed на router-1, latency ~130ms → <80ms)
 - [x] ~~Мониторинг: cron watchdog для перезапуска SmartDNS при падении~~ — реализовано в [`smartdns-redirect/scripts/watchdog.sh`](../smartdns-redirect/scripts/watchdog.sh) (через `WATCHDOG_SERVICE="S38smartdns"`)
 - [x] ~~Интеграция SmartDNS `ipset` directive с geo-split~~ — **Отменено:** `ip rule fwmark` не работает на Keenetic, ipset-based routing невозможен. Текущий подход (1h poll + cmp) достаточен.
 - [x] ~~`bind-tcp 127.0.0.1:6053` в `smartdns.conf`~~ — **Сделано (2026-05-15):** добавлен `bind-tcp` для :6053 и :6153 в smartdns.conf, smartdns-default.conf, postinst bind-addrs.conf

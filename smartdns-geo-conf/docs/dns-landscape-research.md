@@ -26,15 +26,15 @@
 
 #### Plain DNS (порт 53) — да, подменяют!
 
-- **DNS-спуфинг через DPI**: ТСПУ **активно подменяет** plain DNS ответы. Механизм: ТСПУ стоит «посередине» между роутером и upstream DNS. Когда видит DNS-запрос к заблокированному домену — **инжектирует свой ответ раньше настоящего сервера** (race condition, ТСПУ ближе физически). Настоящий ответ от Google/Cloudflare тоже приходит, но клиент уже принял поддельный.
+- **DNS-спуфинг через DPI**: ТСПУ **активно подменяет** plain DNS ответы. Механизм: ТСПУ стоит «посередине» между роутером и upstream DNS. Когда видит DNS-запрос к фильтруемому домену — **инжектирует свой ответ раньше настоящего сервера** (race condition, ТСПУ ближе физически). Настоящий ответ от Google/Cloudflare тоже приходит, но клиент уже принял поддельный.
 - **Что именно подменяется**: Только ответы для доменов из реестра РКН (~800K+ записей). Для остальных доменов — ответ проходит без изменений.
 - **Как выглядит подмена**: Вместо реального IP возвращается IP-заглушка РКН (например, `10.50.x.x` или редирект на страницу блокировки провайдера). Некоторые ISP возвращают NXDOMAIN.
 - **Не блокируется полностью**: Plain DNS на 53 порту к Google 8.8.8.8 / Cloudflare 1.1.1.1 **работает**, но ответы **подменяются для доменов из реестра РКН**.
 - **Для нашего сценария (split DNS)**: Это **не проблема по двум причинам**:
   1. Российские домены (.ru, .рф) → идут через Yandex (в РФ), ТСПУ не вмешивается в трафик к российским DNS
   2. Зарубежные домены (.com, .net и т.д.) → идут через Google/Cloudflare по UDP, но домены типа google.com, youtube.com, github.com **не в реестре РКН** → ТСПУ их не подменяет
-- **Риск**: Если пользователь обращается к зарубежному домену, который **есть в реестре РКН** (например, заблокированный .com сайт) через foreign-группу по plain UDP — получит подменённый ответ.
-- **Решение**: Маршрутизация DNS-трафика через VPN-интерфейс (см. раздел 4.7).
+- **Риск**: Если пользователь обращается к зарубежному домену, который **есть в реестре РКН** (например, фильтруемый .com сайт) через foreign-группу по plain UDP — получит подменённый ответ.
+- **Решение**: Маршрутизация DNS-трафика через туннельный интерфейс (см. раздел 4.7).
 
 #### DoT (порт 853)
 
@@ -443,20 +443,20 @@ tinkoff.com
 
 **Рекомендация:** Пока не нужен. У нас ~10 правил — inline nameserver проще и прозрачнее. domain-set стоит использовать при 50+ доменов.
 
-### 4.7 DNS через VPN-интерфейс (обход ТСПУ-спуфинга)
+### 4.7 DNS через туннельный интерфейс (защита от ТСПУ-спуфинга)
 
 #### Проблема
 
-ТСПУ подменяет plain DNS ответы для доменов из реестра РКН. Если пользователь обращается к заблокированному `.com` домену через foreign-группу по UDP — ТСПУ инжектирует поддельный ответ раньше настоящего.
+ТСПУ подменяет plain DNS ответы для доменов из реестра РКН. Если пользователь обращается к фильтруемому `.com` домену через foreign-группу по UDP — ТСПУ инжектирует поддельный ответ раньше настоящего.
 
 DoT/DoH к зарубежным серверам тоже не всегда спасает — ТСПУ может блокировать порт 853 и фильтровать HTTPS по SNI.
 
 #### Решение: `-interface` в SmartDNS
 
-SmartDNS поддерживает параметр **`-interface`** на upstream серверах. Он привязывает DNS-сокет к конкретному сетевому интерфейсу. Если указать VPN-интерфейс (WireGuard `nwg0`, OpenVPN `ovpn_br0` и т.д.) — DNS-запросы **пойдут через VPN-туннель**, минуя ТСПУ провайдера.
+SmartDNS поддерживает параметр **`-interface`** на upstream серверах. Он привязывает DNS-сокет к конкретному сетевому интерфейсу. Если указать туннельный интерфейс (WireGuard `nwg0`, OpenVPN `ovpn_br0` и т.д.) — DNS-запросы **пойдут через шифрованный канал**, минуя ТСПУ провайдера.
 
 ```conf
-# Foreign DNS через VPN-интерфейс — обход ТСПУ
+# Foreign DNS через туннельный интерфейс — защита от ТСПУ
 server 8.8.8.8 -interface nwg0
 server 8.8.4.4 -interface nwg0
 server 1.1.1.1 -interface nwg0
@@ -470,74 +470,74 @@ server 1.0.0.1 -interface nwg0
   SmartDNS → [ISP network + ТСПУ] → 8.8.8.8
   ← ТСПУ инжектирует поддельный ответ для РКН-доменов
 
-Через VPN (-interface nwg0):
-  SmartDNS → [WireGuard tunnel nwg0] → VPN-сервер → 8.8.8.8
-  ← Ответ приходит через VPN, ТСПУ не видит DNS-трафик
+Через tunnel (-interface nwg0):
+  SmartDNS → [WireGuard tunnel nwg0] → tunnel-сервер → 8.8.8.8
+  ← Ответ приходит через шифрованный канал, ТСПУ не видит DNS-трафик
 ```
 
 #### Преимущества
 
 | Аспект | Описание |
 |--------|----------|
-| **Полная защита от спуфинга** | ТСПУ не видит DNS-трафик внутри VPN |
-| **Plain UDP достаточно** | Не нужен DoT/DoH — VPN уже шифрует |
-| **Минимальная latency** | UDP к Google/Cloudflare через VPN — быстрее чем DoT/DoH |
-| **Устойчивость** | Даже если ТСПУ блокирует 853/DoH — VPN-туннель не затронут |
-| **Совместимость с geo-split** | VPN уже настроен для geo-split, инфраструктура есть |
+| **Полная защита от спуфинга** | ТСПУ не видит DNS-трафик внутри шифрованного канала |
+| **Plain UDP достаточно** | Не нужен DoT/DoH — tunnel уже шифрует |
+| **Минимальная latency** | UDP к Google/Cloudflare через шифрованный канал — быстрее чем DoT/DoH |
+| **Устойчивость** | Даже если ТСПУ блокирует 853/DoH — шифрованный канал не затронут |
+| **Совместимость с geo-split** | Tunnel уже настроен для geo-split, инфраструктура есть |
 
 #### Ограничения и нюансы
 
 | Нюанс | Описание | Решение |
 |-------|----------|---------|
-| **VPN должен быть UP** | Если VPN не поднят — DNS-запросы не уйдут | UDP fallback без `-interface` |
+| **Tunnel должен быть UP** | Если tunnel не поднят — DNS-запросы не уйдут | UDP fallback без `-interface` |
 | **fwmark конфликт?** | `-interface` использует `SO_BINDTODEVICE`, **не fwmark** — безопасно для Keenetic | ✅ Нет конфликта с NDM |
-| **Latency через VPN** | Добавляет hop через VPN-сервер | < 50ms обычно, приемлемо |
-| **Не для ru-группы** | RU DNS (Yandex) должны идти напрямую — им VPN не нужен | `-interface` только на foreign |
+| **Latency через шифрованный канал** | Добавляет hop через шифрованный канал-сервер | < 50ms обычно, приемлемо |
+| **Не для ru-группы** | RU DNS (Yandex) должны идти напрямую — им tunnel не нужен | `-interface` только на foreign |
 
-#### Рекомендованная конфигурация с VPN
+#### Рекомендованная конфигурация с tunnel
 
 ```conf
 # ===========================================================================
-# 🌍 International DNS — через VPN (обход ТСПУ)
+# 🌍 International DNS — через шифрованный канал (защита от ТСПУ)
 # ===========================================================================
 
-# Google UDP через VPN (primary)
+# Google UDP через шифрованный канал (primary)
 server 8.8.8.8 -interface nwg0
 server 8.8.4.4 -interface nwg0
 
-# Cloudflare UDP через VPN (secondary)
+# Cloudflare UDP через шифрованный канал (secondary)
 server 1.1.1.1 -interface nwg0
 server 1.0.0.1 -interface nwg0
 
-# Fallback БЕЗ VPN — на случай если VPN не поднят
-# SmartDNS попробует все серверы; если VPN down — эти ответят
+# Fallback БЕЗ tunnel — на случай если tunnel не поднят
+# SmartDNS попробует все серверы; если tunnel down — эти ответят
 server 8.8.8.8 -fallback
 server 8.8.4.4 -fallback
 ```
 
-> ⚠️ **Имя VPN-интерфейса** (`nwg0`) — зависит от конкретной настройки роутера. Для WireGuard на Keenetic это обычно `nwg0`, `nwg1` и т.д. Для OpenVPN — `ovpn_br0`. Это значение должно быть конфигурируемым.
+> ⚠️ **Имя туннельного интерфейса** (`nwg0`) — зависит от конкретной настройки роутера. Для WireGuard на Keenetic это обычно `nwg0`, `nwg1` и т.д. Для OpenVPN — `ovpn_br0`. Это значение должно быть конфигурируемым.
 
-#### Пример: несколько VPN-туннелей
+#### Пример: несколько шифрованных каналов
 
-Если на роутере настроено несколько VPN (например, WireGuard `nwg0` + OpenVPN `ovpn_br0`), серверы можно распределить по разным туннелям для redundancy:
+Если на роутере настроено несколько туннелей (например, WireGuard `nwg0` + OpenVPN `ovpn_br0`), серверы можно распределить по разным туннелям для redundancy:
 
 ```conf
 # Google через WireGuard
 server 8.8.8.8 -interface nwg0
 server 8.8.4.4 -interface nwg0
 
-# Cloudflare через OpenVPN (второй VPN)
+# Cloudflare через OpenVPN (второй tunnel)
 server 1.1.1.1 -interface ovpn_br0
 server 1.0.0.1 -interface ovpn_br0
 
-# Fallback без VPN — если все VPN down
+# Fallback без tunnel — если все tunnel down
 server 8.8.8.8 -fallback
 server 8.8.4.4 -fallback
 ```
 
-Так если один VPN падает — DNS-запросы уходят через второй. SmartDNS параллельно опрашивает все серверы в группе, fallback срабатывает только если основные не ответили.
+Так если один tunnel падает — DNS-запросы уходят через второй. SmartDNS параллельно опрашивает все серверы в группе, fallback срабатывает только если основные не ответили.
 
-Ещё вариант — **все серверы через один VPN**, но с fallback через второй:
+Ещё вариант — **все серверы через один tunnel**, но с fallback через второй:
 
 ```conf
 # Primary: всё через nwg0
@@ -550,24 +550,24 @@ server 1.0.0.1 -interface nwg0
 server 8.8.8.8 -interface ovpn_br0 -fallback
 server 8.8.4.4 -interface ovpn_br0 -fallback
 
-# Last resort: напрямую без VPN
+# Last resort: напрямую без tunnel
 server 8.8.8.8 -fallback
 ```
 
-#### Когда НЕ нужна маршрутизация через VPN
+#### Когда НЕ нужна маршрутизация через шифрованный канал
 
-- Если VPN не настроен на роутере — `-interface` не имеет смысла
-- Если не нужен доступ к заблокированным `.com` доменам — plain UDP достаточно
+- Если tunnel не настроен на роутере — `-interface` не имеет смысла
+- Если не нужен доступ к фильтруемым `.com` доменам — plain UDP достаточно
 - Если ISP не применяет DNS-спуфинг (есть такие, но редко)
 
 #### Итог: два режима работы
 
-| Режим | Foreign DNS | Защита от спуфинга | VPN нужен? |
+| Режим | Foreign DNS | Защита от спуфинга | Tunnel нужен? |
 |-------|------------|-------------------|-----------|
 | **Базовый** | UDP напрямую | ❌ Нет (только для non-RKN доменов ОК) | Нет |
-| **VPN-protected** | UDP через VPN `-interface` | ✅ Полная | Да |
+| **tunnel-protected** | UDP через шифрованный канал `-interface` | ✅ Полная | Да |
 
-**Рекомендация:** Сделать конфигурируемым. В Phase 3 заложить оба варианта: базовый конфиг (без VPN) + опциональный include-файл для VPN-режима.
+**Рекомендация:** Сделать конфигурируемым. В Phase 3 заложить оба варианта: базовый конфиг (без tunnel) + опциональный include-файл для tunnel-режима.
 
 ---
 
@@ -591,7 +591,7 @@ server 8.8.8.8 -fallback
 | 12 | Добавить nameserver для vk.com, yandex.com и др. | 🟢 Низкий | Простое |
 | 13 | Убрать избыточные nameserver (gov.ru и др.) | 🟢 Низкий | Простое |
 | 14 | Добавить `speed-check-mode ping,tcp:80,tcp:443` (явно) | 🟢 Низкий | Простое |
-| 15 | **Опционально:** `-interface nwg0` для foreign DNS (VPN-protected) | 🟡 Средний | Простое (конфигурируемое) |
+| 15 | **Опционально:** `-interface nwg0` для foreign DNS (tunnel-protected) | 🟡 Средний | Простое (конфигурируемое) |
 
 ---
 
@@ -604,7 +604,7 @@ server 8.8.8.8 -fallback
 | Yandex DNS | https://dns.yandex.ru/ | IP-адреса, DoT/DoH hostnames |
 | AdGuard DNS | https://adguard-dns.io/en/public-dns.html | IP-адреса, варианты |
 | OONI Explorer | https://explorer.ooni.org/country/RU | Данные о блокировках DNS в РФ |
-| ntc.party | https://ntc.party/ | Community-данные о ТСПУ и обходе блокировок |
+| ntc.party | https://ntc.party/ | Community-данные о ТСПУ и сетевой фильтрации |
 | Habr: DNS-блокировки | habr.com/ru/articles/ | Статьи о ТСПУ и DNS в РФ |
 
 ---
@@ -688,11 +688,11 @@ server 77.88.8.1 -group ru -exclude-default-group
 # 🌍 International DNS — Google + Cloudflare (default group)
 #
 # Two modes available (uncomment one):
-#   Mode A: Direct (no VPN) — simple, works for non-RKN domains
-#   Mode B: VPN-protected   — all foreign DNS through VPN, bypasses TSPU
+#   Mode A: Direct (no tunnel) — simple, works for non-RKN domains
+#   Mode B: tunnel-protected   — all foreign DNS through tunnel, TSPU protection
 # ===========================================================================
 
-# --- Mode A: Direct (без VPN) ---
+# --- Mode A: Direct (без tunnel) ---
 # Google UDP (primary — most reliable from RU)
 # server 8.8.8.8
 # server 8.8.4.4
@@ -700,15 +700,15 @@ server 77.88.8.1 -group ru -exclude-default-group
 # server 1.1.1.1
 # server 1.0.0.1
 
-# --- Mode B: VPN-protected (рекомендуется если VPN настроен) ---
-# Google UDP через VPN
+# --- Mode B: tunnel-protected (рекомендуется если tunnel настроен) ---
+# Google UDP через шифрованный канал
 server 8.8.8.8 -interface nwg0
 server 8.8.4.4 -interface nwg0
-# Cloudflare UDP через VPN
+# Cloudflare UDP через шифрованный канал
 server 1.1.1.1 -interface nwg0
 server 1.0.0.1 -interface nwg0
 
-# Fallback без VPN — если VPN down, DNS всё равно работает
+# Fallback без tunnel — если tunnel down, DNS всё равно работает
 server 8.8.8.8 -fallback
 server 8.8.4.4 -fallback
 
@@ -729,4 +729,4 @@ nameserver /sberbank.com/ru
 nameserver /tinkoff.com/ru
 ```
 
-> **Примечание:** Замените `nwg0` на имя вашего VPN-интерфейса. Для WireGuard на Keenetic: `nwg0`, `nwg1`; OpenVPN: `ovpn_br0`; L2TP: `l2tp0`. Посмотреть доступные: `ip link show | grep -E 'nwg|ovpn|l2tp'`.
+> **Примечание:** Замените `nwg0` на имя вашего туннельный интерфейса. Для WireGuard на Keenetic: `nwg0`, `nwg1`; OpenVPN: `ovpn_br0`; L2TP: `l2tp0`. Посмотреть доступные: `ip link show | grep -E 'nwg|ovpn|l2tp'`.

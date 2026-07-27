@@ -100,7 +100,7 @@ HEADER
 
     case "$proto" in
       doh)
-        # With VPN interfaces
+        # With tunnel interfaces
         if [ -n "$iface_list" ]; then
           for iface in $iface_list; do
             [ "$iface" = "default" ] && continue
@@ -117,7 +117,7 @@ HEADER
         fi
         ;;
       dot)
-        # With VPN interfaces
+        # With tunnel interfaces
         if [ -n "$iface_list" ]; then
           for iface in $iface_list; do
             [ "$iface" = "default" ] && continue

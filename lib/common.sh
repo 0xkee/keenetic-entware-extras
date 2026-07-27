@@ -57,6 +57,14 @@ detect_router_ip() {
   printf '%s' "$ip"
 }
 
+# Detect router LAN IPv6 address (Keenetic br0 bridge, global scope).
+# Returns the first global-scope IPv6 address on br0.
+# stdout: IPv6 address or empty string
+detect_router_ip6() {
+  ip -6 addr show br0 2>/dev/null \
+    | awk '/inet6.*global/ {split($2, a, "/"); print a[1]; exit}'
+}
+
 # Get file modification time as epoch seconds (BusyBox compatible).
 # BusyBox stat does not support GNU -c format.
 # Args: $1 - file path

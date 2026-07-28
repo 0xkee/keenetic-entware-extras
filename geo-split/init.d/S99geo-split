@@ -43,8 +43,8 @@ case "${1:-}" in
   refresh)
     # Cron: loaders check freshness + fill tables if stale. No ip rules.
     is_service_enabled "S99geo-split" || exit 0
-    "$SCRIPTS/update-subnets.sh" &
-    "$SCRIPTS/update-domains.sh" &
+    nice -n "${REFRESH_NICE_ADJUST:-0}" "$SCRIPTS/update-subnets.sh" &
+    nice -n "${REFRESH_NICE_ADJUST:-0}" "$SCRIPTS/update-domains.sh" &
     wait
     ;;
   update)

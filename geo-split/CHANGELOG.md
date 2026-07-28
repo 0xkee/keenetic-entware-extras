@@ -5,6 +5,12 @@ All notable changes to `geo-split` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.18.0] - 2026-07-28
+
+### Added
+- `REFRESH_NICE_ADJUST` config option (default `10`) to reduce CPU priority of
+  periodic subnet and domain refresh jobs; set to `0` for normal priority.
+
 ## [0.17.5] - 2026-07-28
 
 ### Changed

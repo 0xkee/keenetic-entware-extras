@@ -5,6 +5,12 @@ All notable changes to `geo-split` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.17.5] - 2026-07-28
+
+### Changed
+- Scripts: simplify `_CONFIG_DIR` assignment — replace `$(cd ... && pwd)` subshell
+  with `${SCRIPT_DIR%/*}/config` parameter expansion (6 files)
+
 ## [0.17.4] - 2026-07-12
 
 ### Added

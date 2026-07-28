@@ -22,19 +22,13 @@
 > Бюджет: ndm 23MB + smartdns 11MB + stock_nginx 20MB = 54MB baseline.
 > webui: 5 nginx proc (14MB RSS) + tmpfs (12MB) + io.popen спайки → >128MB → OOM.
 
-- [ ] **F1: `worker_processes 1`** — `nginx.conf:21`, сейчас `auto` = 4 воркера на 4-core MIPS.
-  На 128MB: экономия ~6 MB RSS (убираем 3 × 2MB). Для dashboard 1 пользователя хватает 1 воркера.
-  lua_shared_dict кеш работает с любым числом воркеров. Рассмотреть `worker_processes` из config.conf.
+- [-] **F1: `worker_processes 1`** — (может быть потом, если возникнет необходимость) `nginx.conf:21`, сейчас `auto`.
 - [x] **F2: Минимальный кеш** — `patch-stock-ui.sh` копирует только `index.html` + `main-*.js` + `polyfills-*.js` + `styles-*.css` + `.gz`
   в `webui/htdocs-cache/` (на /opt). Остальное отдаётся nginx `@stock` напрямую с flash. Экономия: ~4 MB I/O.
 - [x] **F3: Fallback-location на flash** — `nginx.conf`: `try_files $uri @stock;` + `location @stock { root /usr/share/htdocs_; }`.
   Непатченные файлы (`assets/`, `wizards/`, `ndm*.js`, `worker-*.js`) идут напрямую с flash.
-- [ ] **F4: `gzip -1` вместо `-6`** — `patch-stock-ui.sh:149`. Level 6: 1.46MB за 5-8с MIPS.
-  Level 1: ~1.8MB за 1-2с. Разница: +0.3MB размер, −4× время старта. На MIPS критично.
-- [ ] **F5: Объединить 9 sed в 1** — `families/signal.sh` и `families/setter.sh`:
-  9 отдельных `sed -i` на 6.3MB файле = 9 × read+write = ~113MB I/O.
-  Объединить в `sed -i -e '...' -e '...' ...` = 1 pass = ~12MB I/O. Экономия ~8× I/O при старте.
-  Потребуется рефакторинг `patch_sed` → batch-mode (собирать выражения, verify после единого sed).
+- [-] **F4: `gzip -1` вместо `-6`** — (может быть потом, если возникнет необходимость) `patch-stock-ui.sh:149`. Level 6 vs Level 1.
+- [-] **F5: Объединить 9 sed в 1** — (может быть потом, если возникнет необходимость) `families/signal.sh` и `families/setter.sh`.
 
 **F1 = ~6 MB RAM** при переключении на 1 worker.
 

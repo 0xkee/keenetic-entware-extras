@@ -137,6 +137,7 @@ opkg install geo-split-data_<ver>_all.ipk
 opkg install geo-split_<ver>_all.ipk
 opkg install smartdns-geo-conf_<ver>_all.ipk
 opkg install smartdns-redirect_<ver>_all.ipk
+opkg install net-check_<ver>_all.ipk
 opkg install webui_<ver>_all.ipk
 ```
 
@@ -148,6 +149,7 @@ keenetic-entware-extras  ← обязательная база для всех
   │     └── geo-split-data
   ├── smartdns-geo-conf
   ├── smartdns-redirect
+  ├── net-check
   └── webui
 ```
 

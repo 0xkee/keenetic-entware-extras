@@ -9,7 +9,8 @@
 # Args: $1 - message
 log() {
   local tag
-  tag="$(basename "$0" .sh)"
+  tag="${0##*/}"
+  tag="${tag%.sh}"
   logger -t "$tag" "$1"
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$tag] $1"
 }
@@ -18,7 +19,8 @@ log() {
 # Args: $1 - error message
 log_error() {
   local tag
-  tag="$(basename "$0" .sh)"
+  tag="${0##*/}"
+  tag="${tag%.sh}"
   logger -t "$tag" -p user.err "$1"
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$tag] ERROR: $1" >&2
 }
@@ -99,7 +101,7 @@ format_age() {
   [ -z "$result" ] && [ "$hours" -gt 0 ] && result="${hours}h ${mins}m ${secs}s"
   [ -z "$result" ] && [ "$mins" -gt 0 ] && result="${mins}m ${secs}s"
   [ -z "$result" ] && result="${secs}s"
-  echo "$result"
+  printf '%s\n' "$result"
 }
 
 # Format kilobytes as human-readable size with adaptive unit (KB/MB/GB).

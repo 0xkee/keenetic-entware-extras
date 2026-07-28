@@ -22,10 +22,12 @@ assert_eq 'json_escape_val escapes quotes' 'a\"b' "$(json_escape_val 'a"b')"
 assert_eq 'json_escape_val escapes backslashes' 'a\\b' "$(json_escape_val 'a\b')"
 assert_eq 'json_escape_val escapes newlines' 'a\nb' "$(json_escape_val 'a
 b')"
+assert_eq 'json_escape_val escapes tabs' 'a\tb' "$(json_escape_val "$(printf 'a\tb')")"
 assert_eq 'json_kv emits an escaped string' '"name":"a\"b"' "$(json_kv 'name' 'a"b')"
 assert_eq 'json_kv_num emits a number' '"count":42' "$(json_kv_num 'count' 42)"
 assert_eq 'json_kv_bool emits true for zero' '"enabled":true' "$(json_kv_bool 'enabled' 0)"
 assert_eq 'json_kv_bool emits false for non-zero' '"enabled":false' "$(json_kv_bool 'enabled' 1)"
+assert_eq 'json_kv_bool defaults to false when arg omitted' '"enabled":false' "$(json_kv_bool 'enabled')"
 assert_eq 'json_check emits status' '"cache":"warn"' "$(json_check 'cache' 'warn')"
 
 items=''

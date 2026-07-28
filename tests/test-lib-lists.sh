@@ -48,5 +48,7 @@ assert_eq 'list_count counts meaningful source lines' '3' "$(list_count "$TMP_DI
 assert_eq 'list_count_expanded includes nested entries' '3' "$(list_count_expanded "$TMP_DIR/base.txt")"
 assert_eq 'list_read stops circular includes' '' "$(list_read "$TMP_DIR/circular-a.txt" 2>/dev/null)"
 assert_eq 'list_count_expanded returns zero for missing file' '0' "$(list_count_expanded "$TMP_DIR/missing.txt")"
+assert_fail 'list_read returns failure for missing file' list_read "$TMP_DIR/missing.txt" 2>/dev/null
+assert_fail 'list_count returns failure for missing file' list_count "$TMP_DIR/missing.txt" 2>/dev/null
 
 test_summary 'lib/lists.sh'

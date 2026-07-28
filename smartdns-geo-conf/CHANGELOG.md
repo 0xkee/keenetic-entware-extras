@@ -5,6 +5,13 @@ All notable changes to `smartdns-geo-conf` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.11.2] — 2026-07-28
+
+### Changed
+- `scripts/status.sh`: deduplicate `show_ports()` — delegate to `status_show_port()`
+  from `lib/status.sh` instead of inline loop (no functional change)
+- `config/defaults.conf`: expanded PIDFILE comment (upstream daemon path clarification)
+
 ## [0.11.1] — 2026-07-27
 
 ### Fixed

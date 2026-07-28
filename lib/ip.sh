@@ -118,20 +118,22 @@ list_aggregate_cidrs() {
   aggregate 2>/dev/null
 }
 
-# Detect best DNS resolver port for full A-record resolution.
-# Probes SmartDNS no-speed-check (6153), then main (6053), then system.
-# Uses DNS_FULL_RESOLVER_PORT if set in config.
+# Detect best DNS resolver port via /proc/net/tcp (instant, no network I/O).
+# Cascade: 6153 (SmartDNS no-speed-check) → 6053 (SmartDNS main) → 0 (system).
+# Port hex: 6153=0x1809, 6053=0x17A5.
+# Respects DNS_FULL_RESOLVER_PORT override if set in config.
+# Args: $1 (optional) — "main" to skip 6153 (start from 6053; for dns-check.sh).
 # Outputs: "PORT LABEL" (e.g. "6153 SmartDNS no-speed-check") or "0 system resolver"
 detect_dns_port() {
   if [ -n "${DNS_FULL_RESOLVER_PORT:-}" ]; then
     echo "$DNS_FULL_RESOLVER_PORT configured"
     return
   fi
-  if dig +short +time=1 +tries=1 localhost @localhost -p 6153 >/dev/null 2>&1; then
+  if [ "${1:-}" != "main" ] && grep -q ":1809 " /proc/net/tcp 2>/dev/null; then
     echo "6153 SmartDNS no-speed-check"
     return
   fi
-  if dig +short +time=1 +tries=1 localhost @localhost -p 6053 >/dev/null 2>&1; then
+  if grep -q ":17A5 " /proc/net/tcp 2>/dev/null; then
     echo "6053 SmartDNS"
     return
   fi

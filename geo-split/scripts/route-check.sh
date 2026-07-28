@@ -17,13 +17,11 @@ _CONFIG_DIR="${SCRIPT_DIR%/*}/config"
 DNS_HOST="127.0.0.1"
 DNS_TIMEOUT="3"
 
-# Auto-detect SmartDNS no-speed-check (port 6153); fallback to system resolver.
-# Port 6153 hex = 1809. Check /proc/net/tcp (in-memory, no network I/O).
-if grep -q ":1809 " /proc/net/tcp 2>/dev/null; then
-  DNS_PORT="6153"
-else
-  DNS_PORT="53"
-fi
+# Auto-detect: SmartDNS no-speed-check (6153) → main (6053) → system (53).
+_dns_detect=$(detect_dns_port)
+DNS_PORT="${_dns_detect%% *}"
+[ "$DNS_PORT" = "0" ] && DNS_PORT="53"
+unset _dns_detect
 
 # --- Helpers ---
 

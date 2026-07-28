@@ -5,6 +5,13 @@ All notable changes to `geo-split` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [Unreleased]
+
+### Changed
+- `route-check.sh`: DNS port detection unified with `lib/ip.sh:detect_dns_port()` —
+  replaces inline `/proc/net/tcp` grep. Now also falls back to SmartDNS main `:6053`
+  if no-speed-check `:6153` is unavailable (previously skipped directly to system `:53`).
+
 ## [0.18.0] - 2026-07-28
 
 ### Added

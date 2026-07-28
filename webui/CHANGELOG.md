@@ -5,6 +5,15 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [Unreleased]
+
+## [0.35.2] — 2026-07-29
+
+### Changed
+- **DNS Check: single-path diagram when SmartDNS not running**: when `dns_source=system`,
+  diagram shows one "System DNS :53" path instead of zone-routing branches. Zone match
+  info preserved in technical details. Legend, summary, and details show system DNS warning.
+
 ## [0.35.1] — 2026-07-27
 
 ### Fixed

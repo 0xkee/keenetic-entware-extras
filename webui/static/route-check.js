@@ -218,6 +218,8 @@ function _createDiagModal(title, buildBody) {
 function _getVerdictClass(data, type) {
     if (!data || data.ok === false) return 'rc-result--error';
     if (type === 'dns') {
+        // System DNS fallback — always "default" style (blue)
+        if (data.dns_source === 'system') return 'rc-result--default';
         // DNS has no top-level verdict — color by matched zone group:
         // a zone-specific override group is treated like a "matched rule"
         // (green, same as route geo-split); plain "default" stays blue.
@@ -305,6 +307,11 @@ function _buildDnsSummary(data) {
         return '\u2717 error \u00b7 ' + (data && data.error ? data.error : 'unknown');
     }
     var parts = [];
+
+    // System DNS warning prefix
+    if (data.dns_source === 'system') {
+        parts.push('\u26a0 system DNS :' + (data.dns_port || 53));
+    }
 
     var result = data.result || {};
     var sIps = result.ips || [];
@@ -448,6 +455,15 @@ function _buildDnsDetails(data) {
     if (!data || data.ok === false) return '';
     var rows = [];
 
+    // DNS source indicator
+    if (data.dns_source) {
+        rows.push('<tr><th colspan="2">DNS Source</th></tr>');
+        var srcLabel = data.dns_source === 'system'
+            ? 'System DNS (:' + (data.dns_port || 53) + ') \u2014 zone routing not active'
+            : 'SmartDNS (:' + (data.dns_port || 6053) + ')';
+        rows.push('<tr><td>Resolver</td><td>' + EW.escapeHtml(srcLabel) + '</td></tr>');
+    }
+
     if (data.zone) {
         rows.push('<tr><th colspan="2">Zone</th></tr>');
         if (data.zone.group) rows.push('<tr><td>Group</td><td>' + EW.escapeHtml(data.zone.group) + '</td></tr>');
@@ -523,13 +539,18 @@ function _renderFullResult(container, data, type) {
         var legend = document.createElement('span');
         legend.className = 'rc-result__legend';
         if (type === 'dns') {
-            // DNS Check has no top-level verdict — use matched zone group instead,
-            // same visual pattern as Route Check's "query + icon + verdict".
-            var zone = data.zone || {};
-            var groupLabel = zone.group || 'default';
-            var isDefaultGroup = groupLabel === 'default';
-            var dIcon = isDefaultGroup ? '\u2192' : '\u21c4';
-            legend.textContent = query + ' ' + dIcon + ' ' + groupLabel;
+            if (data.dns_source === 'system') {
+                // System DNS fallback — show port instead of zone group
+                legend.textContent = query + ' \u2192 system :' + (data.dns_port || 53);
+            } else {
+                // DNS Check has no top-level verdict — use matched zone group instead,
+                // same visual pattern as Route Check's "query + icon + verdict".
+                var zone = data.zone || {};
+                var groupLabel = zone.group || 'default';
+                var isDefaultGroup = groupLabel === 'default';
+                var dIcon = isDefaultGroup ? '\u2192' : '\u21c4';
+                legend.textContent = query + ' ' + dIcon + ' ' + groupLabel;
+            }
         } else {
             var verdict = (data && data.verdict) ? data.verdict : '';
             if (verdict) {

@@ -652,12 +652,13 @@ local function write_config(svc_id, body)
         end
     end
 
-    -- Generic port validation: any key ending with _PORT must be 1-65535
+    -- Generic port validation: any key ending with _PORT must be 0-65535.
+    -- 0 is allowed as a sentinel value meaning "auto-detect" (e.g. SMARTDNS_PORT=0).
     for _, key in ipairs(reg.keys) do
         if values[key] and key:match("_PORT$") then
             local port = tonumber(values[key])
-            if not port or port < 1 or port > 65535 then
-                return '{"ok":false,"error":"invalid ' .. key .. ' (must be 1-65535)"}'
+            if not port or port < 0 or port > 65535 then
+                return '{"ok":false,"error":"invalid ' .. key .. ' (must be 0-65535)"}'
             end
         end
     end

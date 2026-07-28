@@ -486,6 +486,15 @@ function renderRouteDiagram(container, data) {
  * @returns {Array<Object>} [{ label, providers, matched }]
  */
 function _buildDnsGroups(data) {
+    // System DNS fallback: single path, no zone routing active
+    if (data.dns_source === 'system') {
+        return [{
+            label: "System DNS",
+            providers: [":" + (data.dns_port || 53)],
+            hostnames: [],
+            matched: true
+        }];
+    }
     if (data.groups && data.groups.length > 0) {
         var out = [];
         for (var i = 0; i < data.groups.length; i++) {
@@ -606,6 +615,9 @@ function renderDnsDiagram(container, data) {
     svg.appendChild(_useIcon("ico-zone", zoneX, zoneY, ""));
     svg.appendChild(_svgText("Zone", zoneX, zoneY + 26, "route-node-label"));
     svg.appendChild(_svgText(zone.group || "default", zoneX, zoneY + 38, "route-node-sublabel"));
+    if (data.dns_source === 'system') {
+        svg.appendChild(_svgText("(configured)", zoneX, zoneY + 50, "route-node-sublabel"));
+    }
 
     // DNS group branch nodes — one node per configured group (zone/default),
     // NOT one per individual provider. Providers are listed as text under the node.

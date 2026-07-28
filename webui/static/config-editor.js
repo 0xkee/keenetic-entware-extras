@@ -55,8 +55,8 @@ var CONFIG_SCHEMAS = {
           desc: 'Outgoing interfaces for international DNS. When set, DNS goes through encrypted tunnel (DPI protection).' },
         { key: 'OTHER_DNS_STRICT', label: 'Strict International Tunnel', type: 'toggle', hint: 'Privacy: fail if all tunnels down',
           desc: 'When enabled: NO direct fallback — if all tunnels down, international DNS fails. Privacy over availability. Only meaningful when International Tunnel Interfaces is set.' },
-        { key: 'SMARTDNS_PORT', label: 'SmartDNS Port', type: 'number', min: 1, max: 65535, hint: 'Listen port (default 6053)',
-          desc: 'SmartDNS listen port (main, used for DNS tests).' }
+        { key: 'SMARTDNS_PORT', label: 'SmartDNS Port', type: 'number', min: 0, max: 65535, hint: '0 = auto-detect',
+          desc: 'SmartDNS listen port (main, used for DNS tests). 0 = auto-detect from /proc/net/tcp. Set to a specific port only if using a non-standard SmartDNS listen port.' }
     ],
     'smartdns-redirect': [
         { key: 'UPSTREAM_PORT', label: 'Upstream Port', type: 'number', min: 1, max: 65535, hint: 'SmartDNS=6053, AGH=5353, Unbound=5335',

@@ -114,7 +114,7 @@ section "Installed packages (related)"
 
 if command -v opkg >/dev/null 2>&1; then
     opkg list-installed 2>/dev/null \
-        | grep -E "geo-split|smartdns|webui|keenetic-entware|nginx|^cron |^aggregate |^bind-dig |^ca-certificates |^coreutils-touch |^curl |^ip-full |^iptables |^logrotate " \
+        | grep -E "geo-split|smartdns|webui|keenetic-entware|net-check|boot-diag|nginx|^cron |^aggregate |^bind-dig |^ca-certificates |^coreutils-touch |^curl |^ip-full |^iptables |^logrotate " \
         || echo "  (none found)"
 else
     echo "opkg: not found"
@@ -124,17 +124,40 @@ fi
 
 section "Service state (enabled/disabled)"
 
-for init_name in S99geo-split S39smartdns-redirect S80nginx-webui; do
+for init_name in S01boot-diag S39smartdns-redirect S80nginx-webui S99geo-split; do
     if [ -L "/opt/etc/init.d/$init_name" ]; then
         printf "  %-26s ENABLED (symlink)\n" "$init_name"
     elif [ -f "$BASE/geo-split/init.d/$init_name" ] \
       || [ -f "$BASE/smartdns-redirect/init.d/$init_name" ] \
-      || [ -f "$BASE/webui/init.d/$init_name" ]; then
+      || [ -f "$BASE/webui/init.d/$init_name" ] \
+      || [ -f "$BASE/boot-diag/init.d/$init_name" ]; then
         printf "  %-26s DISABLED (no symlink)\n" "$init_name"
     else
         printf "  %-26s not installed\n" "$init_name"
     fi
 done
+
+# S37smartdns-conf: deployed as copy (not symlink), has own state file
+if [ -x /opt/etc/init.d/S37smartdns-conf ]; then
+    if [ -f /opt/etc/smartdns/.split-enabled ]; then
+        printf "  %-26s ENABLED (split-DNS)\n" "S37smartdns-conf"
+    else
+        printf "  %-26s DISABLED (split-DNS off)\n" "S37smartdns-conf"
+    fi
+elif [ -d "$BASE/smartdns-geo-conf" ]; then
+    printf "  %-26s BROKEN (pkg installed, init missing)\n" "S37smartdns-conf"
+else
+    printf "  %-26s not installed\n" "S37smartdns-conf"
+fi
+
+# S38smartdns: stock Entware init, may be renamed by S37 disable
+if [ -x /opt/etc/init.d/S38smartdns ]; then
+    printf "  %-26s ENABLED\n" "S38smartdns"
+elif [ -f /opt/etc/init.d/S38smartdns.disabled ]; then
+    printf "  %-26s DISABLED (by S37 disable)\n" "S38smartdns"
+else
+    printf "  %-26s not installed\n" "S38smartdns"
+fi
 
 # ─── 5. User configs ─────────────────────────────────────────────────────────
 
@@ -172,6 +195,31 @@ if [ -d "$_gs_conf" ]; then
     )
 else
     echo "  (geo-split not installed)"
+fi
+
+# ─── 6b. smartdns-geo-conf config ────────────────────────────────────────────
+
+section "smartdns-geo-conf config (effective)"
+
+_sgc_conf="$BASE/smartdns-geo-conf/config"
+if [ -d "$_sgc_conf" ]; then
+    (
+        _CONFIG_DIR="$_sgc_conf"
+        # shellcheck disable=SC1091
+        . "$_sgc_conf/defaults.conf"
+        # shellcheck disable=SC1091
+        [ -f "$_sgc_conf/config.conf" ] && . "$_sgc_conf/config.conf"
+        printf "  DNS_ZONE:              %s\n" "${DNS_ZONE:-eas}"
+        printf "  ZONE_DNS_PROVIDER:     %s\n" "${ZONE_DNS_PROVIDER:-yandex alidns system}"
+        printf "  ZONE_DNS_INTERFACE:    %s\n" "${ZONE_DNS_INTERFACE:-(none)}"
+        printf "  ZONE_DNS_STRICT:       %s\n" "${ZONE_DNS_STRICT:-no}"
+        printf "  OTHER_DNS_PROVIDER:    %s\n" "${OTHER_DNS_PROVIDER:-google cloudflare}"
+        printf "  OTHER_DNS_INTERFACES:  %s\n" "${OTHER_DNS_INTERFACES:-(none)}"
+        printf "  OTHER_DNS_STRICT:      %s\n" "${OTHER_DNS_STRICT:-no}"
+        printf "  SMARTDNS_PORT:         %s\n" "${SMARTDNS_PORT:-6053}"
+    )
+else
+    echo "  (smartdns-geo-conf not installed)"
 fi
 
 # ─── 7. Service status ───────────────────────────────────────────────────────
@@ -349,7 +397,7 @@ if command -v ip >/dev/null 2>&1; then
     fi
 
     # Keenetic policy rules (non-geo-split, prio > 100)
-    printf "\nKeenetic policy rules (VPN/other, prio>100):\n"
+    printf "\nKeenetic policy rules (tunnel/other, prio>100):\n"
     _policy_rules=$(ip rule show 2>/dev/null | grep -vE "^(0:|50:|51:|32[67])" | head -15)
     if [ -n "$_policy_rules" ]; then
         echo "$_policy_rules" | sed 's/^/  /'
@@ -361,22 +409,22 @@ if command -v ip >/dev/null 2>&1; then
     _def_iface=$(ip route | grep "^default" | sed -n 's/.*dev \([^ ]*\).*/\1/p' | head -1)
     _geo_iface=""
     _geo_iface=$(ip route show table 1001 2>/dev/null | head -1 | sed -n 's/.*dev \([^ ]*\).*/\1/p')
-    _vpn_up=$(ip -brief link show 2>/dev/null | grep -E "^(nwg|awg|ovpn|tun|tap|wg)" | grep -v "DOWN" | awk '{print $1}' | tr '\n' ' ')
+    _tun_up=$(ip -brief link show 2>/dev/null | grep -E "^(nwg|awg|ovpn|tun|tap|wg)" | grep -v "DOWN" | awk '{print $1}' | tr '\n' ' ')
 
     printf "\nRouting effectiveness:\n"
     if [ -n "$_geo_iface" ] && [ -n "$_def_iface" ]; then
         if [ "$_geo_iface" = "$_def_iface" ]; then
-            if [ -n "$_vpn_up" ] && [ -z "$_policy_rules" ]; then
+            if [ -n "$_tun_up" ] && [ -z "$_policy_rules" ]; then
                 printf "  ⚠ geo-split routes through %s = same as default route!\n" "$_geo_iface"
-                printf "    VPN interfaces UP: %s\n" "$_vpn_up"
+                printf "    Tunnel interfaces UP: %s\n" "$_tun_up"
                 printf "    No Keenetic policy rules found → non-geo traffic stays on ISP.\n"
-                printf "    Fix: configure VPN routing in Keenetic (per-device or global policy).\n"
-            elif [ -n "$_vpn_up" ] && [ -n "$_policy_rules" ]; then
+                printf "    Fix: configure tunnel routing in Keenetic (per-device or global policy).\n"
+            elif [ -n "$_tun_up" ] && [ -n "$_policy_rules" ]; then
                 printf "  ✓ geo-split: %s (= default), Keenetic policy rules active\n" "$_geo_iface"
-                printf "    VPN interfaces UP: %s\n" "$_vpn_up"
+                printf "    Tunnel interfaces UP: %s\n" "$_tun_up"
                 printf "    Non-geo traffic handled by Keenetic fwmark policy (prio 100+).\n"
             else
-                printf "  ℹ geo-split routes through %s (= default). No VPN detected.\n" "$_geo_iface"
+                printf "  ℹ geo-split routes through %s (= default). No tunnel detected.\n" "$_geo_iface"
             fi
         else
             printf "  ✓ geo-split: %s, default: %s (split active)\n" "$_geo_iface" "$_def_iface"
@@ -413,7 +461,7 @@ if command -v ip >/dev/null 2>&1; then
     printf "\nSample routes (table 1000, first 3):\n"
     ip route show table 1000 2>/dev/null | head -3 | sed 's/^/  /'
 
-    # ROUTE_OUT interface stats (TX/RX — shows if VPN/tunnel transmits)
+    # ROUTE_OUT interface stats (TX/RX — shows if tunnel transmits)
     if [ -n "$_geo_iface" ] && [ "$_geo_iface" != "$_def_iface" ]; then
         printf "\nROUTE_OUT interface stats (%s):\n" "$_geo_iface"
         _stats=$(ip -s link show "$_geo_iface" 2>/dev/null | grep -A1 "RX:\|TX:" | head -6)
@@ -512,15 +560,15 @@ if command -v ip >/dev/null 2>&1 && [ -n "$_GEO_IP" ]; then
         _nongeo_client_dev=$(echo "$_client_nongeo" | sed -n 's/.*dev \([^ ]*\).*/\1/p')
         _geo_client_table=$(echo "$_client_geo" | sed -n 's/.*table \([^ ]*\).*/\1/p')
 
-        # Check Keenetic fwmark VPN routing (stock policy for non-GEO traffic)
-        # Iterate fwmark rules to find one that routes through a VPN interface
+        # Check Keenetic fwmark tunnel routing (stock policy for non-GEO traffic)
+        # Iterate fwmark rules to find one that routes through a tunnel interface
         _kee_fwmark="" _kee_vpn_dev=""
         _fwmarks=$(ip rule show 2>/dev/null | grep "fwmark" \
             | sed -n 's/.*fwmark \([^ ]*\).*/\1/p')
         for _fm in $_fwmarks; do
             _fm_route=$(ip route get "$_NON_GEO_IP" mark "$_fm" 2>/dev/null | head -1)
             _fm_dev=$(echo "$_fm_route" | sed -n 's/.*dev \([^ ]*\).*/\1/p')
-            # Check if this routes through a VPN/tunnel interface
+            # Check if this routes through a tunnel interface
             if echo "$_fm_dev" | grep -qE "^(nwg|awg|ovpn|tun|tap|wg|l2tp|pptp|sstp)"; then
                 _kee_fwmark="$_fm"
                 _kee_vpn_dev="$_fm_dev"
@@ -531,19 +579,19 @@ if command -v ip >/dev/null 2>&1 && [ -n "$_GEO_IP" ]; then
         printf "\n  Split-routing verdict (client perspective):\n"
         if [ -n "$_geo_client_dev" ] && [ -n "$_nongeo_client_dev" ]; then
             if [ "$_geo_client_dev" != "$_nongeo_client_dev" ]; then
-                # Case 1: Different interfaces (e.g. GEO→VPN, non-GEO→ISP via default)
+                # Case 1: Different interfaces (e.g. GEO→tunnel, non-GEO→ISP via default)
                 printf "    ✓ GEO → %s, non-GEO → %s (split ACTIVE — different interfaces)\n" \
                     "$_geo_client_dev" "$_nongeo_client_dev"
             elif [ -n "$_geo_client_table" ] && echo "$_geo_client_table" | grep -qE "^(1000|1001)$"; then
-                # Case 2: Same interface but GEO hits geo-split table (e.g. both→ISP, VPN via fwmark)
+                # Case 2: Same interface but GEO hits geo-split table (e.g. both→ISP, tunnel via fwmark)
                 printf "    ✓ GEO → %s (table %s), non-GEO → %s (default route)\n" \
                     "$_geo_client_dev" "$_geo_client_table" "$_nongeo_client_dev"
                 printf "      geo-split policy routing active (GEO hits table %s).\n" "$_geo_client_table"
                 if [ -n "$_kee_vpn_dev" ]; then
-                    printf "    ✓ Keenetic VPN policy: non-GEO → %s (fwmark %s)\n" \
+                    printf "    ✓ Keenetic tunnel policy: non-GEO → %s (fwmark %s)\n" \
                         "$_kee_vpn_dev" "$_kee_fwmark"
                 elif [ -n "$_fwmarks" ]; then
-                    printf "    ℹ Keenetic fwmark policies exist but no VPN interface found.\n"
+                    printf "    ℹ Keenetic fwmark policies exist but no tunnel interface found.\n"
                     printf "      Non-GEO traffic goes via default route (%s).\n" "$_nongeo_client_dev"
                 else
                     printf "    ℹ No Keenetic fwmark policy. Non-GEO via default route (%s).\n" \
@@ -554,7 +602,7 @@ if command -v ip >/dev/null 2>&1 && [ -n "$_GEO_IP" ]; then
                 printf "    ⚠ GEO → %s, non-GEO → %s (SAME path, no geo-split table hit!)\n" \
                     "$_geo_client_dev" "$_nongeo_client_dev"
                 if [ -n "$_kee_vpn_dev" ]; then
-                    printf "    ℹ Keenetic VPN policy active: fwmark %s → %s\n" "$_kee_fwmark" "$_kee_vpn_dev"
+                    printf "    ℹ Keenetic tunnel policy active: fwmark %s → %s\n" "$_kee_fwmark" "$_kee_vpn_dev"
                 fi
             fi
         else
@@ -596,7 +644,7 @@ if command -v ip >/dev/null 2>&1 && [ -n "$_GEO_IP" ]; then
             fi
         fi
 
-        # Non-GEO target — through VPN if found, otherwise through default
+        # Non-GEO target — through tunnel if found, otherwise through default
         _nongeo_ping_dev="${_kee_vpn_dev:-$_nongeo_client_dev}"
         if [ -n "$_nongeo_ping_dev" ]; then
             _nongeo_src=$(ip -4 addr show dev "$_nongeo_ping_dev" 2>/dev/null \
@@ -621,7 +669,7 @@ if command -v ip >/dev/null 2>&1 && [ -n "$_GEO_IP" ]; then
             else
                 printf "✗ FAIL"
                 if echo "$_nongeo_ping_dev" | grep -qE "^(nwg|awg|ovpn|tun|tap|wg)"; then
-                    printf " (VPN tunnel down? no connectivity?)"
+                    printf " (tunnel down? no connectivity?)"
                 fi
                 printf "\n"
             fi
@@ -664,17 +712,36 @@ if command -v iptables >/dev/null 2>&1; then
     iptables -t nat -L PREROUTING -n --line-numbers 2>/dev/null \
         | grep -E "53|smartdns|REDIRECT|DNAT" | head -20 || echo "  (no DNS redirect rules)"
 
-    # POSTROUTING NAT (MASQUERADE/SNAT for VPN — critical for tunnel routing)
-    printf "\niptables NAT (POSTROUTING, VPN/tunnel):\n"
+    # POSTROUTING NAT (MASQUERADE/SNAT — critical for tunnel routing)
+    printf "\niptables NAT (POSTROUTING, tunnel):\n"
     _postrouting=$(iptables -t nat -L POSTROUTING -n -v 2>/dev/null \
         | grep -E "MASQ|SNAT|nwg|awg|ovpn|gre|tun|tap" | head -10)
     if [ -n "$_postrouting" ]; then
         echo "$_postrouting" | sed 's/^/  /'
     else
-        printf "  (no VPN MASQUERADE/SNAT rules)\n"
+        printf "  (no tunnel MASQUERADE/SNAT rules)\n"
     fi
 else
     echo "iptables: not found"
+fi
+
+# IPv6 DNS redirect rules (smartdns-redirect 0.4.0+: automatic DNAT or REJECT)
+if command -v ip6tables >/dev/null 2>&1; then
+    _v6_nat=$(ip6tables -t nat -L PREROUTING -n --line-numbers 2>/dev/null \
+        | grep -E "53|DNAT|REDIRECT" | head -10)
+    _v6_input=$(ip6tables -L INPUT -n 2>/dev/null \
+        | grep -E "53|REJECT" | head -10)
+    if [ -n "$_v6_nat" ] || [ -n "$_v6_input" ]; then
+        printf "\nip6tables (IPv6 DNS redirect):\n"
+        if [ -n "$_v6_nat" ]; then
+            printf "  NAT PREROUTING:\n"
+            echo "$_v6_nat" | sed 's/^/    /'
+        fi
+        if [ -n "$_v6_input" ]; then
+            printf "  INPUT (REJECT → Happy Eyeballs fallback):\n"
+            echo "$_v6_input" | sed 's/^/    /'
+        fi
+    fi
 fi
 
 # ─── 13. Network interfaces ──────────────────────────────────────────────────
@@ -693,7 +760,7 @@ if command -v ip >/dev/null 2>&1; then
         | head -10
 
     # VPN/tunnel interfaces (critical for geo-split routing)
-    printf "\nVPN/tunnel interfaces:\n"
+    printf "\nTunnel interfaces:\n"
     _vpn_ifaces=$(ip -brief link show 2>/dev/null \
         | grep -E "^(nwg|awg|ovpn|l2tp|pptp|tun|tap|wg)" \
         | awk '{printf "  %-16s %s\n", $1, $2}')
@@ -725,8 +792,8 @@ if command -v ip >/dev/null 2>&1; then
     printf "\nFull ip rule show:\n"
     ip rule show 2>/dev/null | head -25 | sed 's/^/  /'
 
-    # MTU on VPN/tunnel interfaces (reduced MTU — expected, shown for TCP MSS diagnostics)
-    printf "\nVPN interface MTU:\n"
+    # MTU on tunnel interfaces (reduced MTU — expected, shown for TCP MSS diagnostics)
+    printf "\nTunnel interface MTU:\n"
     _shown_mtu=0
     ip -brief link show 2>/dev/null | grep -E "^(nwg|awg|ovpn|tun|tap|wg|l2tp|pptp|ngre|gre)" | while IFS= read -r _line; do
         _if_name=$(echo "$_line" | awk '{print $1}')
@@ -743,6 +810,12 @@ if command -v ip >/dev/null 2>&1; then
     if [ "$_def_count" -gt 1 ]; then
         printf "\n⚠ Multiple default routes (%s):\n" "$_def_count"
         ip route | grep "^default" | sed 's/^/  /'
+    fi
+    # GRE/IPIP tunnels (ip tunnel show — for users with manual tunnel config)
+    _tunnels=$(ip tunnel show 2>/dev/null | grep -v "^tunl0\|^sit0\|^ip6tnl0" | head -10)
+    if [ -n "$_tunnels" ]; then
+        printf "\nIP tunnels (GRE/IPIP/SIT):\n"
+        echo "$_tunnels" | sed 's/^/  /'
     fi
 fi
 
@@ -809,9 +882,18 @@ if [ -f /opt/var/log/geo-split.log ]; then
     tail -10 /opt/var/log/geo-split.log 2>/dev/null || true
 fi
 
+_boot_diag_dir="/opt/var/log/boot-diag"
+if [ -d "$_boot_diag_dir" ]; then
+    _last_boot=$(find "$_boot_diag_dir" -name 'boot-*.log' -type f 2>/dev/null | sort | tail -1)
+    if [ -n "$_last_boot" ]; then
+        printf "\n--- boot-diag (last boot snapshot: %s) ---\n" "$(basename "$_last_boot")"
+        tail -20 "$_last_boot" 2>/dev/null || true
+    fi
+fi
+
 if command -v logread >/dev/null 2>&1; then
-    printf "\n--- logread (geo-split|smartdns|nginx-webui|watchdog, last 20) ---\n"
-    logread 2>/dev/null | grep -E "geo-split|smartdns|nginx-webui|watchdog" | tail -20 || echo "  (nothing)"
+    printf "\n--- logread (geo-split|smartdns|nginx-webui|net-check|boot-diag|watchdog, last 20) ---\n"
+    logread 2>/dev/null | grep -E "geo-split|smartdns|nginx-webui|net-check|boot-diag|watchdog" | tail -20 || echo "  (nothing)"
 fi
 
 # ─── Footer ──────────────────────────────────────────────────────────────────

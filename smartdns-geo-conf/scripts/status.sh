@@ -101,25 +101,10 @@ show_cache() {
   fi
 }
 
-# Show listening ports (custom text for "none listening" case).
+# Show listening ports (delegates to lib/status.sh).
+# STATUS_OK is set in main section based on _st_port_ok, not here.
 show_ports() {
-  if [ "$_st_port_ok" = "true" ]; then
-    local first=1 addr=""
-    local _old_ifs="$IFS"
-    IFS=' '
-    for addr in $_st_port_addrs; do
-      [ -z "$addr" ] && continue
-      if [ "$first" = 1 ]; then
-        status_line "Ports" "$addr" "ok"
-        first=0
-      else
-        status_line_cont "$addr" "ok"
-      fi
-    done
-    IFS="$_old_ifs"
-  else
-    status_line "Ports" "none listening" "fail"; STATUS_OK=1
-  fi
+  status_show_port "$SMARTDNS_PORT"
 }
 
 # Run a single DNS test via main SmartDNS port.

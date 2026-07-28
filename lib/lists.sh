@@ -102,6 +102,7 @@ list_dedup() {
 # Returns: 0 on success, 1 if file not found
 list_count() {
   [ -f "$1" ] || { log_error "list_count: file not found: $1"; return 1; }
+  local _cnt
   _cnt=$(grep -cvE '^[[:space:]]*(#|$)' "$1" 2>/dev/null) || _cnt=0
   echo "$_cnt"
 }

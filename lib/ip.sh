@@ -8,7 +8,14 @@ set -eu
 # Args: $1 - string to check
 # Returns: 0 if valid IPv4, 1 otherwise
 is_ipv4() {
-  echo "$1" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+  printf '%s\n' "$1" | awk -F '.' '
+    NF != 4 { exit 1 }
+    {
+      for (i = 1; i <= 4; i++) {
+        if ($i !~ /^[0-9]+$/ || $i > 255) exit 1
+      }
+    }
+  '
 }
 
 # Check if string is a plausible domain name.
@@ -25,7 +32,7 @@ is_domain() {
 is_cidr() {
   echo "$1" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$' || return 1
   local prefix="${1##*/}"
-  [ "$prefix" -ge 0 ] 2>/dev/null && [ "$prefix" -le 32 ]
+  is_ipv4 "${1%/*}" && [ "$prefix" -ge 0 ] 2>/dev/null && [ "$prefix" -le 32 ]
 }
 
 # Count total IPs in a CIDR subnet.
@@ -154,18 +161,36 @@ detect_out_iface() {
   local iface
 
   # Primary: main table default route (actual system default)
-  iface=$(ip route | grep "^default" | \
-    grep -v "dev nwg\|dev awg\|dev ovpn\|dev l2tp\|dev pptp\|dev sstp\|dev ipsec\|dev tun\|dev tap" | \
-    sed -n 's/.*dev \([^ ]*\).*/\1/p' | grep -v '^br' | head -1)
+  iface=$(ip route 2>/dev/null | _first_non_tunnel_default_iface) || iface=""
 
   # Fallback: all tables (tunnel is default policy, ISP only in policy tables)
   if [ -z "$iface" ]; then
-    iface=$(ip route show table all | grep "^default" | \
-      grep -v "dev nwg\|dev awg\|dev ovpn\|dev l2tp\|dev pptp\|dev sstp\|dev ipsec\|dev tun\|dev tap" | \
-      sed -n 's/.*dev \([^ ]*\).*/\1/p' | grep -v '^br' | head -1)
+    iface=$(ip route show table all 2>/dev/null | _first_non_tunnel_default_iface) || iface=""
   fi
 
-  echo "$iface"
+  printf '%s\n' "$iface"
+}
+
+# Select the first non-tunnel, non-LAN interface from default route lines.
+# stdin: output from ip route
+# stdout: interface name or empty string
+_first_non_tunnel_default_iface() {
+  local line iface
+  while IFS= read -r line; do
+    case "$line" in
+      default*) ;;
+      *) continue ;;
+    esac
+    iface=$(printf '%s\n' "$line" | sed -n 's/.*dev \([^ ]*\).*/\1/p')
+    [ -n "$iface" ] || continue
+    case "$iface" in
+      br*) continue ;;
+    esac
+    is_tunnel_iface "$iface" && continue
+    printf '%s\n' "$iface"
+    return 0
+  done
+  return 1
 }
 
 # Detect gateway (nexthop) IP for a given interface.

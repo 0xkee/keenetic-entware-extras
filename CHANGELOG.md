@@ -5,6 +5,23 @@ All notable changes to `keenetic-entware-extras` (base package) are documented h
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.16.14] - 2026-07-28
+
+### Fixed
+- `lib/lists.sh`: `list_count()` — missing `local` on `_cnt` var caused global namespace leak
+- `lib/ip.sh`: `is_ipv4()` now validates each octet is 0–255 (previously `999.999.999.999` was accepted); `is_cidr()` reuses `is_ipv4()` for host-part validation
+- `lib/ip.sh`: `detect_out_iface()` refactored to use `is_tunnel_iface()` via `_first_non_tunnel_default_iface()` helper — previously `sit*`, `gre*`, `vti*`, `ip6tnl*`, `xfrm*` were not excluded
+
+### Changed
+- `lib/common.sh`: `log()` / `log_error()` use `${0##*/}` / `${tag%.sh}` instead of `$(basename "$0" .sh)` — eliminates subshell fork per log call
+- `lib/common.sh`: `format_age()` uses `printf '%s\n'` (was `echo`) — consistent with rest of file
+- `tests/run-all.sh`: non-executable test files now emit `SKIP` warning instead of silently skipping
+
+### Tests
+- `tests/test-lib-ip.sh`: `is_ipv4` octet-range tests; `cidr_sample_ips /30` case
+- `tests/test-lib-common.sh`: `json_escape_val` tab escape; `json_kv_bool` no-arg default
+- `tests/test-lib-lists.sh`: `list_read` / `list_count` failure on missing file
+
 ## [0.16.13] - 2026-07-28
 
 ### Changed

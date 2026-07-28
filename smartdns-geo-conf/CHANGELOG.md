@@ -5,6 +5,20 @@ All notable changes to `smartdns-geo-conf` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.11.3] — 2026-07-28
+
+### Fixed
+- **ECH (Encrypted Client Hello) support**: removed `force-qtype-SOA 65` directive
+  that blocked HTTPS/SVCB DNS records (type 65). Browsers can now receive ECH
+  parameters from upstream DNS servers (Cloudflare, Google) and encrypt SNI in
+  TLS ClientHello. No impact on geo-split (uses A-records only).
+
+### Removed
+- `config/smartdns-default.conf` — dead code; `disable` action fully stops the
+  SmartDNS daemon (`S38.disabled`) and never activated this config. Also removed
+  `CONF_DEFAULT` variable from `config/defaults.conf` and deploy block from
+  `packaging/postinst`.
+
 ## [0.11.2] — 2026-07-28
 
 ### Changed
@@ -135,7 +149,7 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 ### Fixed
 - **DNS probe timeout**: increased from 2s to 3s (`+time=3`) in both
   `collect_dns_tests_json()` and `collect_dns_server_checks_json()`. Reduces
-  false-positive ✗ indicators when upstream DNS (DoT/DoH via VPN) is momentarily
+  false-positive ✗ indicators when upstream DNS (DoT/DoH via tunnel) is momentarily
   slow. Early-exit logic (skip after 2 fails) limits worst-case impact.
 
 ## [0.10.4] — 2026-06-16

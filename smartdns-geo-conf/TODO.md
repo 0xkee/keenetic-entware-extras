@@ -24,7 +24,7 @@
 - [x] Убран `-k` (skip TLS verify) — `ca-certificates` в зависимостях
 - [x] International DNS: DoH only (Google + Cloudflare), DoT/UDP убраны
 - [x] `cache-persist yes` + `cache-file` — кэш выживает перезагрузку
-- [x] `force-qtype-SOA 65` — блокировка HTTPS/SVCB records
+- [x] ~~`force-qtype-SOA 65`~~ — **Удалено (2026-07):** блокировало HTTPS/SVCB записи (тип 65), из-за чего браузеры не могли получить ECH-параметры и Encrypted Client Hello не работал. Без этой директивы SmartDNS проксирует HTTPS-записи к upstream, Chromium/Firefox получают ech= ключ и шифруют SNI.
 - [x] TTL bounds: `rr-ttl-min 60`, `rr-ttl-max 86400`
 - [x] Логирование: `log-file`, `log-size 128K`, `log-num 2`
 - [x] Российские .com домены (vk.com, yandex.com и др.) → ru-группа
@@ -60,6 +60,12 @@
 
 - [x] ~~**conffile conflict при установке**~~ — решено: `opkg install --force-maintainer` по умолчанию (см. [deploy-workflow.md §4.6](../.project/deploy-workflow.md))
 - [x] ~~**BUG-6: `restart-on-crash`**~~ — SmartDNS `execv()` fails с relative `argv[0]` при запуске через `S38`/`rc.func`. Upstream SmartDNS bug. **Mitigated (2026-05-15):** опция закомментирована в конфиге + `smartdns-redirect/scripts/watchdog.sh` перезапускает при падении через cron.
+- [x] ~~**`smartdns-default.conf` (мёртвый код)**~~ — **Удалено (2026-07):** при `disable` SmartDNS полностью останавливается (`S38.disabled`), default-конфиг никогда не активировался. `CONF_DEFAULT` убрана из `defaults.conf`.
+
+### Архитектурные решения (intentional)
+
+- **`log-file /tmp/smartdns.log`** — осознанный выбор. `/tmp` достаточно для операционных логов (level=error → пишет редко). Персистентные логи (`/opt/var/log/`) не нужны: при проблемах диагностику делают онлайн, не post-mortem. Не менять.
+- **Автосброс кэша при смене конфига не реализован** — решено через UX: кнопка "Очистить кэш DNS" в WebUI (`S37 flush-cache`). При поломке DNS пользователь жмёт кнопку. Автоматический сброс при каждом `enable/restart` замедлял бы cold start без необходимости.
 
 ### Исследовать
 

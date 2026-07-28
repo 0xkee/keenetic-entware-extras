@@ -71,12 +71,9 @@ if [ ! -f "$_CONFIG_DIR/dns-providers-custom.conf" ]; then
 TMPL
 fi
 
-# 3. Deploy both config variants (split-DNS and default)
+# 3. Deploy split-DNS config template
 if [ -f "$_CONFIG_DIR/smartdns.conf" ]; then
     cp "$_CONFIG_DIR/smartdns.conf" "$CONF_SPLIT"
-fi
-if [ -f "$_CONFIG_DIR/smartdns-default.conf" ]; then
-    cp "$_CONFIG_DIR/smartdns-default.conf" "$CONF_DEFAULT"
 fi
 
 # 4. Install S37 init script

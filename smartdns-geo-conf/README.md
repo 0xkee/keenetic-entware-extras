@@ -268,8 +268,7 @@ smartdns-geo-conf/
 │   ├── dns-providers.conf     # DNS provider catalog (15 providers)
 │   ├── zone-routing-rules.conf # IDN TLDs + extra CDN domains (80+ countries)
 │   ├── test-domains.conf      # test domains for status.sh
-│   ├── smartdns.conf          # split-DNS mode template
-│   └── smartdns-default.conf  # default mode template
+│   └── smartdns.conf          # split-DNS mode template
 ├── init.d/
 │   └── S37smartdns-conf       # init script (enable/disable/restart)
 ├── scripts/

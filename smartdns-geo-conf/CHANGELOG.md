@@ -5,6 +5,63 @@ All notable changes to `smartdns-geo-conf` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [Unreleased]
+
+## [0.12.0] - 2026-07-29
+
+### Added
+- **`dns-check.sh` DNS source indicator**: new JSON fields `dns_source` (`"system"` or
+  `"smartdns"`) and `dns_port` — consumers can distinguish system resolver fallback
+  from SmartDNS zone routing. Text output shows `⚠ SmartDNS not running` warning.
+
+## [0.11.5] - 2025-07-29
+
+### Fixed
+- **`dns-check.sh` works when SmartDNS is disabled**: checks `/proc/net/tcp` before
+  using `SMARTDNS_PORT` — falls back to system resolver `:53` when SmartDNS is stopped.
+  `SMARTDNS_PORT=0` or empty → full auto-detect via `detect_dns_port(main)`.
+- **`status.sh` works with `SMARTDNS_PORT=0`**: auto-detects actual listening port
+  via `detect_dns_port(main)` → fallback `6053` when SmartDNS not running (disabled mode
+  already skips DNS tests).
+- **`status.sh` DNS tests false-positive on connection refused**: Entware `dig +short`
+  outputs `";; communications error..."` to stdout (not stderr); `2>/dev/null` didn't
+  catch it. Added `grep -v '^;;'` filter + `is_ipv4` validation for the result.
+  Applies to both text (`dns_test()`) and JSON (`collect_dns_tests_json()`) output paths.
+- **`status.sh` DNS tests skip when process not running**: `show_dns_tests()` and
+  `collect_dns_tests_json()` now early-exit when `_st_running=false` instead of
+  sending 6 doomed `dig` queries (~12s timeout waste) with misleading results.
+
+### Added
+- **`SMARTDNS_PORT=0` = auto-detect**: new sentinel value — `0` or empty in `config.conf`
+  triggers `/proc/net/tcp` auto-detection. WebUI field updated with `0 = auto-detect` hint.
+  Default changed from `SMARTDNS_PORT=6053` to `SMARTDNS_PORT=0` (auto-detect).
+
+### Changed
+- **`status.sh`**: sources `lib/ip.sh` (adds `detect_dns_port()` for auto-detect).
+
+- **`dns-check.sh`: `"verified"` field** — direct UDP probe to first upstream of
+  the expected DNS group (e.g. Yandex `77.88.8.8` for zone-group, Google `8.8.8.8`
+  for other); compares with SmartDNS answer. `true` = routing confirmed; `false` =
+  mismatch detected; `null` = probe unavailable. Text output: `Verified: ✓/✗`.
+  JSON: top-level `"verified"` boolean/null field.
+- **`get_probe_ip()`** helper in `dns-check.sh` — returns first non-system upstream
+  IP for a DNS group (skips `system` provider; used for probe verification).
+
+### Changed
+- **`lib/ip.sh`: `detect_dns_port()` rewritten** — replaces slow `dig`-based probing
+  (3×1s worst-case timeout) with instant `/proc/net/tcp` check. New optional arg
+  `"main"` skips port 6153 (used by `dns-check.sh` which queries SmartDNS main port).
+
+### Documentation
+- `docs/user-manual.ru.md`: corrected `disable` semantics — it is a **full shutdown**
+  (SmartDNS + smartdns-redirect stop, DNS reverts to Keenetic system), not a "default
+  forwarder" mode. The "default" mode row removed from the modes table.
+- `README.md`: same fix — `disable` comment updated to "full shutdown — DNS reverts to
+  Keenetic system/ndnproxy".
+- `docs/dns-landscape-research.md` moved to `docs/archive/` — contains outdated/harmful
+  recommendations (`force-qtype-SOA 65` removed in v0.11.3; `restart-on-crash yes` known
+  broken as BUG-6). Historical reference only.
+
 ## [0.11.3] — 2026-07-28
 
 ### Fixed

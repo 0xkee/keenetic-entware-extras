@@ -6,6 +6,7 @@ set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/common.sh"
+. "$SCRIPT_DIR/../../lib/ip.sh"
 . "$SCRIPT_DIR/../../lib/status.sh"
 . "$SCRIPT_DIR/../../lib/geo.sh"
 
@@ -13,6 +14,13 @@ _CONFIG_DIR="${SCRIPT_DIR%/*}/config"
 # shellcheck source=/dev/null
 . "$_CONFIG_DIR/defaults.conf"
 [ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
+# SMARTDNS_PORT=0 or empty → auto-detect via /proc/net/tcp → fallback 6053.
+if [ -z "${SMARTDNS_PORT:-}" ] || [ "$SMARTDNS_PORT" = "0" ]; then
+  _port_detect=$(detect_dns_port main)
+  SMARTDNS_PORT="${_port_detect%% *}"
+  [ "$SMARTDNS_PORT" = "0" ] && SMARTDNS_PORT=6053
+  unset _port_detect
+fi
 
 STATUS_OK=0
 _st_pid=""
@@ -112,10 +120,12 @@ show_ports() {
 dns_test() {
   local domain="$1" label="$2"
   local result ip_line
-  result="$(dig +short +time=2 +tries=1 "$domain" @127.0.0.1 -p "$SMARTDNS_PORT" 2>/dev/null || echo "FAILED")"
+  # Filter ";;" comment/error lines: Entware dig +short outputs
+  # ";; communications error..." to stdout (not stderr) on connection refused.
+  result="$(dig +short +time=2 +tries=1 "$domain" @127.0.0.1 -p "$SMARTDNS_PORT" 2>/dev/null | grep -v '^;;' || echo "FAILED")"
   # dig +short may return multiple lines; take first A-record
   ip_line="$(echo "$result" | head -1)"
-  if [ -n "$ip_line" ] && [ "$ip_line" != "FAILED" ]; then
+  if [ -n "$ip_line" ] && [ "$ip_line" != "FAILED" ] && is_ipv4 "$ip_line"; then
     _text_buf="${_text_buf}$(printf '    %-14s %s (%s) ✓\n' "${domain}:" "$ip_line" "$label")
 "
   else
@@ -128,6 +138,10 @@ dns_test() {
 # Run DNS resolution tests (requires dig).
 # Dynamic: tests first domain from each active zone + international.
 show_dns_tests() {
+  if [ "$_st_running" = "false" ]; then
+    status_line "DNS test" "skipped (process not running)"
+    return
+  fi
   if ! command -v dig >/dev/null 2>&1; then
     status_line "DNS test" "skipped (dig not available)"
     return
@@ -160,8 +174,8 @@ show_dns_tests() {
 # Run DNS tests and collect results for JSON.
 # Sets: _json_dns_tests (JSON array string)
 collect_dns_tests_json() {
-  # Skip DNS tests when service is disabled (no port listening) — spec §4.2
-  if [ "$_ck_disabled" = "true" ]; then
+  # Skip DNS tests when service is disabled or not running — no port to query
+  if [ "$_ck_disabled" = "true" ] || [ "$_st_running" = "false" ]; then
     _json_dns_tests="[]"
     return
   fi
@@ -190,7 +204,7 @@ collect_dns_tests_json() {
         if [ "$_dns_failed" -ge 2 ]; then
           r="SKIPPED"
         else
-          r="$(dig +short +time=3 +tries=1 "$d" @127.0.0.1 -p "$SMARTDNS_PORT" 2>/dev/null | head -1 || true)"
+          r="$(dig +short +time=3 +tries=1 "$d" @127.0.0.1 -p "$SMARTDNS_PORT" 2>/dev/null | grep -v '^;;' | head -1 || true)"
           [ -z "$r" ] && _dns_failed=$((_dns_failed + 1))
         fi
         [ "$first" -eq 0 ] && _json_dns_tests="${_json_dns_tests},"
@@ -206,7 +220,7 @@ collect_dns_tests_json() {
   if [ "$_dns_failed" -ge 2 ]; then
     intl_r="SKIPPED"
   else
-    intl_r="$(dig +short +time=3 +tries=1 "$intl_d" @127.0.0.1 -p "$SMARTDNS_PORT" 2>/dev/null | head -1 || true)"
+    intl_r="$(dig +short +time=3 +tries=1 "$intl_d" @127.0.0.1 -p "$SMARTDNS_PORT" 2>/dev/null | grep -v '^;;' | head -1 || true)"
   fi
   [ "$first" -eq 0 ] && _json_dns_tests="${_json_dns_tests},"
   _json_dns_tests="${_json_dns_tests}{\"domain\":\"$intl_d\",\"group\":\"other\",\"result\":\"${intl_r:-FAILED}\"}"

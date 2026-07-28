@@ -356,7 +356,7 @@ example.com    # ← добавить сюда
 # Включить split-DNS
 /opt/etc/init.d/S37smartdns-conf enable
 
-# Отключить (простой форвардер, всё → international DNS)
+# Отключить SmartDNS (полное выключение — DNS возвращается в Keenetic system)
 /opt/etc/init.d/S37smartdns-conf disable
 
 # Проверить текущий режим
@@ -371,12 +371,14 @@ example.com    # ← добавить сюда
 
 ### Режимы работы
 
-| Режим | Описание |
-|-------|----------|
-| **split-DNS** (по умолч.) | Зоны → региональные DNS, остальное → международные DoH |
-| **default** | Всё → international DNS (без разделения) |
+| Команда | Что происходит |
+|---------|----------------|
+| `enable` | SmartDNS запускается в split-DNS режиме (зоны + international) |
+| `disable` | SmartDNS **полностью останавливается** — DNS возвращается к Keenetic system (ndnproxy). smartdns-redirect также останавливается. |
 
-> 📝 При переключении SmartDNS перезапускается фоново. Порты (:6053, :6153) остаются теми же — smartdns-redirect и geo-split продолжают работать.
+> ⚠️ **`disable` — это полное выключение**, а не переключение в режим «всё → international». При `disable` SmartDNS не обрабатывает DNS вообще.
+
+> 📝 При `enable/restart` SmartDNS перезапускается фоново. Порты (:6053, :6153) остаются теми же — smartdns-redirect и geo-split продолжают работать при `enable`.
 
 ---
 

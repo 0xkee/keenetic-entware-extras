@@ -206,7 +206,7 @@ OTHER_DNS_INTERFACES="nwg3 nwg4"
 # Enable split-DNS
 /opt/etc/init.d/S37smartdns-conf enable
 
-# Disable (all queries → Google/Cloudflare)
+# Disable (full shutdown — DNS reverts to Keenetic system/ndnproxy)
 /opt/etc/init.d/S37smartdns-conf disable
 
 # Status

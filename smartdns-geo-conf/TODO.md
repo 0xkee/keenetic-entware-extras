@@ -1,6 +1,6 @@
 # smartdns-geo-conf — TODO
 
-**Updated:** 2026-06-09
+**Updated:** 2026-07-28
 
 ---
 
@@ -35,53 +35,49 @@
 - [x] DNS-тесты: yandex.ru, google.com, github.com — работают
 - [x] `status.sh` отображает корректную диагностику
 
----
-
-## В работе / Pending ⏳
-
-### Multi-zone DNS + tunnel interfaces (Этап C) ✅
-
-**Реализовано (v0.5.0, 2026-06-06):**
+### Multi-zone DNS + tunnel interfaces (Этап C, v0.5.0)
 
 - [x] `config/config.conf` — пользовательская настройка: `DNS_ZONE`, `OTHER_DNS_INTERFACES`, `ZONE_DNS_INTERFACE`
-- [x] `config/unions.conf` — справочник 35+ гео-союзов (eas, cis, brics, nato, eu, schengen…)
-- [x] `config/zones/{ru,by,kz,am,kg}.conf` — статические пресеты DNS-серверов + nameserver rules
-- [x] `config/zones/test-domains.conf` — тестовые домены для 100+ стран
 - [x] `scripts/generate-conf.sh` — генератор `dns-servers-other.conf` + `dns-zones-active.conf`
 - [x] `init.d/S37smartdns-conf` — init-скрипт (enable/disable/restart/status, генерирует при старте)
-- [x] `smartdns.conf` / `smartdns-default.conf` — `conf-file` includes вместо hardcoded серверов
-- [x] `postinst` / `postrm` / `prerm` — обновлены для S37
 - [x] `status.sh` — выводит зону/союз, динамические DNS-тесты, JSON с `dns_tests` массивом
-- [x] WebUI: обновлены `shared.js`, `app.js` (SUMMARY_KEYS + CONFIG_SCHEMAS)
-- [x] Документация обновлена (README, user-manual, CHANGELOG)
 
+### Провайдеры / конфиг-генерация (v0.8.0–v0.10.0)
 
-### Известные проблемы
+- [x] **Конфигурируемые international DNS** — `OTHER_DNS_PROVIDER` / `ZONE_DNS_PROVIDER`. Каталог 15 провайдеров в `dns-providers.conf`. Динамическая генерация зон из `zone-routing-rules.conf` (заменены 235 статических zone-файлов)
+- [x] **`system` (Keenetic DNS) провайдер** — plain UDP из `/tmp/ndnproxymain.conf`
+- [x] **Custom DNS providers** (`dns-providers-custom.conf`) — сохраняются при обновлении, видны в WebUI
+- [x] WebUI: `ZONE_DNS_STRICT`, `OTHER_DNS_STRICT` toggles; `ENABLE_IPV6` из redirect удалён
 
-- [x] ~~**conffile conflict при установке**~~ — решено: `opkg install --force-maintainer` по умолчанию (см. [deploy-workflow.md §4.6](../.project/deploy-workflow.md))
-- [x] ~~**BUG-6: `restart-on-crash`**~~ — SmartDNS `execv()` fails с relative `argv[0]` при запуске через `S38`/`rc.func`. Upstream SmartDNS bug. **Mitigated (2026-05-15):** опция закомментирована в конфиге + `smartdns-redirect/scripts/watchdog.sh` перезапускает при падении через cron.
-- [x] ~~**`smartdns-default.conf` (мёртвый код)**~~ — **Удалено (2026-07):** при `disable` SmartDNS полностью останавливается (`S38.disabled`), default-конфиг никогда не активировался. `CONF_DEFAULT` убрана из `defaults.conf`.
+### Жизненный цикл сервиса (v0.11.0)
+
+- [x] **Strict tunnel mode** (`OTHER_DNS_STRICT`, `ZONE_DNS_STRICT`) — DNS fails if all tunnels down (privacy > availability)
+- [x] **Disable = full shutdown**: `S37 disable` переименовывает S38, останавливает smartdns-redirect, DNS reverting to system
+- [x] **`do_bind_addrs()`** — авто-детект IPv6, генерация bind-addrs.conf при каждом restart
+
+### Известные проблемы (решены)
+
+- [x] ~~**conffile conflict при установке**~~ — решено: `opkg install --force-maintainer` по умолчанию
+- [x] ~~**BUG-6: `restart-on-crash`**~~ — SmartDNS `execv()` fails с relative `argv[0]` при запуске через `S38`/`rc.func`. **Mitigated (2026-05-15):** опция закомментирована + `smartdns-redirect/scripts/watchdog.sh` перезапускает при падении через cron
+- [x] ~~**`smartdns-default.conf` (мёртвый код)**~~ — **Удалено (2026-07):** при `disable` SmartDNS полностью останавливается, default-конфиг никогда не активировался
+- [x] ~~**checker bug когда сервис выключен**~~ — **Исправлено (v0.11.1, 2026-07-27):** dns_tests пропускаются, uptime/pid сбрасываются, checks возвращают `"skip"` вместо `"fail"`
+- [x] ~~**dns-check.sh не работал когда SmartDNS выключен**~~ — **Исправлено (v0.11.4, 2026-07-28):** авто-детект порта через `/proc/net/tcp` (`:6053` → `:53` fallback). `SMARTDNS_PORT` override сохранён.
+- [x] ~~**dns-check.sh вычислял DNS-пути из конфига, а не проверял по факту**~~ — **Реализовано (v0.11.4, 2026-07-28):** новое поле `"verified"` — прямой UDP probe к upstream ожидаемой группы, сравнение с ответом SmartDNS. `get_probe_ip()` helper. JSON: `"verified":true/false/null`. Text: `Verified: ✓/✗`.
 
 ### Архитектурные решения (intentional)
 
-- **`log-file /tmp/smartdns.log`** — осознанный выбор. `/tmp` достаточно для операционных логов (level=error → пишет редко). Персистентные логи (`/opt/var/log/`) не нужны: при проблемах диагностику делают онлайн, не post-mortem. Не менять.
-- **Автосброс кэша при смене конфига не реализован** — решено через UX: кнопка "Очистить кэш DNS" в WebUI (`S37 flush-cache`). При поломке DNS пользователь жмёт кнопку. Автоматический сброс при каждом `enable/restart` замедлял бы cold start без необходимости.
+- **`log-file /tmp/smartdns.log`** — осознанный выбор. `/tmp` достаточно для операционных логов (level=error → пишет редко). Персистентные логи не нужны: при проблемах диагностику делают онлайн. Не менять.
+- **Автосброс кэша при смене конфига не реализован** — решено через UX: кнопка "Очистить кэш DNS" в WebUI (`S37 flush-cache`). Автоматический сброс при каждом `enable/restart` замедлял бы cold start без необходимости.
 
-### Исследовать
+---
 
-- [ ] **Нужен ли `ndmc -c 'ip name-server <IP>:6053'` при наличии smartdns-redirect?** Если DNAT (br0:53→:6053) покрывает все LAN-клиенты, то настройка ndnproxy через `ip name-server` может быть избыточна. Вопрос: что происходит с DNS-запросами **самого роутера** (loopback, он ходит через ndnproxy:53) — для них DNAT не работает, нужен forward через ndnproxy. Разобрать сценарии: (a) только smartdns-redirect, (b) только ip name-server, (c) оба.
-- [ ] **Персистентный кэш SmartDNS — возможный источник плавающих поломок DNS.** У SmartDNS включён `cache-persist yes` + `cache-file`, кэш сохраняется на диске и переживает перезагрузки. Пользователь nikolay1980 сообщает: при смене конфига DNS ломался (вообще нет интернета), сброс кэша + перезагрузка не помогали, но наутро заработало само. Вероятно устаревшие/битые записи в персистентном кэше мешают работе после смены upstream-серверов. **Действия:** (a) добавить в troubleshooting guide рекомендацию удалить файл кэша при проблемах после смены конфига; (b) рассмотреть автоочистку кэша в `generate-conf.sh` при смене провайдера; (c) документировать расположение файла кэша. (источник: nikolay1980, 2026-07-12)
+## Backlog ⏳
 
-### Улучшения (backlog)
+- [ ] **Персистентный кэш SmartDNS — возможный источник плавающих поломок DNS.** При смене конфига DNS может ломаться из-за устаревших записей. **Действия:** (a) добавить в user-manual рекомендацию удалить файл кэша (`/opt/var/cache/smartdns.cache`) при проблемах после смены конфига; (b) рассмотреть автоочистку в `generate-conf.sh` при смене провайдера; (c) задокументировать расположение файла кэша в troubleshooting. (источник: nikolay1980, 2026-07-12)
+- [ ] **Exclude-список для DNS-роутинга** — файл `config/dns-zone-exclude.conf` с правилами (`nameserver /specific-host.ru/default`), include в конец zone-конфига. Документировать в user-manual. По запросу.
+- [ ] **dns-check.sh: bootstrap resolution marker** — для DoH провайдеров без IP1/IP2 добавить `"resolution": "bootstrap"` маркер в JSON-вывод `get_upstream_info()`, чтобы WebUI-диаграмма визуально отличала bootstrap-resolved от IP-pinned путей. Косметика.
+- [ ] **FAQ: ECS не передаётся** — добавить в user-manual пояснение что SmartDNS не отправляет EDNS Client Subnet upstream-серверам. (источник: cryoPanda)
 
-- [x] ~~**WebUI: обновить под disable=full shutdown + STRICT опции**~~ — (a) ⚠ Disabled / ⏸ Pending уже работают через status.sh enabled/running + existing app.js logic; (c) CONFIG_SCHEMAS: `ZONE_DNS_STRICT`, `OTHER_DNS_STRICT` добавлены (webui 0.35.0); (d) toggle → `toggle.sh enable/disable` (существующий механизм). Также удалён устаревший `ENABLE_IPV6` из smartdns-redirect schema.
-- [ ] - когда сервис выключен checker всё равно показывает разные пути - очевидно баг (нужно проверять фактичесткое положение вещей!)
-- [x] ~~**Конфигурируемые international DNS-серверы**~~ — **Сделано (v0.8.0, 2026-06-09):** `OTHER_DNS_PROVIDER` / `ZONE_DNS_PROVIDER` в `config.conf`. Каталог 15 провайдеров в `dns-providers.conf`. Динамическая генерация зон из `zone-routing-rules.conf` (заменено 235 статических zone-файлов).
-- [x] ~~**`default` (ISP DNS) провайдер**~~ — **Сделано (v0.9.0, 2026-06-15):** `default` в обоих провайдер-списках. Proto `udp` в generate-conf.sh, динамическое чтение из `/tmp/ndnproxymain.conf`. WebUI, README, user-manual обновлены.
-- [ ] **Exclude-список для зонового DNS-роутинга** — возможность исключить домен из обработки зоны (`nameserver /specific-host.ru/default`). Реализация: файл `config/dns-zone-exclude.conf` с правилами, include в конец zone-конфига. Документировать в user-manual.
-- [ ] **FAQ: ECS (EDNS Client Subnet) не передаётся** — добавить в user-manual пояснение что SmartDNS не отправляет подсеть клиента upstream-серверам. Google/Cloudflare видят только IP роутера (WAN или tunnel egress). Фидбэк: cryoPanda.
-- [ ] **dns-check.sh: bootstrap resolution marker** — для DoH провайдеров с пустыми IP1/IP2 (v0.10.8) `UP_SERVERS` пуст, SmartDNS резолвит hostname через bootstrap/UDP. Добавить `"resolution": "bootstrap"` маркер в JSON-вывод `get_upstream_info()`, чтобы webui-диаграмма визуально отличала bootstrap-resolved от IP-pinned путей.
-- [x] ~~DNS DNAT redirect: `iptables PREROUTING` br0:53 → SmartDNS:6053 (минуя ndnproxy)~~ — реализовано в отдельном пакете [`smartdns-redirect`](../smartdns-redirect/) v0.1.1 (deployed на router-1, latency ~130ms → <80ms)
-- [x] ~~Мониторинг: cron watchdog для перезапуска SmartDNS при падении~~ — реализовано в [`smartdns-redirect/scripts/watchdog.sh`](../smartdns-redirect/scripts/watchdog.sh) (через `WATCHDOG_SERVICE="S38smartdns"`)
-- [x] ~~Интеграция SmartDNS `ipset` directive с geo-split~~ — **Отменено:** `ip rule fwmark` не работает на Keenetic, ipset-based routing невозможен. Текущий подход (1h poll + cmp) достаточен.
-- [x] ~~`bind-tcp 127.0.0.1:6053` в `smartdns.conf`~~ — **Сделано (2026-05-15):** добавлен `bind-tcp` для :6053 и :6153 в smartdns.conf, smartdns-default.conf, postinst bind-addrs.conf
+## Someday / Maybe 🔮
+
+- [ ] **Нужен ли `ndmc -c 'ip name-server <IP>:6053'` при наличии smartdns-redirect?** DNAT покрывает LAN, но DNS-запросы самого роутера (loopback→ndnproxy) проходят без DNAT. Разобрать три сценария: (a) только smartdns-redirect, (b) только ip name-server, (c) оба.

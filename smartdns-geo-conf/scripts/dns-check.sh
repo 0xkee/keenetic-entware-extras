@@ -18,8 +18,28 @@ _CONFIG_DIR="${SCRIPT_DIR%/*}/config"
 
 # --- Constants ---
 DNS_HOST="127.0.0.1"
-DNS_PORT="${SMARTDNS_PORT:-6053}"
 DNS_TIMEOUT="3"
+
+# Port: SMARTDNS_PORT=0 or empty → auto-detect via /proc/net/tcp.
+# SMARTDNS_PORT=N (1-65535) → check if actually listening, fall back to :53 if not.
+if [ -n "${SMARTDNS_PORT:-}" ] && [ "$SMARTDNS_PORT" != "0" ]; then
+  _port_hex=$(printf '%04X' "$SMARTDNS_PORT")
+  if grep -q ":${_port_hex} " /proc/net/tcp 2>/dev/null; then
+    DNS_PORT="$SMARTDNS_PORT"
+  else
+    DNS_PORT="53"
+  fi
+  unset _port_hex
+else
+  _dns_detect=$(detect_dns_port main)
+  DNS_PORT="${_dns_detect%% *}"
+  [ "$DNS_PORT" = "0" ] && DNS_PORT="53"
+  unset _dns_detect
+fi
+
+# DNS source: "smartdns" when SmartDNS is resolving, "system" when fallback to :53.
+DNS_SOURCE="smartdns"
+[ "$DNS_PORT" = "53" ] && DNS_SOURCE="system"
 
 # --- Helpers ---
 
@@ -251,6 +271,33 @@ get_upstream_info() {
   done
 }
 
+# Get first directly-reachable upstream IP for a DNS group (probe verification).
+# Skips "system" provider (no fixed IP). Assumes dns-providers.conf already sourced.
+# Args: $1 - "zone" or "other"
+# Echoes: first IP (e.g. "77.88.8.8") or returns 1 if none available
+get_probe_ip() {
+  local _prov _prefix _ip _provider_list
+  if [ "${1:-}" = "zone" ]; then
+    _provider_list="$ZONE_DNS_PROVIDER"
+  else
+    _provider_list="$OTHER_DNS_PROVIDER"
+  fi
+  for _prov in $_provider_list; do
+    [ "$_prov" = "system" ] && continue
+    if [ "${1:-}" = "zone" ]; then
+      _prefix="ZONE_${_prov}"
+    else
+      _prefix="OTHER_${_prov}"
+    fi
+    eval "_ip=\"\${${_prefix}_IP1:-}\""
+    if [ -n "$_ip" ]; then
+      printf '%s' "$_ip"
+      return 0
+    fi
+  done
+  return 1
+}
+
 # --- Argument parsing ---
 JSON_MODE=0
 QUERY=""
@@ -353,6 +400,17 @@ OG_INTERFACE="$UP_INTERFACE"
 # Restore matched group's info (used by legacy "upstream" field + text output)
 get_upstream_info "$ZONE_GROUP"
 
+# --- Probe verification ---
+# Direct dig to expected-group upstream IP; compared with SmartDNS result below.
+PROBE_IP="" PROBE_IPS="" VERIFIED=""
+_probe_grp="other"
+[ "$ZONE_GROUP" = "zone" ] && _probe_grp="zone"
+PROBE_IP=$(get_probe_ip "$_probe_grp") || PROBE_IP=""
+if [ -n "$PROBE_IP" ]; then
+  PROBE_IPS=$(dig "@${PROBE_IP}" +short +time=3 +tries=1 "$QUERY" 2>/dev/null \
+    | awk '/^[0-9]/' | tr '\n' ' ' | sed 's/ $//' || true)
+fi
+
 # --- DNS resolution ---
 dig_ips=""
 dig_ttl=""
@@ -375,6 +433,14 @@ if [ -n "$dig_output" ]; then
   fi
 fi
 
+# Compare SmartDNS/system result with direct upstream probe (verified by fact)
+if [ -n "$dig_ips" ] && [ -n "$PROBE_IPS" ]; then
+  VERIFIED="false"
+  for _vip in $dig_ips; do
+    case " $PROBE_IPS " in *" $_vip "*) VERIFIED="true"; break ;; esac
+  done
+fi
+
 if [ -z "$dig_ips" ]; then
   emit_error "dns_failed" "$QUERY" "No A records from ${DNS_HOST}:${DNS_PORT}"
 fi
@@ -386,6 +452,14 @@ if [ "$JSON_MODE" = "1" ]; then
   for ip in $dig_ips; do
     ips_json="${ips_json:+${ips_json},}\"$(json_escape_val "$ip")\""
   done
+
+  # Build verified field (null when probe unavailable, true/false when compared)
+  verified_json='"verified":null'
+  if [ "$VERIFIED" = "true" ]; then
+    verified_json='"verified":true'
+  elif [ "$VERIFIED" = "false" ]; then
+    verified_json='"verified":false'
+  fi
 
   # Legacy "upstream" field — matched group's providers/servers (kept for
   # backward compat with any consumer reading data.upstream directly).
@@ -425,9 +499,11 @@ if [ "$JSON_MODE" = "1" ]; then
     "$(json_kv_bool "matched" "$og_matched")")
 
   # Output JSON
-  printf '{%s,%s,"zone":{%s,%s,%s},"upstream":{%s,%s,"hostnames":%s,%s},"groups":[%s],"result":{%s,%s,%s}}\n' \
+  printf '{%s,%s,%s,%s,"zone":{%s,%s,%s},"upstream":{%s,%s,"hostnames":%s,%s},"groups":[%s],%s,"result":{%s,%s,%s}}\n' \
     "$(json_kv_bool "ok" 0)" \
     "$(json_kv "query" "$QUERY")" \
+    "$(json_kv "dns_source" "$DNS_SOURCE")" \
+    "$(json_kv_num "dns_port" "$DNS_PORT")" \
     "$(json_kv "group" "$GROUP_NAME")" \
     "$(json_kv "match_rule" "$MATCH_RULE")" \
     "$(json_kv "match_type" "$MATCH_TYPE")" \
@@ -436,12 +512,17 @@ if [ "$JSON_MODE" = "1" ]; then
     "$hostnames_json" \
     "$(json_kv "interface" "$UP_INTERFACE")" \
     "$groups_json" \
+    "$verified_json" \
     "\"ips\":[$ips_json]" \
     "$(json_kv_num "ttl" "${dig_ttl:-0}")" \
     "$(json_kv_num "time_ms" "$dig_time_ms")"
 else
   # Human-readable text output
   printf 'DNS Zone Check: %s\n\n' "$QUERY"
+
+  if [ "$DNS_SOURCE" = "system" ]; then
+    printf '  \xe2\x9a\xa0 SmartDNS not running, querying system DNS (:%s)\n\n' "$DNS_PORT"
+  fi
 
   # Zone match info
   if [ -n "$MATCH_CC" ]; then
@@ -483,5 +564,10 @@ else
     printf '  Result:     %s (%d IPs, TTL %s, %dms)\n' "$dig_ips" "$ip_count" "${dig_ttl:-?}" "$dig_time_ms"
   else
     printf '  Result:     %s (TTL %s, %dms)\n' "$dig_ips" "${dig_ttl:-?}" "$dig_time_ms"
+  fi
+  if [ "$VERIFIED" = "true" ]; then
+    printf '  Verified:   \342\234\223 matches %s direct\n' "$PROBE_IP"
+  elif [ "$VERIFIED" = "false" ]; then
+    printf '  Verified:   \342\234\227 mismatch \342\200\224 %s returns: %s\n' "$PROBE_IP" "$PROBE_IPS"
   fi
 fi

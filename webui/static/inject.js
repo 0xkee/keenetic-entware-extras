@@ -887,7 +887,9 @@
                             rlFamParts.push(EW.escapeHtml(rlFam) + ' ' + rlProtoParts.join(', '));
                         }
                     }
-                    rlLines.push(EW.escapeHtml(rlIface) + ': ' + rlFamParts.join(', '));
+                    for (var rlFi = 0; rlFi < rlFamParts.length; rlFi++) {
+                        rlLines.push(EW.escapeHtml(rlIface) + ': ' + rlFamParts[rlFi]);
+                    }
                 }
                 var rlBreakdown = '<div class="ew-dns-line">' + rlLines.join('</div><div class="ew-dns-line">') + '</div>';
                 var rlp = detailsHtml.indexOf('ew-detail-label">Rules<');

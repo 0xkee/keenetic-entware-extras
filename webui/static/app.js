@@ -203,7 +203,9 @@ function setDetails(id, data) {
                     famParts.push(EW.escapeHtml(fam) + ' ' + protoParts.join(', '));
                 }
             }
-            rulesLines.push(EW.escapeHtml(rIface) + ': ' + famParts.join(', '));
+            for (var fi = 0; fi < famParts.length; fi++) {
+                rulesLines.push(EW.escapeHtml(rIface) + ': ' + famParts[fi]);
+            }
         }
         var rulesBreakdown = '<div class="ew-dns-line">' + rulesLines.join('</div><div class="ew-dns-line">') + '</div>';
         var rp = html.indexOf('ew-detail-label">Rules<');

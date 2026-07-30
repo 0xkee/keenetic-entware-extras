@@ -5,16 +5,26 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
-## [Unreleased]
+## [0.36.0] - 2026-07-30
 
-## [0.35.2] — 2026-07-29
+### Added
+- **Config editor: DNS Transport** select for SmartDNS Geo-Config (`auto` / `strict`)
+- **Config editor: Redirect Mode** select for DNS Redirect (`force` / `local`)
 
-### Changed
+### Removed
+- **Config editor: SmartDNS Port** field removed (auto-detect is reliable, no user need)
+
+### Fixed
+- **Rules detail: v4/v6 on separate lines** — each address family is now its own
+  `ew-dns-line` row instead of joining all families with comma on a single line.
+  Prevents truncation when multiple interfaces × v4+v6 × 4 protocols are shown.
+
+## [0.35.0] — 2026-07-29
+
+### Added
 - **DNS Check: single-path diagram when SmartDNS not running**: when `dns_source=system`,
   diagram shows one "System DNS :53" path instead of zone-routing branches. Zone match
   info preserved in technical details. Legend, summary, and details show system DNS warning.
-
-## [0.35.1] — 2026-07-27
 
 ### Fixed
 - **Custom dashboard badge state**: `app.js` now uses `data.checks` via shared
@@ -25,25 +35,15 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
   `parseDetails()` for check-based coloring (was using boolean fallback only)
 
 ### Changed
-- `checksSummary()` extracted from inject.js to shared.js (DRY — used by both UIs)
-
-## [0.35.0] — 2026-07-27
-
-### Added
-- SmartDNS config editor: `ZONE_DNS_STRICT` toggle — strict tunnel mode for zone DNS
-  (no UDP fallback without tunnel, privacy over availability)
-- SmartDNS config editor: `OTHER_DNS_STRICT` toggle — strict tunnel mode for international DNS
-  (no direct fallback, fails if all tunnels down)
-
-### Changed
 - SmartDNS config editor: field order unified with `defaults.conf` — Zone group
-  (provider → interface → strict) before Other group, then SmartDNS Port last
-- API keys whitelist: `ZONE_DNS_STRICT`, `OTHER_DNS_STRICT` added to smartdns config registry
+  (provider → interface) before Other group
+- SmartDNS config editor: `OTHER_DNS_INTERFACES` description updated — tunnel interfaces
+  now imply no direct fallback (privacy by design)
+- `checksSummary()` extracted from inject.js to shared.js (DRY — used by both UIs)
 
 ### Removed
 - DNS Redirect config editor: removed `ENABLE_IPV6` toggle — IPv6 handling is now
   fully automatic (dnat/reject/none), removed in `smartdns-redirect` v0.4.0
-- API keys whitelist: `ENABLE_IPV6` removed from smartdns-redirect config registry
 
 ## [0.34.0] — 2026-07-22
 

@@ -5,6 +5,24 @@ All notable changes to `smartdns-redirect` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.6.0] - 2026-07-30
+
+### Added
+- **`REDIRECT_MODE` config parameter** — `force` (default, intercept all :53 DNS +
+  block DoT :853) or `local` (intercept only DNS to router IP, external DNS passes
+  through, DoT not blocked). For IoT devices or corporate laptops with hardcoded DNS.
+
+## [0.5.0] - 2026-07-29
+
+### Added
+- **DoT blocking in `force` mode**: DNS-over-TLS (port 853) from LAN clients is blocked
+  via iptables FORWARD REJECT alongside DNAT :53. Prevents clients from bypassing
+  SmartDNS via direct DoT to external resolvers (8.8.8.8:853, 1.1.1.1:853 etc.).
+  IPv4 + IPv6 rules. Watchdog monitors DoT block rules.
+
+### Removed
+- `DNS_STRICT` config parameter — replaced by `REDIRECT_MODE` (force/local).
+
 ## [0.4.3] - 2026-07-28
 
 ### Changed

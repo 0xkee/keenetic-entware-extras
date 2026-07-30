@@ -53,6 +53,7 @@ WATCHDOG_SERVICE="S38smartdns"   # init script to restart on failure
 PRESERVE_FILTER_PROFILES=no      # Phase 5 (not implemented)
 # IPv6 DNS handling is fully automatic — no configuration needed.
 # DNAT when SmartDNS has IPv6 bind, REJECT otherwise (Happy Eyeballs fallback).
+# DoT blocking (port 853) is always-on — no configuration needed.
 ```
 
 After changing config:
@@ -81,12 +82,15 @@ logread | grep smartdns-redirect
 
 ### LAN client request flow
 
-All configured interfaces use `DNAT` to br0 IP — this ensures SmartDNS receives the packet regardless of which interface it arrived on:
+All configured interfaces use `DNAT` to br0 IP — this ensures SmartDNS receives the packet regardless of which interface it arrived on. DoT (port 853) is always blocked via `FORWARD REJECT` on the same interfaces — prevents LAN clients from bypassing SmartDNS via direct DNS-over-TLS:
 
 ```
-Client (10.0.0.42) → UDP :53 → br0/br1/nwg1 →
+Client (10.0.0.42) → UDP/TCP :53 → br0/br1/nwg1 →
   [iptables PREROUTING DNAT → 10.0.0.1:6053] →
     SmartDNS (10.0.0.1:6053) → upstream (DoT/DoH/UDP)
+
+Client → TCP :853 → br0/br1/nwg1 →
+  [iptables FORWARD REJECT] → client falls back to :53 → DNAT → SmartDNS
 ```
 
 The router itself (loopback `127.0.0.1:53`) goes to ndnproxy — LAN interface rules don't apply to it.
@@ -99,7 +103,7 @@ Keenetic periodically flushes iptables via its netfilter hooks. The symlink in `
 
 Cron runs [`watchdog.sh`](scripts/watchdog.sh) every 5 minutes:
 
-1. Checks for rules in `PREROUTING` — restores if missing.
+1. Checks for rules in `PREROUTING` and `FORWARD` (DoT block) — restores if missing.
 2. Sends a test DNS query to `UPSTREAM_PORT`. If upstream is unresponsive — restarts `WATCHDOG_SERVICE` (default `S38smartdns`).
 
 ## Removal

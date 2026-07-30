@@ -82,12 +82,15 @@ check_upstream() {
 
 # Verify iptables rules for all interfaces × protos.
 # IPv6 rules checked based on auto-detected mode (dnat or reject).
+# DoT blocking (:853) checked only in "force" mode.
+# In "local" mode, DNAT rules include -d $ROUTER_IP / -d $ROUTER_IP6.
 # Sets: _ck_rules_ok (0=all present, 1=some missing),
 #        _ck_rules_json (JSON array of per-iface/proto results)
 check_rules() {
   _ck_rules_ok=0
   _ck_rules_json=""
-  local _iface _proto _ok
+  local _iface _proto _ok _mode
+  _mode="${REDIRECT_MODE:-force}"
   if [ -z "$INTERFACES" ]; then
     return
   fi
@@ -95,8 +98,13 @@ check_rules() {
   for _iface in $INTERFACES; do
     for _proto in udp tcp; do
       _ok="true"
-      iptables -t nat -C PREROUTING -i "$_iface" -p "$_proto" --dport 53 \
-        -j DNAT --to-destination "${ROUTER_IP}:${UPSTREAM_PORT}" 2>/dev/null || { _ck_rules_ok=1; _ok="false"; }
+      if [ "$_mode" = "local" ]; then
+        iptables -t nat -C PREROUTING -i "$_iface" -p "$_proto" -d "$ROUTER_IP" --dport 53 \
+          -j DNAT --to-destination "${ROUTER_IP}:${UPSTREAM_PORT}" 2>/dev/null || { _ck_rules_ok=1; _ok="false"; }
+      else
+        iptables -t nat -C PREROUTING -i "$_iface" -p "$_proto" --dport 53 \
+          -j DNAT --to-destination "${ROUTER_IP}:${UPSTREAM_PORT}" 2>/dev/null || { _ck_rules_ok=1; _ok="false"; }
+      fi
       _ck_rules_json="${_ck_rules_json:+${_ck_rules_json},}{\"iface\":\"${_iface}\",\"family\":\"v4\",\"proto\":\"${_proto}\",\"ok\":${_ok}}"
     done
   done
@@ -105,8 +113,13 @@ check_rules() {
     for _iface in $INTERFACES; do
       for _proto in udp tcp; do
         _ok="true"
-        ip6tables -t nat -C PREROUTING -i "$_iface" -p "$_proto" --dport 53 \
-          -j DNAT --to-destination "[${ROUTER_IP6}]:${UPSTREAM_PORT}" 2>/dev/null || { _ck_rules_ok=1; _ok="false"; }
+        if [ "$_mode" = "local" ]; then
+          ip6tables -t nat -C PREROUTING -i "$_iface" -p "$_proto" -d "$ROUTER_IP6" --dport 53 \
+            -j DNAT --to-destination "[${ROUTER_IP6}]:${UPSTREAM_PORT}" 2>/dev/null || { _ck_rules_ok=1; _ok="false"; }
+        else
+          ip6tables -t nat -C PREROUTING -i "$_iface" -p "$_proto" --dport 53 \
+            -j DNAT --to-destination "[${ROUTER_IP6}]:${UPSTREAM_PORT}" 2>/dev/null || { _ck_rules_ok=1; _ok="false"; }
+        fi
         _ck_rules_json="${_ck_rules_json:+${_ck_rules_json},}{\"iface\":\"${_iface}\",\"family\":\"v6\",\"proto\":\"${_proto}\",\"type\":\"dnat\",\"ok\":${_ok}}"
       done
     done
@@ -119,6 +132,27 @@ check_rules() {
         _ck_rules_json="${_ck_rules_json:+${_ck_rules_json},}{\"iface\":\"${_iface}\",\"family\":\"v6\",\"proto\":\"${_proto}\",\"type\":\"reject\",\"ok\":${_ok}}"
       done
     done
+  fi
+  # DoT blocking: FORWARD REJECT :853 rules (force mode only)
+  if [ "$_mode" = "force" ]; then
+    for _iface in $INTERFACES; do
+      for _proto in tcp udp; do
+        _ok="true"
+        iptables -C FORWARD -i "$_iface" -p "$_proto" --dport 853 \
+          -j REJECT --reject-with icmp-port-unreachable 2>/dev/null || { _ck_rules_ok=1; _ok="false"; }
+        _ck_rules_json="${_ck_rules_json:+${_ck_rules_json},}{\"iface\":\"${_iface}\",\"family\":\"v4\",\"proto\":\"${_proto}\",\"type\":\"dot_block\",\"ok\":${_ok}}"
+      done
+    done
+    if command -v ip6tables >/dev/null 2>&1; then
+      for _iface in $INTERFACES; do
+        for _proto in tcp udp; do
+          _ok="true"
+          ip6tables -C FORWARD -i "$_iface" -p "$_proto" --dport 853 \
+            -j REJECT --reject-with icmp6-port-unreachable 2>/dev/null || { _ck_rules_ok=1; _ok="false"; }
+          _ck_rules_json="${_ck_rules_json:+${_ck_rules_json},}{\"iface\":\"${_iface}\",\"family\":\"v6\",\"proto\":\"${_proto}\",\"type\":\"dot_block\",\"ok\":${_ok}}"
+        done
+      done
+    fi
   fi
 }
 
@@ -154,6 +188,12 @@ show_mode() {
   else
     status_line "Interfaces" "— (empty → disabled)"
   fi
+  # Redirect mode display
+  case "${REDIRECT_MODE:-force}" in
+    force)  status_line "Redirect" "force (intercept all DNS + block DoT)" ;;
+    local)  status_line "Redirect" "local (only router-targeted DNS)" ;;
+    *)      status_line "Redirect" "${REDIRECT_MODE:-force}" ;;
+  esac
   # IPv6 mode display
   case "$IPV6_MODE" in
     dnat)   status_line "IPv6" "auto-dnat [${ROUTER_IP6}]:${UPSTREAM_PORT}" ;;
@@ -161,18 +201,30 @@ show_mode() {
     none)   status_line "IPv6" "unavailable (no ip6tables)" ;;
   esac
   status_line "DNAT to" "${ROUTER_IP}:${UPSTREAM_PORT}"
+  if [ "${REDIRECT_MODE:-force}" = "force" ]; then
+    status_line "DoT block" ":853 → REJECT (force mode)" "ok"
+  else
+    status_line "DoT block" "off (local mode)" ""
+  fi
 }
 
 # Check a single iptables/ip6tables rule for display.
 # Args: $1 - "v4"|"v6_dnat"|"v6_reject", $2 - iface, $3 - proto (udp|tcp)
 check_rule() {
-  local rtype="$1" iface="$2" proto="$3" label target
+  local rtype="$1" iface="$2" proto="$3" label target _check_ok
   case "$rtype" in
     v4)
       label="v4"
       target="${ROUTER_IP}:${UPSTREAM_PORT}"
-      if iptables -t nat -C PREROUTING -i "$iface" -p "$proto" --dport 53 \
-          -j DNAT --to-destination "$target" 2>/dev/null; then
+      _check_ok="false"
+      if [ "${REDIRECT_MODE:-force}" = "local" ]; then
+        iptables -t nat -C PREROUTING -i "$iface" -p "$proto" -d "$ROUTER_IP" --dport 53 \
+            -j DNAT --to-destination "$target" 2>/dev/null && _check_ok="true"
+      else
+        iptables -t nat -C PREROUTING -i "$iface" -p "$proto" --dport 53 \
+            -j DNAT --to-destination "$target" 2>/dev/null && _check_ok="true"
+      fi
+      if [ "$_check_ok" = "true" ]; then
         _text_buf="${_text_buf}$(printf '    %-10s %-6s %s → DNAT %s ✓\n' "$label" "$proto" "$iface" "$target")
 "
       else
@@ -184,8 +236,15 @@ check_rule() {
     v6_dnat)
       label="v6-dnat"
       target="[${ROUTER_IP6}]:${UPSTREAM_PORT}"
-      if ip6tables -t nat -C PREROUTING -i "$iface" -p "$proto" --dport 53 \
-          -j DNAT --to-destination "$target" 2>/dev/null; then
+      _check_ok="false"
+      if [ "${REDIRECT_MODE:-force}" = "local" ]; then
+        ip6tables -t nat -C PREROUTING -i "$iface" -p "$proto" -d "$ROUTER_IP6" --dport 53 \
+            -j DNAT --to-destination "$target" 2>/dev/null && _check_ok="true"
+      else
+        ip6tables -t nat -C PREROUTING -i "$iface" -p "$proto" --dport 53 \
+            -j DNAT --to-destination "$target" 2>/dev/null && _check_ok="true"
+      fi
+      if [ "$_check_ok" = "true" ]; then
         _text_buf="${_text_buf}$(printf '    %-10s %-6s %s → DNAT %s ✓\n' "$label" "$proto" "$iface" "$target")
 "
       else
@@ -202,6 +261,18 @@ check_rule() {
 "
       else
         _text_buf="${_text_buf}$(printf '    %-10s %-6s %s → REJECT ✗\n' "$label" "$proto" "$iface")
+"
+        STATUS_OK=1
+      fi
+      ;;
+    dot_block)
+      label="dot-block"
+      if iptables -C FORWARD -i "$iface" -p "$proto" --dport 853 \
+          -j REJECT --reject-with icmp-port-unreachable 2>/dev/null; then
+        _text_buf="${_text_buf}$(printf '    %-10s %-6s %s :853 → REJECT ✓\n' "$label" "$proto" "$iface")
+"
+      else
+        _text_buf="${_text_buf}$(printf '    %-10s %-6s %s :853 → REJECT ✗\n' "$label" "$proto" "$iface")
 "
         STATUS_OK=1
       fi
@@ -239,6 +310,14 @@ show_rules() {
       done
       ;;
   esac
+  # DoT blocking: FORWARD REJECT :853 (force mode only)
+  if [ "${REDIRECT_MODE:-force}" = "force" ]; then
+    for iface in $INTERFACES; do
+      for proto in tcp udp; do
+        check_rule "dot_block" "$iface" "$proto"
+      done
+    done
+  fi
 }
 
 # Display upstream probe result.
@@ -327,7 +406,13 @@ json_output() {
   [ "$enabled_val" -ne 0 ] && _disabled="true"
 
   # Details — Redirect chain
+  status_detail "redirect_mode" "${REDIRECT_MODE:-force}"
   status_detail "interfaces" "$INTERFACES"
+  if [ "${REDIRECT_MODE:-force}" = "force" ]; then
+    status_detail "dot_block" "on"
+  else
+    status_detail "dot_block" "off"
+  fi
   status_detail "ipv6" "$IPV6_MODE"
   status_detail "dnat_target" "${ROUTER_IP}:${UPSTREAM_PORT}"
   if [ "$IPV6_MODE" = "dnat" ]; then

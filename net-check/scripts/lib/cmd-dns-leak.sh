@@ -1,16 +1,19 @@
 # net-check: DNS leak test — discover which recursive DNS resolvers handle queries.
 # 3-level service fallback: dnscheck.tools → bash.ws → whoami queries.
 # Detects leaks when ISP DNS appears in resolver chain while SmartDNS/DoH is configured.
+# Tunnel-aware: resolvers at known VPN tunnel exit countries are expected, not leaks.
 #
 # Dependencies: lib/output.sh (emit_error, section_title, tbl_header, tbl_row, tbl_cell,
 #     status_mark, color_status, summary_line, is_quiet),
 #   lib/cmd-dns.sh (identify_dns_provider, _get_isp_dns),
 #   lib/geoip.sh (geolocate_ip, geoip_read_full),
-#   lib/ip.sh (detect_dns_port),
+#   lib/ip.sh (detect_dns_port, is_tunnel_iface),
+#   lib/wan.sh (load_zone_context, ensure_geo_cache, geo_cached_cc),
 #   lib/common.sh (json_kv, json_kv_bool, json_arr_add, require_cmd)
 # Globals used: OUTPUT_JSON, VERBOSITY, _EXIT_CODE, PRIVACY_MODE,
 #   DNS_LEAK_PROBE_COUNT, DNS_LEAK_WAIT, DNS_LEAK_TIMEOUT, DNS_TIMEOUT,
 #   CURL_UA, _RUN_DIR, DATA_DIR, SMARTDNS_PORT,
+#   _NON_GEO_SEGMENTS,
 #   C_GREEN, C_RED, C_YELLOW, C_DIM, C_RST, C_BOLD, C_CYAN
 # shellcheck disable=SC3043,SC2154,SC2086
 
@@ -224,17 +227,22 @@ _dns_leak_whoami() {
     grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
   [ -n "$_ip" ] && _ips="${_ips} ${_ip}"
 
-  # myip.opendns.com via OpenDNS — returns resolver IP
-  _ip=$(dig +short myip.opendns.com @resolver1.opendns.com \
-    +time="$DNS_TIMEOUT" +tries=1 2>/dev/null | \
-    grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-  [ -n "$_ip" ] && _ips="${_ips} ${_ip}"
+  # Queries 2 & 3 bypass SmartDNS (@specific_server) — they return the router's
+  # own WAN IP, not a DNS resolver. With SmartDNS active, skip them to avoid
+  # false leak detection (ISP WAN IP ≠ leak when SmartDNS routes all DNS).
+  if [ -z "$_dns_leak_dig_extra" ]; then
+    # myip.opendns.com via OpenDNS — returns client IP as seen by OpenDNS
+    _ip=$(dig +short myip.opendns.com @resolver1.opendns.com \
+      +time="$DNS_TIMEOUT" +tries=1 2>/dev/null | \
+      grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    [ -n "$_ip" ] && _ips="${_ips} ${_ip}"
 
-  # o-o.myaddr.l.google.com via Google NS — returns resolver IP as TXT
-  _ip=$(dig +short -t TXT o-o.myaddr.l.google.com @ns1.google.com \
-    +time="$DNS_TIMEOUT" +tries=1 2>/dev/null | \
-    tr -d '"' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-  [ -n "$_ip" ] && _ips="${_ips} ${_ip}"
+    # o-o.myaddr.l.google.com via Google NS — returns client IP as TXT
+    _ip=$(dig +short -t TXT o-o.myaddr.l.google.com @ns1.google.com \
+      +time="$DNS_TIMEOUT" +tries=1 2>/dev/null | \
+      tr -d '"' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    [ -n "$_ip" ] && _ips="${_ips} ${_ip}"
+  fi
 
   _ips=$(printf '%s' "$_ips" | sed 's/^ //')
   [ -z "$_ips" ] && return 1
@@ -299,23 +307,38 @@ cmd_dns_leak() {
     return 1
   }
 
+  # ── Tunnel exit CC set + ISP CC: for tunnel-aware leak classification ──
+  # When SmartDNS routes DoH through VPN tunnels, resolvers at tunnel exits
+  # (or nearby anycast backends) are expected — not leaks.
+  # Real leak = ISP DNS resolver appearing (CC matches ISP country).
+  local _tunnel_ccs="" _isp_ccs=""
+  if [ "$_has_smartdns" = 1 ]; then
+    load_zone_context
+    ensure_geo_cache
+    local _tdev _tcc
+    for _tdev in $_NON_GEO_SEGMENTS; do
+      _tcc=$(geo_cached_cc "$_tdev" | tr '[:upper:]' '[:lower:]')
+      [ -z "$_tcc" ] && continue
+      if is_tunnel_iface "$_tdev"; then
+        case " $_tunnel_ccs " in *" $_tcc "*) continue ;; esac
+        _tunnel_ccs="${_tunnel_ccs:+${_tunnel_ccs} }${_tcc}"
+      else
+        case " $_isp_ccs " in *" $_tcc "*) continue ;; esac
+        _isp_ccs="${_isp_ccs:+${_isp_ccs} }${_tcc}"
+      fi
+    done
+  fi
+
   # ── Leak detection: check if non-provider DNS leaks through SmartDNS/DoH ──
   local _isp_dns=""
   _isp_dns=$(_get_isp_dns)
 
   # Count resolvers and detect leaks
-  local _resolver_count=0 _leak_count=0 _leak_ips="" _all_expected=1
+  # _is_expected: 1=known provider, 2=tunnel exit resolver, 0=leak
+  local _resolver_count=0 _leak_count=0 _tunnel_count=0
+  local _leak_ips="" _all_expected=1
   local _rline _rip _rprov _rcc _rasn _is_expected
   local _json_resolvers=""
-
-  printf '%s' "$_leak_resolvers" | while IFS='|' read -r _rip _rprov _rcc _rasn; do
-    [ -z "$_rip" ] && continue
-    _resolver_count=$((_resolver_count + 1))
-  done
-
-  # Re-count outside subshell
-  _resolver_count=0
-  _leak_count=0
 
   # Collect results for display
   local _display_lines=""
@@ -324,18 +347,54 @@ cmd_dns_leak() {
     _resolver_count=$((_resolver_count + 1))
 
     # Check if this resolver is expected or a leak.
-    # With SmartDNS active: only known DNS providers should appear.
-    # Without SmartDNS: only flag explicitly known ISP DNS IPs.
+    # Classification (SmartDNS active):
+    #   1. Known DNS provider (IP glob / ASN match)           → expected (1)
+    #   2. Tunnel-related resolver:                            → expected (2)
+    #      a) CC matches a VPN tunnel exit country
+    #      b) Tunnels exist AND CC ≠ ISP country (anycast backend near tunnel)
+    #   3. CC matches ISP country (or no tunnels configured)   → leak    (0)
+    # Without SmartDNS: ISP DNS is the expected resolver.
     _is_expected=1
     if [ "$_has_smartdns" = 1 ]; then
-      if ! _is_known_dns_provider "$_rip" "$_rasn"; then
-        _is_expected=0
-        _leak_count=$((_leak_count + 1))
-        _leak_ips="${_leak_ips} ${_rip}"
-        _all_expected=0
+      if _is_known_dns_provider "$_rip" "$_rasn"; then
+        # Known provider — also count as tunnel if CC matches a tunnel exit
+        if [ -n "$_tunnel_ccs" ] && [ -n "$_rcc" ] && [ "$_rcc" != "??" ]; then
+          local _kcc
+          _kcc=$(printf '%s' "$_rcc" | tr '[:upper:]' '[:lower:]')
+          case " $_tunnel_ccs " in *" $_kcc "*) _tunnel_count=$((_tunnel_count + 1)) ;; esac
+        fi
+      else
+        local _rcc_lower=""
+        [ -n "$_rcc" ] && [ "$_rcc" != "??" ] && \
+          _rcc_lower=$(printf '%s' "$_rcc" | tr '[:upper:]' '[:lower:]')
+        if [ -n "$_tunnel_ccs" ] && [ -n "$_rcc_lower" ]; then
+          # Check tunnel exit CC match (exact) or non-ISP foreign resolver
+          local _is_isp_cc=0
+          case " $_isp_ccs " in *" $_rcc_lower "*) _is_isp_cc=1 ;; esac
+          if [ "$_is_isp_cc" = 0 ]; then
+            # Foreign resolver (not ISP country) — tunnel exit or nearby backend
+            _is_expected=2
+            _tunnel_count=$((_tunnel_count + 1))
+          else
+            # Resolver in ISP country but not a known provider — real leak
+            _is_expected=0
+            _leak_count=$((_leak_count + 1))
+            _leak_ips="${_leak_ips} ${_rip}"
+            _all_expected=0
+          fi
+        else
+          # No tunnels or unknown CC — conservative: flag as leak
+          _is_expected=0
+          _leak_count=$((_leak_count + 1))
+          _leak_ips="${_leak_ips} ${_rip}"
+          _all_expected=0
+        fi
       fi
     elif [ -n "$_isp_dns" ]; then
-      if _dns_leak_ip_in_list "$_rip" "$_isp_dns"; then
+      # Without SmartDNS: ISP DNS is expected. Only flag unknown non-ISP
+      # resolvers AND known providers as potential leaks (uncommon scenario).
+      if ! _dns_leak_ip_in_list "$_rip" "$_isp_dns" && \
+         ! _is_known_dns_provider "$_rip" "$_rasn"; then
         _is_expected=0
         _leak_count=$((_leak_count + 1))
         _leak_ips="${_leak_ips} ${_rip}"
@@ -348,15 +407,21 @@ cmd_dns_leak() {
 
     # JSON resolver entry
     if [ "$OUTPUT_JSON" = 1 ]; then
-      local _j_expected="true"
-      [ "$_is_expected" = 0 ] && _j_expected="false"
+      local _j_expected="true" _j_reason="known_provider"
+      if [ "$_is_expected" = 2 ]; then
+        _j_reason="tunnel_exit"
+      elif [ "$_is_expected" = 0 ]; then
+        _j_expected="false"
+        _j_reason="unknown"
+      fi
       local _entry
-      _entry=$(printf '{%s,%s,%s,%s,"expected":%s}' \
+      _entry=$(printf '{%s,%s,%s,%s,"expected":%s,%s}' \
         "$(json_kv "ip" "$_rip")" \
         "$(json_kv "provider" "${_rprov:-unknown}")" \
         "$(json_kv "cc" "$_rcc")" \
         "$(json_kv "asn" "${_rasn:-}")" \
-        "$_j_expected")
+        "$_j_expected" \
+        "$(json_kv "reason" "$_j_reason")")
       json_arr_add _json_resolvers "$_entry"
     fi
   done <<EOF
@@ -382,9 +447,12 @@ EOF
     else
       printf '  (via system resolver :53)'
     fi
+    if [ -n "$_tunnel_ccs" ]; then
+      printf '  tunnels: %s%s%s' "$C_DIM" "$_tunnel_ccs" "$C_RST"
+    fi
     printf '\n\n'
 
-    tbl_header "Resolver IP:18" "CC:5" "ASN:12" "Provider:40" "Status"
+    tbl_header "Resolver IP:24" "CC:4" "ASN:10" "Provider:50" "Status"
 
     printf '%s' "$_display_lines" | while IFS='|' read -r _rip _rprov _rcc _rasn _is_expected; do
       [ -z "$_rip" ] && continue
@@ -392,26 +460,38 @@ EOF
       if [ "$_is_expected" = 0 ]; then
         _st="fail"
         _status_cell="LEAK $(status_mark fail)"
+      elif [ "$_is_expected" = 2 ]; then
+        # Tunnel infrastructure (unknown resolver at non-ISP CC)
+        _status_cell="tunnel $(status_mark ok)"
       else
-        _status_cell="$(status_mark ok)"
+        # Known provider — check if CC matches a tunnel exit for label
+        local _dcc=""
+        [ -n "$_rcc" ] && [ "$_rcc" != "??" ] && \
+          _dcc=$(printf '%s' "$_rcc" | tr '[:upper:]' '[:lower:]')
+        case " $_tunnel_ccs " in
+          *" $_dcc "*) _status_cell="tunnel $(status_mark ok)" ;;
+          *)           _status_cell="direct $(status_mark ok)" ;;
+        esac
       fi
-      tbl_row "$(tbl_cell 18 "$_rip" "$_st")" "${_rcc:-—}" "${_rasn:-—}" "${_rprov:-—}" "$_status_cell"
+      tbl_row "$(tbl_cell 24 "$_rip" "$_st")" "${_rcc:-—}" "${_rasn:-—}" "$(tbl_cell 50 "${_rprov:-—}")" "$_status_cell"
     done
 
     # Verdict line
     if [ "$_verdict" = "leak" ]; then
-      printf '→ %s%s DNS leak detected!%s (%s resolver(s), %s ISP DNS leaked: %s)\n' \
+      printf '→ %s%s DNS leak detected!%s (%s resolver(s), %s leaked: %s)\n' \
         "$C_RED" "$(status_mark fail)" "$C_RST" \
         "$_resolver_count" "$_leak_count" "$_leak_ips"
     else
-      printf '→ %sNo DNS leak%s %s (%s resolver(s), all expected)\n' \
-        "$C_GREEN" "$C_RST" "$(status_mark ok)" "$_resolver_count"
+      local _extra=""
+      [ "$_tunnel_count" -gt 0 ] && _extra=", ${_tunnel_count} via tunnel"
+      printf '→ %sNo DNS leak%s %s (%s resolver(s), all expected%s)\n' \
+        "$C_GREEN" "$C_RST" "$(status_mark ok)" "$_resolver_count" "$_extra"
     fi
   fi
 
   if [ "$OUTPUT_JSON" = 0 ] && is_quiet; then
     if [ "$_verdict" = "leak" ]; then
-      printf 'dns-leak: %s leak (%s ISP resolver(s))\n' "$(status_mark fail)" "$_leak_count"
+      printf 'dns-leak: %s leak (%s resolver(s))\n' "$(status_mark fail)" "$_leak_count"
     else
       printf 'dns-leak: no leak %s\n' "$(status_mark ok)"
     fi
@@ -423,11 +503,12 @@ EOF
     [ "$_verdict" = "leak" ] && _ok_val=1
     local _j_resolver="system:53"
     [ "$_has_smartdns" = 1 ] && _j_resolver="smartdns:${_smartdns_port}"
-    printf '{%s,%s,%s,%s,"resolvers":[%s],%s,%s}\n' \
+    printf '{%s,%s,%s,%s,%s,"resolvers":[%s],%s,%s}\n' \
       "$(json_kv_bool "ok" "$_ok_val")" \
       "$(json_kv "source" "$_leak_source")" \
       "$(json_kv "probe_resolver" "$_j_resolver")" \
       "$(json_kv_num "resolver_count" "$_resolver_count")" \
+      "$(json_kv_num "tunnel_resolver_count" "$_tunnel_count")" \
       "$_json_resolvers" \
       "$(json_kv "verdict" "$_verdict")" \
       "$(json_kv "leak_ips" "$_leak_ips")"

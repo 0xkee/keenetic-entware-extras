@@ -5,6 +5,29 @@ All notable changes to `net-check` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.0.2] - 2026-07-30
+
+### Fixed
+
+- **dns-leak: false LEAK on multi-tunnel setups** — resolvers at VPN tunnel
+  exit countries (NL, LV, SE, NO etc.) were incorrectly flagged as leaks.
+  New 3-level classification: known provider → tunnel exit → real leak.
+  Only ISP-country resolvers are flagged as leaks when tunnels are configured.
+- **dns-leak: whoami fallback ISP WAN IP false positive** — queries #2/#3
+  in the whoami fallback bypass SmartDNS and return the router's WAN IP,
+  causing false leak detection. Now skipped when SmartDNS is active.
+- **dns-leak: inverted elif logic** — without SmartDNS, ISP DNS was flagged
+  as a leak instead of being treated as the expected resolver.
+
+### Changed
+
+- **dns-leak: tunnel/direct status labels** — resolvers now show `tunnel ✅`
+  (at VPN exit) or `direct ✅` (via ISP) instead of plain `✅`.
+- **dns-leak: wider table columns** — Resolver IP 18→24 (IPv6 fit),
+  Provider 40→50 (long names fit).
+- **DNS_LEAK_WAIT** increased from 3s to 7s — multi-tunnel setups need more
+  time for all probe responses to propagate.
+
 ## [0.0.1] - 2026-07-21
 
 Initial pre-release. Full CLI network diagnostics tool for Keenetic routers

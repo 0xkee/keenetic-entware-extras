@@ -173,7 +173,10 @@ show_dns_tests() {
 
 # Run DNS tests and collect results for JSON.
 # Sets: _json_dns_tests (JSON array string)
+# Sets: _dns_zone_ok, _dns_other_ok — group health for dns_server_checks
 collect_dns_tests_json() {
+  _dns_zone_ok="false"
+  _dns_other_ok="false"
   # Skip DNS tests when service is disabled or not running — no port to query
   if [ "$_ck_disabled" = "true" ] || [ "$_st_running" = "false" ]; then
     _json_dns_tests="[]"
@@ -207,6 +210,8 @@ collect_dns_tests_json() {
           r="$(dig +short +time=3 +tries=1 "$d" @127.0.0.1 -p "$SMARTDNS_PORT" 2>/dev/null | grep -v '^;;' | head -1 || true)"
           [ -z "$r" ] && _dns_failed=$((_dns_failed + 1))
         fi
+        # Track zone group health: any successful resolve = zone providers reachable
+        [ -n "$r" ] && [ "$r" != "FAILED" ] && [ "$r" != "SKIPPED" ] && _dns_zone_ok="true"
         [ "$first" -eq 0 ] && _json_dns_tests="${_json_dns_tests},"
         _json_dns_tests="${_json_dns_tests}{\"domain\":\"$d\",\"group\":\"${cc}\",\"result\":\"${r:-FAILED}\"}"
         first=0
@@ -222,6 +227,8 @@ collect_dns_tests_json() {
   else
     intl_r="$(dig +short +time=3 +tries=1 "$intl_d" @127.0.0.1 -p "$SMARTDNS_PORT" 2>/dev/null | grep -v '^;;' | head -1 || true)"
   fi
+  # Track other group health
+  [ -n "$intl_r" ] && [ "$intl_r" != "SKIPPED" ] && _dns_other_ok="true"
   [ "$first" -eq 0 ] && _json_dns_tests="${_json_dns_tests},"
   _json_dns_tests="${_json_dns_tests}{\"domain\":\"$intl_d\",\"group\":\"other\",\"result\":\"${intl_r:-FAILED}\"}"
   _json_dns_tests="${_json_dns_tests}]"
@@ -237,87 +244,60 @@ _status_get_first_isp_ip() {
   printf '%s' "$_ip"
 }
 
-# Check direct reachability of configured upstream DNS providers.
+# Derive upstream provider health from DNS test results (collected by collect_dns_tests_json).
+# Tests resolution through SmartDNS port — the actual path providers are reached,
+# regardless of tunnel binding or direct routing. No separate dig probes needed.
+# Requires: _dns_zone_ok, _dns_other_ok (set by collect_dns_tests_json)
 # Sets: _json_dns_server_checks (JSON array string)
 collect_dns_server_checks_json() {
-  # Skip upstream checks when service is disabled (no SmartDNS running)
+  # Skip when service is disabled (no SmartDNS running)
   if [ "$_ck_disabled" = "true" ]; then
     _json_dns_server_checks="[]"
     return
   fi
   _json_dns_server_checks="["
   local first=1
-  local _upstream_fails=0
-  if ! command -v dig >/dev/null 2>&1; then
-    _json_dns_server_checks="[]"
-    return
-  fi
-  # Source provider catalog for IP/host lookups
-  local providers_file="$_CONFIG_DIR/dns-providers.conf"
-  if [ ! -f "$providers_file" ]; then
-    _json_dns_server_checks="[]"
-    return
-  fi
-  # shellcheck source=/dev/null
-  . "$providers_file"
 
-  # Check zone providers
+  # Source provider catalog for host/label lookups
+  local providers_file="$_CONFIG_DIR/dns-providers.conf"
+  if [ -f "$providers_file" ]; then
+    # shellcheck source=/dev/null
+    . "$providers_file"
+  fi
+
+  # Zone providers — health derived from zone DNS tests
   for p in $_ck_zone_provider; do
-    local ip_var="ZONE_${p}_IP1"
     local host_var="ZONE_${p}_TLS_HOST"
-    eval "local ip=\"\${${ip_var}:-}\""
+    local ip_var="ZONE_${p}_IP1"
     eval "local host=\"\${${host_var}:-}\""
-    # Dynamic provider (System/Keenetic): resolve IP from ndnproxymain.conf
-    if [ -z "$ip" ]; then
+    eval "local ip=\"\${${ip_var}:-}\""
+    # Dynamic provider (System/Keenetic): show ISP IP as host
+    if [ -z "$host" ] && [ -z "$ip" ]; then
       eval "local _dyn=\"\${ZONE_${p}_DYNAMIC:-}\""
       # shellcheck disable=SC2154  # _dyn assigned via eval
-      if [ "$_dyn" = "resolv" ]; then
-        ip="$(_status_get_first_isp_ip)"
-        host="$ip"
-      fi
+      [ "$_dyn" = "resolv" ] && host="$(_status_get_first_isp_ip)"
     fi
-    [ -z "$ip" ] && continue
-    local ok="false"
-    # Early-exit: if 2+ upstreams already timed out, network is down — skip rest
-    if [ "$_upstream_fails" -ge 2 ]; then
-      ok="false"
-    elif dig +short +time=3 +tries=1 "test.local" @"$ip" >/dev/null 2>&1; then
-      ok="true"
-    else
-      _upstream_fails=$((_upstream_fails + 1))
-    fi
+    [ -z "$host" ] && host="${ip:-$p}"
     [ "$first" -eq 0 ] && _json_dns_server_checks="${_json_dns_server_checks},"
-    _json_dns_server_checks="${_json_dns_server_checks}{\"provider\":\"$p\",\"group\":\"zone\",\"host\":\"${host:-$ip}\",\"ok\":$ok}"
+    _json_dns_server_checks="${_json_dns_server_checks}{\"provider\":\"$p\",\"group\":\"zone\",\"host\":\"${host}\",\"ok\":$_dns_zone_ok}"
     first=0
   done
 
-  # Check other (international) providers
+  # Other (international) providers — health derived from international DNS test
   for p in $_ck_other_provider; do
-    local ip_var="OTHER_${p}_IP1"
     local host_var="OTHER_${p}_TLS_HOST"
-    eval "local ip=\"\${${ip_var}:-}\""
+    local ip_var="OTHER_${p}_IP1"
     eval "local host=\"\${${host_var}:-}\""
-    # Dynamic provider (System/Keenetic): resolve IP from ndnproxymain.conf
-    if [ -z "$ip" ]; then
+    eval "local ip=\"\${${ip_var}:-}\""
+    # Dynamic provider (System/Keenetic): show ISP IP as host
+    if [ -z "$host" ] && [ -z "$ip" ]; then
       eval "local _dyn=\"\${OTHER_${p}_DYNAMIC:-}\""
       # shellcheck disable=SC2154  # _dyn assigned via eval
-      if [ "$_dyn" = "resolv" ]; then
-        ip="$(_status_get_first_isp_ip)"
-        host="$ip"
-      fi
+      [ "$_dyn" = "resolv" ] && host="$(_status_get_first_isp_ip)"
     fi
-    [ -z "$ip" ] && continue
-    local ok="false"
-    # Early-exit: skip if network clearly down
-    if [ "$_upstream_fails" -ge 2 ]; then
-      ok="false"
-    elif dig +short +time=3 +tries=1 "test.local" @"$ip" >/dev/null 2>&1; then
-      ok="true"
-    else
-      _upstream_fails=$((_upstream_fails + 1))
-    fi
+    [ -z "$host" ] && host="${ip:-$p}"
     [ "$first" -eq 0 ] && _json_dns_server_checks="${_json_dns_server_checks},"
-    _json_dns_server_checks="${_json_dns_server_checks}{\"provider\":\"$p\",\"group\":\"other\",\"host\":\"${host:-$ip}\",\"ok\":$ok}"
+    _json_dns_server_checks="${_json_dns_server_checks}{\"provider\":\"$p\",\"group\":\"other\",\"host\":\"${host}\",\"ok\":$_dns_other_ok}"
     first=0
   done
 

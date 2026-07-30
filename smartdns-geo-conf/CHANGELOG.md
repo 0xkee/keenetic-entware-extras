@@ -5,7 +5,35 @@ All notable changes to `smartdns-geo-conf` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
-## [Unreleased]
+## [0.14.0] - 2026-07-30
+
+### Added
+- **`DNS_TRANSPORT` config parameter** — upstream DNS encryption policy: `auto`
+  (default, current behavior — DoT/DoH + UDP fallback) or `strict` (DoT/DoH only,
+  no plain UDP). Use `strict` when DNS privacy matters (e.g., abroad with non-local ISP).
+
+### Removed
+- **`SMARTDNS_PORT` removed from WebUI** config editor. Parameter remains in
+  `defaults.conf` and scripts (auto-detect via `/proc/net/tcp` works reliably).
+
+## [0.13.0] - 2026-07-29
+
+### Changed
+- **Tunnel interfaces imply no direct fallback**: when `OTHER_DNS_INTERFACES` is
+  set, only tunnel-bound upstream servers are generated — no direct (non-tunnel)
+  fallback. Setting tunnel interfaces IS the privacy policy now.
+- `ZONE_DNS_INTERFACE` behavior unchanged — zone providers always use the
+  configured interface (UDP fallback included), as before.
+
+## [0.12.1] - 2026-07-29
+
+### Fixed
+- **`status.sh` upstream provider checks: probe through SmartDNS instead of direct dig**.
+  Previous approach tested providers via `dig @IP` on default route — produced false negatives
+  when providers are reached through tunnel interfaces (`OTHER_DNS_INTERFACES`, `ZONE_DNS_INTERFACE`).
+  Now derives provider health from DNS test results (resolution through SmartDNS port),
+  which tests the actual path SmartDNS uses regardless of tunnels or direct routing.
+  Eliminates flickering on 4G/LTE setups and removes ~7 dig fork calls from status poll.
 
 ## [0.12.0] - 2026-07-29
 
@@ -14,7 +42,7 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
   `"smartdns"`) and `dns_port` — consumers can distinguish system resolver fallback
   from SmartDNS zone routing. Text output shows `⚠ SmartDNS not running` warning.
 
-## [0.11.5] - 2025-07-29
+## [0.11.5] - 2026-07-29
 
 ### Fixed
 - **`dns-check.sh` works when SmartDNS is disabled**: checks `/proc/net/tcp` before
@@ -100,9 +128,6 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 ## [0.11.0] — 2026-07-27
 
 ### Added
-- **Strict tunnel mode** (`OTHER_DNS_STRICT`, `ZONE_DNS_STRICT`): when `"yes"`,
-  direct (no-tunnel) fallback servers are not generated — DNS fails if all tunnels
-  are down (privacy over availability). Only meaningful when tunnel interfaces are set.
 - **Disable = full shutdown**: `S37smartdns-conf disable` now fully stops SmartDNS
   (renames S38 init script) and stops smartdns-redirect. DNS reverts to system
   (ndnproxy). `enable` restores everything.

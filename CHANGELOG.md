@@ -5,6 +5,13 @@ All notable changes to `keenetic-entware-extras` (base package) are documented h
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.16.15] - 2026-07-30
+
+### Changed
+- `lib/status.sh`: colored status marks (✓/✗/⚠), bold section headers; new `status_setup_colors()` with TTY-aware auto-detection
+- `lib/status.sh`: `_status_parse_color_arg()` — `--color`/`--no-color` flag support for all status scripts
+- `scripts/kee-status.sh`: passes `--color` to sub-scripts in `--details` mode for colored sub-output
+
 ## [0.16.14] - 2026-07-28
 
 ### Fixed

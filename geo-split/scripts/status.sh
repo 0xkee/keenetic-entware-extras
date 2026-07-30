@@ -14,6 +14,9 @@ _CONFIG_DIR="$(cd "$SCRIPT_DIR/../config" && pwd)"
 . "$_CONFIG_DIR/defaults.conf"
 [ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
 
+# Enable colors for text output (auto = TTY-aware, --color/--no-color override)
+status_setup_colors "$(_status_parse_color_arg "$@")"
+
 STATUS_OK=0
 _st_uptime_seconds=0
 _st_version=""
@@ -302,11 +305,9 @@ show_domains() {
 show_domain_sources() {
   check_domain_sources
   if [ -f "${DOMAINS_LIST_FILE:-}" ]; then
-    _text_buf="${_text_buf}  Domain sources: $_ck_domain_sources domain(s) configured
-"
+    status_line "Sources" "$_ck_domain_sources domain(s) configured"
   else
-    _text_buf="${_text_buf}  Domain sources: — (no list file)
-"
+    status_line "Sources" "— (no list file)"
   fi
 }
 

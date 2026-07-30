@@ -17,6 +17,9 @@ _CONFIG_DIR="${SCRIPT_DIR%/*}/config"
 . "$_CONFIG_DIR/defaults.conf"
 [ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
 
+# Enable colors for text output (auto = TTY-aware, --color/--no-color override)
+status_setup_colors "$(_status_parse_color_arg "$@")"
+
 STATUS_OK=0
 OUTPUT_JSON=0
 

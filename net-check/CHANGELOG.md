@@ -5,6 +5,13 @@ All notable changes to `net-check` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.0.3] - 2026-07-30
+
+### Changed
+- `status.sh`: colored status marks and bold section headers via `lib/status.sh` color system; `--color`/`--no-color` flag support
+- `output.sh`: `setup_colors()` delegates to `lib/status.sh:status_setup_colors()` — single source of ANSI color codes
+- `net-check.sh`: added `lib/status.sh` to source chain
+
 ## [0.0.2] - 2026-07-30
 
 ### Fixed

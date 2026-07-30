@@ -14,6 +14,10 @@ _CONFIG_DIR="${SCRIPT_DIR%/*}/config"
 # shellcheck source=/dev/null
 . "$_CONFIG_DIR/defaults.conf"
 [ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
+
+# Enable colors for text output (auto = TTY-aware, --color/--no-color override)
+status_setup_colors "$(_status_parse_color_arg "$@")"
+
 # SMARTDNS_PORT=0 or empty → auto-detect via /proc/net/tcp → fallback 6053.
 if [ -z "${SMARTDNS_PORT:-}" ] || [ "$SMARTDNS_PORT" = "0" ]; then
   _port_detect=$(detect_dns_port main)
@@ -126,11 +130,9 @@ dns_test() {
   # dig +short may return multiple lines; take first A-record
   ip_line="$(echo "$result" | head -1)"
   if [ -n "$ip_line" ] && [ "$ip_line" != "FAILED" ] && is_ipv4 "$ip_line"; then
-    _text_buf="${_text_buf}$(printf '    %-14s %s (%s) ✓\n' "${domain}:" "$ip_line" "$label")
-"
+    status_line "$domain" "$ip_line ($label)" "ok"
   else
-    _text_buf="${_text_buf}$(printf '    %-14s FAILED (%s) ✗\n' "${domain}:" "$label")
-"
+    status_line "$domain" "FAILED ($label)" "fail"
     STATUS_OK=1
   fi
 }

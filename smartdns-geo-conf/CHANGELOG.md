@@ -5,6 +5,12 @@ All notable changes to `smartdns-geo-conf` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.14.1] - 2026-07-30
+
+### Changed
+- `status.sh`: colored status marks and bold section headers via `lib/status.sh` color system; `--color`/`--no-color` flag support
+- `status.sh`: `dns_test()` migrated from raw `_text_buf` printf to `status_line()` API — consistent format with all other status lines
+
 ## [0.14.0] - 2026-07-30
 
 ### Added

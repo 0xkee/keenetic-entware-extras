@@ -13,6 +13,9 @@ CONFIG_FILE="$_CONFIG_DIR/defaults.conf"
 . "$CONFIG_FILE"
 [ -f "$_CONFIG_DIR/config.conf" ] && . "$_CONFIG_DIR/config.conf"
 
+# Enable colors for text output (auto = TTY-aware, --color/--no-color override)
+status_setup_colors "$(_status_parse_color_arg "$@")"
+
 # Detect router LAN IP for DNAT rule check (must match dns-redirect.sh).
 ROUTER_IP="$(detect_router_ip)"
 ROUTER_IP6=""
@@ -209,9 +212,9 @@ show_mode() {
 }
 
 # Check a single iptables/ip6tables rule for display.
-# Args: $1 - "v4"|"v6_dnat"|"v6_reject", $2 - iface, $3 - proto (udp|tcp)
+# Args: $1 - "v4"|"v6_dnat"|"v6_reject"|"dot_block", $2 - iface, $3 - proto (udp|tcp)
 check_rule() {
-  local rtype="$1" iface="$2" proto="$3" label target _check_ok
+  local rtype="$1" iface="$2" proto="$3" label target _check_ok _desc _st
   case "$rtype" in
     v4)
       label="v4"
@@ -224,14 +227,7 @@ check_rule() {
         iptables -t nat -C PREROUTING -i "$iface" -p "$proto" --dport 53 \
             -j DNAT --to-destination "$target" 2>/dev/null && _check_ok="true"
       fi
-      if [ "$_check_ok" = "true" ]; then
-        _text_buf="${_text_buf}$(printf '    %-10s %-6s %s → DNAT %s ✓\n' "$label" "$proto" "$iface" "$target")
-"
-      else
-        _text_buf="${_text_buf}$(printf '    %-10s %-6s %s → DNAT %s ✗\n' "$label" "$proto" "$iface" "$target")
-"
-        STATUS_OK=1
-      fi
+      _desc="$label $proto $iface → DNAT $target"
       ;;
     v6_dnat)
       label="v6-dnat"
@@ -244,40 +240,29 @@ check_rule() {
         ip6tables -t nat -C PREROUTING -i "$iface" -p "$proto" --dport 53 \
             -j DNAT --to-destination "$target" 2>/dev/null && _check_ok="true"
       fi
-      if [ "$_check_ok" = "true" ]; then
-        _text_buf="${_text_buf}$(printf '    %-10s %-6s %s → DNAT %s ✓\n' "$label" "$proto" "$iface" "$target")
-"
-      else
-        _text_buf="${_text_buf}$(printf '    %-10s %-6s %s → DNAT %s ✗\n' "$label" "$proto" "$iface" "$target")
-"
-        STATUS_OK=1
-      fi
+      _desc="$label $proto $iface → DNAT $target"
       ;;
     v6_reject)
       label="v6-reject"
-      if ip6tables -C INPUT -i "$iface" -p "$proto" --dport 53 \
-          -j REJECT --reject-with icmp6-port-unreachable 2>/dev/null; then
-        _text_buf="${_text_buf}$(printf '    %-10s %-6s %s → REJECT ✓\n' "$label" "$proto" "$iface")
-"
-      else
-        _text_buf="${_text_buf}$(printf '    %-10s %-6s %s → REJECT ✗\n' "$label" "$proto" "$iface")
-"
-        STATUS_OK=1
-      fi
+      _check_ok="false"
+      ip6tables -C INPUT -i "$iface" -p "$proto" --dport 53 \
+          -j REJECT --reject-with icmp6-port-unreachable 2>/dev/null && _check_ok="true"
+      _desc="$label $proto $iface → REJECT"
       ;;
     dot_block)
       label="dot-block"
-      if iptables -C FORWARD -i "$iface" -p "$proto" --dport 853 \
-          -j REJECT --reject-with icmp-port-unreachable 2>/dev/null; then
-        _text_buf="${_text_buf}$(printf '    %-10s %-6s %s :853 → REJECT ✓\n' "$label" "$proto" "$iface")
-"
-      else
-        _text_buf="${_text_buf}$(printf '    %-10s %-6s %s :853 → REJECT ✗\n' "$label" "$proto" "$iface")
-"
-        STATUS_OK=1
-      fi
+      _check_ok="false"
+      iptables -C FORWARD -i "$iface" -p "$proto" --dport 853 \
+          -j REJECT --reject-with icmp-port-unreachable 2>/dev/null && _check_ok="true"
+      _desc="$label $proto $iface :853 → REJECT"
       ;;
   esac
+  if [ "$_check_ok" = "true" ]; then
+    _st="ok"
+  else
+    _st="fail"; STATUS_OK=1
+  fi
+  status_line_cont "$_desc" "$_st"
 }
 
 # Report expected rules (per configured iface × proto); mark missing as ✗.

@@ -18,6 +18,7 @@ _CONFIG_DIR="${SCRIPT_DIR%/*}/config"
 
 # ─── Shared project libraries ────────────────────────────────────────────────
 . "$SCRIPT_DIR/../../lib/common.sh"
+. "$SCRIPT_DIR/../../lib/status.sh"
 . "$SCRIPT_DIR/../../lib/ip.sh"
 
 # ─── Local module libraries (all lib/*.sh, alphabetical order) ───────────────

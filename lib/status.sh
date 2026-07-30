@@ -6,6 +6,49 @@
 # shellcheck disable=SC3043  # 'local' supported by ash/busybox sh
 set -eu
 
+# --- Color support (ANSI escape codes) ---
+# All C_* variables are empty by default = no color.
+# Call status_setup_colors() to enable based on TTY / NO_COLOR / caller pref.
+# shellcheck disable=SC2034
+_SC_RST="" _SC_BOLD="" _SC_DIM=""
+_SC_GREEN="" _SC_RED="" _SC_YELLOW="" _SC_CYAN=""
+
+# Extract color mode from script arguments.
+# Scans for --color (force on) or --no-color (force off).
+# Args: pass "$@" from the calling script
+# stdout: "always" | "never" | "auto"
+_status_parse_color_arg() {
+  local _a
+  for _a in "$@"; do
+    case "$_a" in
+      --color)    printf 'always'; return ;;
+      --no-color) printf 'never'; return ;;
+    esac
+  done
+  printf 'auto'
+}
+
+# Initialize terminal color escape codes.
+# Respects NO_COLOR env var (https://no-color.org/) and non-tty output.
+# Args: $1 - mode: "auto" (default) | "always" | "never"
+# Sets: _SC_RST, _SC_BOLD, _SC_DIM, _SC_GREEN, _SC_RED, _SC_YELLOW, _SC_CYAN
+status_setup_colors() {
+  local mode="${1:-auto}"
+  if [ "$mode" = "never" ] || [ "${NO_COLOR:-}" = 1 ]; then
+    return 0
+  fi
+  if [ "$mode" = "auto" ] && ! [ -t 1 ]; then
+    return 0
+  fi
+  _SC_RST=$(printf '\033[0m')
+  _SC_BOLD=$(printf '\033[1m')
+  _SC_DIM=$(printf '\033[2m')
+  _SC_GREEN=$(printf '\033[32m')
+  _SC_RED=$(printf '\033[31m')
+  _SC_YELLOW=$(printf '\033[33m')
+  _SC_CYAN=$(printf '\033[36m')
+}
+
 # --- Check functions (set _st_* globals, never touch STATUS_OK) ---
 
 # Detect process PID from pidfile with pidof fallback.
@@ -158,24 +201,31 @@ status_check_version() {
 
 _text_buf=""
 
-# Accumulate a section header.
+# Accumulate a section header (bold when colors enabled).
 # Args: $1 - title (without colon)
 status_section() {
-  _text_buf="${_text_buf}$(printf '  %s:\n' "$1")
+  _text_buf="${_text_buf}$(printf '  %s%s:%s\n' "$_SC_BOLD" "$1" "$_SC_RST")
 "
+}
+
+# Build colored status mark.
+# Args: $1 - status: "ok"|"fail"|"warn"|"" (default: "")
+# stdout: colored mark string (e.g. " ✓" in green)
+_status_mark() {
+  case "${1:-}" in
+    ok)   printf ' %s✓%s' "$_SC_GREEN" "$_SC_RST" ;;
+    fail) printf ' %s✗%s' "$_SC_RED" "$_SC_RST" ;;
+    warn) printf ' %s⚠%s' "$_SC_YELLOW" "$_SC_RST" ;;
+    *)    ;;
+  esac
 }
 
 # Accumulate a status line.
 # Args: $1 - label (without colon), $2 - value, $3 - status: "ok"|"fail"|"warn"|"" (default: "")
 status_line() {
   local label="$1" value="$2" status="${3:-}"
-  local mark=""
-  case "$status" in
-    ok)   mark=" ✓" ;;
-    fail) mark=" ✗" ;;
-    warn) mark=" ⚠" ;;
-    *)    mark="" ;;
-  esac
+  local mark
+  mark="$(_status_mark "$status")"
   _text_buf="${_text_buf}$(printf '    %-13s%s%s\n' "${label}:" "$value" "$mark")
 "
 }
@@ -184,13 +234,8 @@ status_line() {
 # Args: $1 - value, $2 - status: "ok"|"fail"|"warn"|"" (default: "")
 status_line_cont() {
   local value="$1" status="${2:-}"
-  local mark=""
-  case "$status" in
-    ok)   mark=" ✓" ;;
-    fail) mark=" ✗" ;;
-    warn) mark=" ⚠" ;;
-    *)    mark="" ;;
-  esac
+  local mark
+  mark="$(_status_mark "$status")"
   _text_buf="${_text_buf}$(printf '                 %s%s\n' "$value" "$mark")
 "
 }

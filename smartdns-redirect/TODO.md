@@ -65,6 +65,27 @@
 - [ ] Hook на изменение NDM config (или periodic re-read через watchdog)
 - [ ] Документирование limitation: MAC-randomization у iOS private MAC
 
+### iptables DNS enforcement
+
+- [x] **Phase 1: Always-on DoT blocking — FORWARD REJECT :853 on INTERFACES.** (v0.5.0, 2026-07-29)
+  iptables FORWARD REJECT :853 на всех INTERFACES — always-on, без конфига. `DNS_STRICT` toggle убран (over-engineering). Клиенты не могут обойти SmartDNS через прямой DoT к 8.8.8.8:853 и т.д. Fallback на plain DNS :53 → DNAT → SmartDNS. IPv4+IPv6, watchdog мониторит.
+
+- [x] **Phase 1.5: `REDIRECT_MODE` — force / local.** (2026-07-30)
+  - `force` (default) — DNAT **всего** :53 с LAN → SmartDNS + REJECT :853 (DoT/DoQ). Текущее поведение.
+  - `local` — DNAT только :53 **к IP роутера** → SmartDNS:6053. Трафик к внешним DNS (8.8.8.8:53) проходит свободно. DoT :853 **не блокируется**.
+  Файлы: `defaults.conf`, `dns-redirect.sh`, `watchdog.sh`, `status.sh`, `config-editor.js`, `api-router.lua`.
+
+- [ ] **Phase 2 (future): OUTPUT chain — блокировка DNS-трафика SmartDNS на WAN.**
+  SmartDNS `-interface nwg0` — `SO_BINDTODEVICE`, но при reconnection DoH может fallback на default route. Идея: iptables OUTPUT REJECT :53/:853 на non-tunnel интерфейсах. Требует `STRICT_ALLOWED_INTERFACES` параметр. DoH (443) на OUTPUT нельзя заблокировать без DPI → accepted limitation.
+
+### Cleanup
+
+- [ ] **Удалить `PRESERVE_FILTER_PROFILES` (мёртвый код, Phase 5 никогда не реализована).** 7 мест:
+  `config/defaults.conf` (параметр + комментарий), `webui/static/config-editor.js` (toggle из schema),
+  `webui/lua/api-router.lua` (whitelist keys), `README.md` (пример конфига),
+  `docs/user-manual.ru.md` (примечание), `TODO.md` (Phase 5 блок),
+  `.project/target-arch.md` (описание Phase 5).
+
 ### Backlog (minor)
 
 - [x] ~~**SmartDNS TCP on :6053**~~ — **Сделано (2026-05-15):** добавлен `bind-tcp` в `smartdns-geo-conf/config/smartdns.conf` + `smartdns-default.conf` + `postinst` (bind-addrs.conf). TCP iptables redirect теперь работает end-to-end.

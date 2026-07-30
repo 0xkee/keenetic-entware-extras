@@ -45,20 +45,48 @@ can_dnat_ipv6() {
 # --- helpers ---
 
 # Check if a single rule exists.
+# In "local" mode, DNAT rules include -d $ROUTER_IP / -d $ROUTER_IP6.
 # Args: $1 - rule type ("v4_dnat"|"v6_dnat"|"v6_reject"), $2 - iface, $3 - proto
 rule_exists() {
     local rtype="$1" iface="$2" proto="$3"
     case "$rtype" in
         v4_dnat)
-            iptables -t nat -C PREROUTING -i "$iface" -p "$proto" --dport 53 \
-                -j DNAT --to-destination "${ROUTER_IP}:${UPSTREAM_PORT}" 2>/dev/null
+            if [ "${REDIRECT_MODE:-force}" = "local" ]; then
+                iptables -t nat -C PREROUTING -i "$iface" -p "$proto" -d "$ROUTER_IP" --dport 53 \
+                    -j DNAT --to-destination "${ROUTER_IP}:${UPSTREAM_PORT}" 2>/dev/null
+            else
+                iptables -t nat -C PREROUTING -i "$iface" -p "$proto" --dport 53 \
+                    -j DNAT --to-destination "${ROUTER_IP}:${UPSTREAM_PORT}" 2>/dev/null
+            fi
             ;;
         v6_dnat)
-            ip6tables -t nat -C PREROUTING -i "$iface" -p "$proto" --dport 53 \
-                -j DNAT --to-destination "[${ROUTER_IP6}]:${UPSTREAM_PORT}" 2>/dev/null
+            if [ "${REDIRECT_MODE:-force}" = "local" ]; then
+                ip6tables -t nat -C PREROUTING -i "$iface" -p "$proto" -d "$ROUTER_IP6" --dport 53 \
+                    -j DNAT --to-destination "[${ROUTER_IP6}]:${UPSTREAM_PORT}" 2>/dev/null
+            else
+                ip6tables -t nat -C PREROUTING -i "$iface" -p "$proto" --dport 53 \
+                    -j DNAT --to-destination "[${ROUTER_IP6}]:${UPSTREAM_PORT}" 2>/dev/null
+            fi
             ;;
         v6_reject)
             ip6tables -C INPUT -i "$iface" -p "$proto" --dport 53 \
+                -j REJECT --reject-with icmp6-port-unreachable 2>/dev/null
+            ;;
+        *)  return 1 ;;
+    esac
+}
+
+# Check DoT blocking FORWARD REJECT rule exists.
+# Args: $1 - "v4"|"v6", $2 - iface, $3 - proto
+dot_block_rule_exists() {
+    local family="$1" iface="$2" proto="$3"
+    case "$family" in
+        v4)
+            iptables -C FORWARD -i "$iface" -p "$proto" --dport 853 \
+                -j REJECT --reject-with icmp-port-unreachable 2>/dev/null
+            ;;
+        v6)
+            ip6tables -C FORWARD -i "$iface" -p "$proto" --dport 853 \
                 -j REJECT --reject-with icmp6-port-unreachable 2>/dev/null
             ;;
         *)  return 1 ;;
@@ -85,6 +113,21 @@ any_rule_missing() {
                 rule_exists "$v6_type" "$iface" "$proto" || return 0
             done
         done
+    fi
+    # DoT blocking: check FORWARD REJECT :853 rules (force mode only)
+    if [ "${REDIRECT_MODE:-force}" = "force" ]; then
+        for iface in $INTERFACES; do
+            for proto in tcp udp; do
+                dot_block_rule_exists "v4" "$iface" "$proto" || return 0
+            done
+        done
+        if command -v ip6tables >/dev/null 2>&1; then
+            for iface in $INTERFACES; do
+                for proto in tcp udp; do
+                    dot_block_rule_exists "v6" "$iface" "$proto" || return 0
+                done
+            done
+        fi
     fi
     return 1
 }

@@ -212,10 +212,8 @@ if [ -d "$_sgc_conf" ]; then
         printf "  DNS_ZONE:              %s\n" "${DNS_ZONE:-eas}"
         printf "  ZONE_DNS_PROVIDER:     %s\n" "${ZONE_DNS_PROVIDER:-yandex alidns system}"
         printf "  ZONE_DNS_INTERFACE:    %s\n" "${ZONE_DNS_INTERFACE:-(none)}"
-        printf "  ZONE_DNS_STRICT:       %s\n" "${ZONE_DNS_STRICT:-no}"
         printf "  OTHER_DNS_PROVIDER:    %s\n" "${OTHER_DNS_PROVIDER:-google cloudflare}"
         printf "  OTHER_DNS_INTERFACES:  %s\n" "${OTHER_DNS_INTERFACES:-(none)}"
-        printf "  OTHER_DNS_STRICT:      %s\n" "${OTHER_DNS_STRICT:-no}"
         printf "  SMARTDNS_PORT:         %s\n" "${SMARTDNS_PORT:-6053}"
     )
 else

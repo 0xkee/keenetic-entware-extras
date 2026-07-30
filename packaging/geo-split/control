@@ -1,5 +1,5 @@
 Package: geo-split
-Version: 0.18.1
+Version: 0.18.2
 Architecture: all
 Maintainer: 0xkee
 Depends: keenetic-entware-extras, geo-split-data, ip-full, curl, bind-dig, aggregate, coreutils-touch

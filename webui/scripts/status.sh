@@ -10,6 +10,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../../lib/common.sh"
 . "$SCRIPT_DIR/../../lib/status.sh"
 
+# Enable colors for text output (auto = TTY-aware, --color/--no-color override)
+status_setup_colors "$(_status_parse_color_arg "$@")"
+
 CONF="$SCRIPT_DIR/../config/nginx.conf"
 LISTEN_CONF="$SCRIPT_DIR/../config/listen.conf"
 BASE_URL="http://127.0.0.1:${LISTEN_PORT}"

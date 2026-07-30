@@ -5,6 +5,12 @@ All notable changes to `smartdns-redirect` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.6.1] - 2026-07-30
+
+### Changed
+- `status.sh`: colored status marks and bold section headers via `lib/status.sh` color system; `--color`/`--no-color` flag support
+- `status.sh`: `check_rule()` refactored from 4 duplicated case branches (−50 lines) to unified `status_line_cont()` API
+
 ## [0.6.0] - 2026-07-30
 
 ### Added

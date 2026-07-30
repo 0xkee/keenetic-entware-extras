@@ -143,6 +143,12 @@ OVERALL_RC=0
 FOUND=0
 _PKG_SEP=""
 
+# Build sub-script color flag: pass --color in --details mode when color is active
+_SUB_COLOR=""
+if [ -n "$DETAILS" ] && [ -n "$C_GREEN" ]; then
+  _SUB_COLOR="--color"
+fi
+
 for script in "$BASE"/*/scripts/status.sh; do
   # Glob may expand to literal if no matches exist
   [ -f "$script" ] || continue
@@ -160,7 +166,7 @@ for script in "$BASE"/*/scripts/status.sh; do
 
   # Run sub-status; capture stdout+stderr and exit code without tripping set -e
   set +e
-  output=$(sh "$script" 2>&1)
+  output=$(sh "$script" $_SUB_COLOR 2>&1)
   rc=$?
   set -e
 

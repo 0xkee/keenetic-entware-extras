@@ -3,6 +3,7 @@
 # Globals used: OUTPUT_JSON, USE_COLOR, VERBOSITY,
 #   C_RST, C_BOLD, C_DIM, C_GREEN, C_RED, C_YELLOW, C_CYAN, _spinner_pid
 # shellcheck disable=SC2034
+# shellcheck disable=SC2153
 # shellcheck disable=SC3043
 
 # ─── Section Titles (single source of truth) ─────────────────────────────────
@@ -19,21 +20,17 @@ _TITLE_SPEED="Throughput Test (Layers 4+7)"
 _TITLE_CHECK="Deep Resource Check"
 
 # Set up terminal color escape codes.
+# Delegates to lib/status.sh status_setup_colors(), then aliases C_* from _SC_*.
 # Respects --no-color flag, NO_COLOR env, and non-tty output.
 setup_colors() {
-  if [ "$USE_COLOR" = "never" ] || [ "${NO_COLOR:-}" = 1 ]; then
-    return 0
-  fi
-  if [ "$USE_COLOR" = "auto" ] && ! [ -t 1 ]; then
-    return 0
-  fi
-  C_RST=$(printf '\033[0m')
-  C_BOLD=$(printf '\033[1m')
-  C_DIM=$(printf '\033[2m')
-  C_GREEN=$(printf '\033[32m')
-  C_RED=$(printf '\033[31m')
-  C_YELLOW=$(printf '\033[33m')
-  C_CYAN=$(printf '\033[36m')
+  status_setup_colors "$USE_COLOR"
+  C_RST="$_SC_RST"
+  C_BOLD="$_SC_BOLD"
+  C_DIM="$_SC_DIM"
+  C_GREEN="$_SC_GREEN"
+  C_RED="$_SC_RED"
+  C_YELLOW="$_SC_YELLOW"
+  C_CYAN="$_SC_CYAN"
 }
 
 # ─── Data Directory ───────────────────────────────────────────────────────────

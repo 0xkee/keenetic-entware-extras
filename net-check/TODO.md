@@ -14,6 +14,7 @@
 
 ## Future
 
+- [ ] опрделять ► по следующему хопу !
 - [ ] **`dns-providers.conf` unification** — consider merging IP prefix and ASN sections
   into ASN-only approach; IP globs may become redundant if ASN matching is sufficient
   for both `identify_dns_provider()` and `_is_known_dns_provider()`.

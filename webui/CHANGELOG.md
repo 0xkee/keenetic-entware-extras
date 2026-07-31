@@ -5,6 +5,20 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.36.2] - 2026-07-31
+
+### Changed
+- **Rules detail: condensed per-iface format** — replaced verbose per-family/proto
+  lines with condensed `br0: v4+v6 DNS/DoT` (1 line per interface when all OK).
+  Protocol labels: `DNS` = DNAT :53 redirect, `DoT` = :853 block.
+  On failure: shows `(ok/total)` counter + individual `✗ v4 udp DoT` lines.
+  Reduces 8 lines → 2 lines for typical 2-interface setup.
+
+### Fixed
+- **Rules detail: DoT-block protos mixed with DNAT** — grouping used only
+  `iface+family`, causing DoT-block (:853) and DNAT (:53) protocols to merge
+  into `udp/tcp/tcp/udp`.
+
 ## [0.36.1] - 2026-07-30
 
 ### Changed

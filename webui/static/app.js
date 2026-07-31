@@ -168,43 +168,39 @@ function setDetails(id, data) {
             '<div class="ew-detail-label">' + EW.escapeHtml(e.label) + '</div>' +
             '<div class="ew-detail-value' + numClass + '"' + valStyle + dataAttr + '>' + valHtml + updateBtn + '</div></div>';
     }
-    // rules_detail per-iface breakdown (smartdns-redirect, geo-split style)
-    // Groups by iface+family: ok → "br0: v4 udp/tcp"; mixed → "v4 udp ✓, tcp ✗"
+    // rules_detail per-iface condensed breakdown (smartdns-redirect, geo-split style)
+    // All OK: "br0: v4+v6 DNS/DoT"  —  1 line per iface
+    // Failures: "br0: v4+v6 DNS/DoT (6/8)" + per-failure "✗ v4 udp DoT"
     if (data.rules_detail && data.rules_detail.length) {
-        // Group by iface, then by family within each iface
         var rByIface = {}, rOrder = [];
         for (var ri = 0; ri < data.rules_detail.length; ri++) {
             var r = data.rules_detail[ri];
-            if (!rByIface[r.iface]) { rByIface[r.iface] = {}; rOrder.push(r.iface); }
-            if (!rByIface[r.iface][r.family]) rByIface[r.iface][r.family] = [];
-            rByIface[r.iface][r.family].push(r);
+            if (!rByIface[r.iface]) { rByIface[r.iface] = []; rOrder.push(r.iface); }
+            rByIface[r.iface].push(r);
         }
         var rulesLines = [];
         for (var rg = 0; rg < rOrder.length; rg++) {
             var rIface = rOrder[rg];
-            var rFamilies = rByIface[rIface];
-            var famParts = [];
-            for (var fam in rFamilies) {
-                var fEntries = rFamilies[fam];
-                var fAllOk = true;
-                for (var fk = 0; fk < fEntries.length; fk++) { if (!fEntries[fk].ok) { fAllOk = false; break; } }
-                if (fAllOk) {
-                    var protos = [];
-                    for (var fp = 0; fp < fEntries.length; fp++) protos.push(fEntries[fp].proto);
-                    famParts.push(EW.escapeHtml(fam + ' ' + protos.join('/')));
-                } else {
-                    var protoParts = [];
-                    for (var fp2 = 0; fp2 < fEntries.length; fp2++) {
-                        var fe = fEntries[fp2];
-                        var feIcon = fe.ok ? '\u2713' : '\u2717';
-                        var feCls = fe.ok ? 'ew-bool-icon--ok' : 'ew-bool-icon--fail';
-                        protoParts.push(EW.escapeHtml(fe.proto) + ' <span class="ew-bool-icon ' + feCls + '">' + feIcon + '</span>');
-                    }
-                    famParts.push(EW.escapeHtml(fam) + ' ' + protoParts.join(', '));
-                }
+            var rRules = rByIface[rIface];
+            var rAllOk = true, rOkCount = 0;
+            var rFamSet = {}, rPortSet = {};
+            for (var ri2 = 0; ri2 < rRules.length; ri2++) {
+                rFamSet[rRules[ri2].family] = 1;
+                rPortSet[rRules[ri2].type === 'dot_block' ? 'DoT' : 'DNS'] = 1;
+                if (rRules[ri2].ok) { rOkCount++; } else { rAllOk = false; }
             }
-            for (var fi = 0; fi < famParts.length; fi++) {
-                rulesLines.push(EW.escapeHtml(rIface) + ': ' + famParts[fi]);
+            var rFams = (rFamSet.v4 ? 'v4' : '') + (rFamSet.v4 && rFamSet.v6 ? '+' : '') + (rFamSet.v6 ? 'v6' : '');
+            var rPorts = (rPortSet.DNS ? 'DNS' : '') + (rPortSet.DNS && rPortSet.DoT ? '/' : '') + (rPortSet.DoT ? 'DoT' : '');
+            var rLine = EW.escapeHtml(rIface) + ': ' + EW.escapeHtml(rFams + ' ' + rPorts);
+            if (!rAllOk) rLine += ' (' + rOkCount + '/' + rRules.length + ')';
+            rulesLines.push(rLine);
+            if (!rAllOk) {
+                for (var ri3 = 0; ri3 < rRules.length; ri3++) {
+                    if (!rRules[ri3].ok) {
+                        rulesLines.push('\u00a0\u00a0<span class="ew-bool-icon ew-bool-icon--fail">\u2717</span> ' +
+                            EW.escapeHtml(rRules[ri3].family + ' ' + rRules[ri3].proto + ' ' + (rRules[ri3].type === 'dot_block' ? 'DoT' : 'DNS')));
+                    }
+                }
             }
         }
         var rulesBreakdown = '<div class="ew-dns-line">' + rulesLines.join('</div><div class="ew-dns-line">') + '</div>';

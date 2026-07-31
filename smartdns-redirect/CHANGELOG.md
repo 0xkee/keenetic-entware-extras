@@ -5,6 +5,30 @@ All notable changes to `smartdns-redirect` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.6.2] - 2026-07-31
+
+### Fixed
+- **`disable` now fully cleans up**: removes NDM netfilter.d hook and comments out
+  cron watchdog job. Previously only iptables rules and init.d symlink were removed,
+  leaving stale hook and active cron entry.
+- **`enable` restores infrastructure**: re-creates NDM hook symlink and uncomments
+  cron watchdog job (no line duplication).
+- **`status.sh` disabled output simplified**: when self-disabled, shows minimal
+  "disabled (iptables rules removed, no DNS interception)" instead of full
+  config/rules/upstream display with misleading ✓/✗ marks.
+
+### Changed
+- `status.sh`: DoT block line in Mode section no longer shows ✓ mark
+  (config display, not runtime check).
+
+### Removed
+- `dot_block` field from JSON output — redundant with `redirect_mode`
+  (`force` → always on, `local` → always off).
+
+### Added
+- **Watchdog cron status** in `status.sh` text and JSON output: shows `Watchdog: cron */5 min ✓`
+  when active, `(no active cron job) ✗` when missing/commented.
+
 ## [0.6.1] - 2026-07-30
 
 ### Changed

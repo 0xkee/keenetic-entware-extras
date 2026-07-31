@@ -179,6 +179,17 @@ check_init() {
   fi
 }
 
+# Check cron watchdog job presence (active = not commented out).
+# Sets: _ck_cron_ok (0=active, 1=missing/commented)
+check_cron() {
+  _ck_cron_ok=1
+  if [ -f "/opt/etc/crontab" ]; then
+    if grep -q '^[^#].*smartdns-redirect' /opt/etc/crontab 2>/dev/null; then
+      _ck_cron_ok=0
+    fi
+  fi
+}
+
 # --- Show functions (text output for CLI) ---
 
 # Show configuration: source file and resolver parameters.
@@ -205,9 +216,9 @@ show_mode() {
   esac
   status_line "DNAT to" "${ROUTER_IP}:${UPSTREAM_PORT}"
   if [ "${REDIRECT_MODE:-force}" = "force" ]; then
-    status_line "DoT block" ":853 → REJECT (force mode)" "ok"
+    status_line "DoT block" ":853 → REJECT (force mode)"
   else
-    status_line "DoT block" "off (local mode)" ""
+    status_line "DoT block" "off (local mode)"
   fi
 }
 
@@ -359,6 +370,20 @@ show_version() {
   status_show_version
 }
 
+# Show cron watchdog status.
+show_cron() {
+  if [ ! -f "/opt/etc/crontab" ]; then
+    status_line "Watchdog" "— (/opt/etc/crontab missing)"
+    return
+  fi
+  if [ "$_ck_cron_ok" = 0 ]; then
+    status_line "Watchdog" "cron */5 min" "ok"
+  else
+    status_line "Watchdog" "(no active cron job)" "fail"
+    STATUS_OK=1
+  fi
+}
+
 # --- JSON output ---
 
 # Collect structured data and emit JSON for webui.
@@ -393,11 +418,6 @@ json_output() {
   # Details — Redirect chain
   status_detail "redirect_mode" "${REDIRECT_MODE:-force}"
   status_detail "interfaces" "$INTERFACES"
-  if [ "${REDIRECT_MODE:-force}" = "force" ]; then
-    status_detail "dot_block" "on"
-  else
-    status_detail "dot_block" "off"
-  fi
   status_detail "ipv6" "$IPV6_MODE"
   status_detail "dnat_target" "${ROUTER_IP}:${UPSTREAM_PORT}"
   if [ "$IPV6_MODE" = "dnat" ]; then
@@ -415,6 +435,7 @@ json_output() {
     # Details — Infrastructure (only shown when enabled — no ✓ noise when off)
     status_detail "ndm_hook" "$_ck_ndm_hook_ok" "bool"
     status_detail "init" "$_ck_init_ok" "bool"
+    status_detail "cron" "$_ck_cron_ok" "bool"
   fi
   # Details — System
   status_detail "uptime" "$uptime_seconds_val" "num"
@@ -442,6 +463,7 @@ json_output() {
   fi
   status_check_result "ndm_hook" "$(if [ "$_ck_ndm_hook_ok" = 0 ]; then printf ok; else printf fail; fi)"
   status_check_result "init" "$(if [ "$_ck_init_ok" = 0 ]; then printf ok; else printf fail; fi)"
+  status_check_result "cron" "$(if [ "$_ck_cron_ok" = 0 ]; then printf ok; else printf fail; fi)"
   if [ "$_disabled" = "true" ]; then
     status_check_result "rules" "skip"
   else
@@ -459,6 +481,7 @@ check_upstream
 check_rules
 check_ndm_hook
 check_init
+check_cron
 status_check_uptime "$PIDFILE"
 status_check_version "smartdns-redirect"
 
@@ -495,6 +518,13 @@ text_output() {
     show_init
     show_ndm_hook
     show_version
+  elif ! is_service_enabled "S39smartdns-redirect"; then
+    # Simplified output: self-disabled — no rules, no hook, no watchdog
+    status_section "Service"
+    status_line "Mode" "disabled (iptables rules removed, no DNS interception)"
+    status_blank
+    status_section "System"
+    show_version
   else
     show_mode
     status_blank
@@ -506,6 +536,7 @@ text_output() {
     show_uptime
     show_init
     show_ndm_hook
+    show_cron
     show_version
   fi
 

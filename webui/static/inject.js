@@ -854,41 +854,39 @@
         // Update expandable details grid
         if (detailsEl) {
             var detailsHtml = renderDetailsGrid(data.details, data.running, data.checks, data.dns_server_checks, svc.id);
-            // rules_detail per-iface breakdown (smartdns-redirect, geo-split style)
+            // rules_detail per-iface condensed breakdown (smartdns-redirect, geo-split style)
+            // All OK: "br0: v4+v6 DNS/DoT"  —  1 line per iface
+            // Failures: "br0: v4+v6 DNS/DoT (6/8)" + per-failure "✗ v4 udp DoT"
             if (data.rules_detail && data.rules_detail.length) {
                 var rlByIface = {}, rlOrder = [];
                 for (var rli = 0; rli < data.rules_detail.length; rli++) {
                     var rl = data.rules_detail[rli];
-                    if (!rlByIface[rl.iface]) { rlByIface[rl.iface] = {}; rlOrder.push(rl.iface); }
-                    if (!rlByIface[rl.iface][rl.family]) rlByIface[rl.iface][rl.family] = [];
-                    rlByIface[rl.iface][rl.family].push(rl);
+                    if (!rlByIface[rl.iface]) { rlByIface[rl.iface] = []; rlOrder.push(rl.iface); }
+                    rlByIface[rl.iface].push(rl);
                 }
                 var rlLines = [];
                 for (var rlg = 0; rlg < rlOrder.length; rlg++) {
                     var rlIface = rlOrder[rlg];
-                    var rlFamilies = rlByIface[rlIface];
-                    var rlFamParts = [];
-                    for (var rlFam in rlFamilies) {
-                        var rlFEntries = rlFamilies[rlFam];
-                        var rlFAllOk = true;
-                        for (var rlFk = 0; rlFk < rlFEntries.length; rlFk++) { if (!rlFEntries[rlFk].ok) { rlFAllOk = false; break; } }
-                        if (rlFAllOk) {
-                            var rlProtos = [];
-                            for (var rlFp = 0; rlFp < rlFEntries.length; rlFp++) rlProtos.push(rlFEntries[rlFp].proto);
-                            rlFamParts.push(EW.escapeHtml(rlFam + ' ' + rlProtos.join('/')));
-                        } else {
-                            var rlProtoParts = [];
-                            for (var rlFp2 = 0; rlFp2 < rlFEntries.length; rlFp2++) {
-                                var rle = rlFEntries[rlFp2];
-                                var rleIcon = rle.ok ? '\u2713' : '\u2717';
-                                var rleCls = rle.ok ? 'ew-bool-icon--ok' : 'ew-bool-icon--fail';
-                                rlProtoParts.push(EW.escapeHtml(rle.proto) + ' <span class="ew-bool-icon ' + rleCls + '">' + rleIcon + '</span>');
-                            }
-                            rlFamParts.push(EW.escapeHtml(rlFam) + ' ' + rlProtoParts.join(', '));
-                        }
+                    var rlRules = rlByIface[rlIface];
+                    var rlAllOk = true, rlOkCount = 0;
+                    var rlFamSet = {}, rlPortSet = {};
+                    for (var rli2 = 0; rli2 < rlRules.length; rli2++) {
+                        rlFamSet[rlRules[rli2].family] = 1;
+                        rlPortSet[rlRules[rli2].type === 'dot_block' ? 'DoT' : 'DNS'] = 1;
+                        if (rlRules[rli2].ok) { rlOkCount++; } else { rlAllOk = false; }
                     }
-                    for (var rlFi = 0; rlFi < rlFamParts.length; rlFi++) {
-                        rlLines.push(EW.escapeHtml(rlIface) + ': ' + rlFamParts[rlFi]);
+                    var rlFams = (rlFamSet.v4 ? 'v4' : '') + (rlFamSet.v4 && rlFamSet.v6 ? '+' : '') + (rlFamSet.v6 ? 'v6' : '');
+                    var rlPorts = (rlPortSet.DNS ? 'DNS' : '') + (rlPortSet.DNS && rlPortSet.DoT ? '/' : '') + (rlPortSet.DoT ? 'DoT' : '');
+                    var rlLine = EW.escapeHtml(rlIface) + ': ' + EW.escapeHtml(rlFams + ' ' + rlPorts);
+                    if (!rlAllOk) rlLine += ' (' + rlOkCount + '/' + rlRules.length + ')';
+                    rlLines.push(rlLine);
+                    if (!rlAllOk) {
+                        for (var rli3 = 0; rli3 < rlRules.length; rli3++) {
+                            if (!rlRules[rli3].ok) {
+                                rlLines.push('\u00a0\u00a0<span class="ew-bool-icon ew-bool-icon--fail">\u2717</span> ' +
+                                    EW.escapeHtml(rlRules[rli3].family + ' ' + rlRules[rli3].proto + ' ' + (rlRules[rli3].type === 'dot_block' ? 'DoT' : 'DNS')));
+                            }
+                        }
                     }
                 }
                 var rlBreakdown = '<div class="ew-dns-line">' + rlLines.join('</div><div class="ew-dns-line">') + '</div>';

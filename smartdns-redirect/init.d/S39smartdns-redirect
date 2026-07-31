@@ -40,11 +40,20 @@ case "${1:-}" in
     ;;
   enable)
     ln -sf "$INSTALL_DIR/init.d/$(basename "$0")" "/opt/etc/init.d/$(basename "$0")"
+    # Restore NDM hook (re-applies rules after Keenetic iptables flush)
+    mkdir -p /opt/etc/ndm/netfilter.d
+    ln -sf "$INSTALL_DIR/scripts/netfilter-hook.sh" /opt/etc/ndm/netfilter.d/smartdns-redirect-hook
+    # Uncomment cron watchdog (commented by disable)
+    sed -i 's|^#\(.*smartdns-redirect.*\)$|\1|' /opt/etc/crontab 2>/dev/null || true
     "$0" start
     ;;
   disable)
     "$0" stop
     rm -f "/opt/etc/init.d/$(basename "$0")"
+    # Remove NDM hook (prevents stale hook in netfilter.d)
+    rm -f /opt/etc/ndm/netfilter.d/smartdns-redirect-hook
+    # Comment out cron watchdog (keeps line, easy re-enable)
+    sed -i 's|^\([^#].*smartdns-redirect.*\)$|#\1|' /opt/etc/crontab 2>/dev/null || true
     echo "smartdns-redirect disabled (persistent until 'enable')"
     ;;
   *)

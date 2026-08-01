@@ -27,6 +27,10 @@ _NON_GEO_SEGMENTS=""
 _NON_GEO_SINGLE=""
 _NON_GEO_COUNT=0
 
+# Per-run cache for auto-detected VPN fwmark.
+# "" = unchecked, "none" = no VPN fwmark found, "0xNN..." = fwmark value.
+_AUTO_FWMARK=""
+
 # Get interface type label.
 # Args: $1 - interface name
 # stdout: "tunnel" or "isp"
@@ -288,17 +292,79 @@ expected_route_type() {
   esac
 }
 
-# Determine active route device for a target using category + zone context.
-# Category-aware: uses geo-split config for zone resources, enumerated tunnel
-# segments for non-geo resources. Falls back to kernel FIB (route_dev_for_ip)
-# when category is unknown or zone context not loaded.
-# Args: $1 - resolved IP (optional, for FIB fallback)
+# Auto-detect first VPN tunnel fwmark from ip rules.
+# Scans fwmark-based policy rules, finds the first whose routing table
+# has a default route through a tunnel device.
+# Same logic as route-check.sh legacy auto-detect.
+# Cached per run. stdout: fwmark hex (e.g. "0xff0100") or empty.
+_detect_auto_fwmark() {
+  if [ -n "$_AUTO_FWMARK" ]; then
+    [ "$_AUTO_FWMARK" = "none" ] && return 0
+    printf '%s' "$_AUTO_FWMARK"
+    return 0
+  fi
+
+  local _result
+  _result=$(ip rule show 2>/dev/null \
+    | sed -n 's/.*fwmark \(0x[0-9a-f]*\) lookup \([0-9]*\).*/\1 \2/p' \
+    | while read -r _m _t; do
+        _dev=$(ip route show table "$_t" 2>/dev/null \
+          | awk '/^default/{for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); exit}}')
+        [ -z "$_dev" ] && continue
+        is_tunnel_iface "$_dev" && { printf '%s' "$_m"; break; }
+      done)
+
+  if [ -n "$_result" ]; then
+    _AUTO_FWMARK="$_result"
+    printf '%s' "$_result"
+  else
+    _AUTO_FWMARK="none"
+  fi
+}
+
+# Determine active route device via kernel FIB with auto-detected VPN fwmark.
+# Simulates a VPN-policy LAN client: ip route get with fwmark + iif br0.
+# Correctly returns:
+#   - geo-split dev for zone IPs (prio 50/51 checked before fwmark rules)
+#   - tunnel dev for intl IPs (fwmark rule at prio 100+ after geo-split miss)
+#   - default route dev when no fwmark policies exist
+# Args: $1 - target IP
+# stdout: device name or empty
+fib_active_dev() {
+  local _fib_ip="$1" _route_out=""
+  [ -z "$_fib_ip" ] || [ "$_fib_ip" = "—" ] && return 0
+
+  local _lan="${LAN_BRIDGE:-br0}"
+  local _fake_src
+  _fake_src=$(ip -4 addr show "$_lan" 2>/dev/null | \
+    awk '/inet /{split($2,a,"/"); split(a[1],b,"."); printf "%s.%s.%s.%d", b[1],b[2],b[3],(b[4]%254)+1; exit}')
+  [ -z "$_fake_src" ] && return 0
+
+  # Try with auto-detected VPN fwmark first (simulates VPN-policy client)
+  local _fwmark
+  _fwmark=$(_detect_auto_fwmark)
+  if [ -n "$_fwmark" ]; then
+    _route_out=$(ip route get "$_fib_ip" mark "$_fwmark" from "$_fake_src" iif "$_lan" 2>/dev/null) || _route_out=""
+  fi
+
+  # Fallback: without fwmark (default-policy client)
+  [ -z "$_route_out" ] && \
+    _route_out=$(ip route get "$_fib_ip" from "$_fake_src" iif "$_lan" 2>/dev/null) || true
+
+  printf '%s' "$_route_out" | sed -n 's/.* dev \([^ ]*\).*/\1/p' | head -1
+}
+
+# Determine active route device for a target.
+# Category-aware fast path: uses geo-split config for zone resources.
+# FIB fallback with auto-fwmark: simulates VPN-policy LAN client routing
+# (geo-split tables checked at prio 50/51, fwmark at prio 100+).
+# Args: $1 - resolved IP (for FIB lookup)
 #        $2 - category from check-targets.conf (optional)
-# stdout: device name or empty (ambiguous — multiple non-geo segments, no ►)
+# stdout: device name or empty
 active_dev_for_target() {
   local _ip="${1:-}" _cat="${2:-}"
 
-  # Category-based logic (preferred when zone context loaded)
+  # Category-based fast path (avoids ip route get fork per target)
   if [ -n "$_cat" ] && [ "$_ZONE_CTX_LOADED" = 1 ]; then
     case "$_cat" in
       zone-*)
@@ -308,39 +374,10 @@ active_dev_for_target() {
           return 0
         fi ;;
     esac
-    case "$_cat" in
-      intl-*|intl|global)
-        # Single non-geo path → unambiguous ►
-        if [ -n "$_NON_GEO_SINGLE" ]; then
-          printf '%s' "$_NON_GEO_SINGLE"
-        else
-          # Multiple paths → show ► on main default (with note in header)
-          printf '%s' "$_DEFAULT_ROUTE_DEV"
-        fi
-        return 0 ;;
-    esac
   fi
 
-  # Fallback: kernel FIB lookup (no fwmark — correct for default-policy clients)
-  [ -n "$_ip" ] && route_dev_for_ip "$_ip"
-}
-
-# Check where traffic to a given IP actually routes from LAN perspective.
-# Uses ip route get with iif br0 (same as geo-split/route-check.sh).
-# Args: $1 - destination IP
-# stdout: device name (e.g. "eth3", "nwg0") or empty
-route_dev_for_ip() {
-  local _ip="$1" _route_out=""
-  [ -z "$_ip" ] || [ "$_ip" = "—" ] && return 0
-  local _lan="${LAN_BRIDGE:-br0}"
-  local _fake_src
-  _fake_src=$(ip -4 addr show "$_lan" 2>/dev/null | \
-    awk '/inet /{split($2,a,"/"); split(a[1],b,"."); printf "%s.%s.%s.%d", b[1],b[2],b[3],(b[4]%254)+1; exit}')
-  if [ -n "$_fake_src" ]; then
-    _route_out=$(ip route get "$_ip" from "$_fake_src" iif "$_lan" 2>/dev/null) || _route_out=""
-  fi
-  [ -z "$_route_out" ] && _route_out=$(ip route get "$_ip" 2>/dev/null) || true
-  printf '%s' "$_route_out" | sed -n 's/.* dev \([^ ]*\).*/\1/p' | head -1
+  # FIB with auto-fwmark: correct for both zone (geo-split) and intl (tunnel)
+  [ -n "$_ip" ] && fib_active_dev "$_ip"
 }
 
 # Format zone context header line for output.

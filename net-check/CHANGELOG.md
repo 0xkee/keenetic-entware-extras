@@ -5,6 +5,35 @@ All notable changes to `net-check` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.0.5] - 2026-08-01
+
+### Added
+- `check-targets.conf`: new targets — Avito (zone-ru), Kufar + Beltelecom
+  (zone-by), Nur.kz + Krisha (zone-kz), Spotify (intl-streaming), Perplexity
+  (intl-ai), Telegram + Reddit (intl-services), AWS + Google Cloud (intl-cloud)
+- `cdn-domains.conf`: VK CDN (zone-ru), Facebook CDN + jsDelivr CDN
+- `http-core.sh`: curl exit 92 → "HTTP/2 protocol error" (H2ERR) classification
+
+### Removed
+- `check-targets.conf`: 21vek.by (zone-by), kaspi.kz (zone-kz) — server-side
+  geo-blocks for non-local IPs, always fail from abroad
+- `cdn-domains.conf`: cdn.ozon.ru — HTTP/2 PROTOCOL_ERROR on root URL probe
+
+### Changed
+- `cdn-domains.conf`: Instagram CDN endpoint i.instagram.com → scontent.cdninstagram.com
+  (i.instagram.com returns app-level errors for non-app requests)
+
+## [0.0.4] - 2026-08-01
+
+### Changed
+- `wan.sh`: ► active route detection now uses kernel FIB with auto-detected VPN
+  fwmark (`--as auto` mode). New `_detect_auto_fwmark()` finds the first VPN
+  tunnel fwmark from ip rules, `fib_active_dev()` queries `ip route get` with
+  fwmark + iif br0 — correctly simulates VPN-policy LAN client. Zone IPs hit
+  geo-split tables (prio 50/51), intl IPs hit fwmark rule (prio 100+) → tunnel.
+  Replaces old `route_dev_for_ip()` which queried without fwmark (always returned
+  default route for intl targets). Removed `intl-*` category heuristic fallback.
+
 ## [0.0.3] - 2026-07-30
 
 ### Changed

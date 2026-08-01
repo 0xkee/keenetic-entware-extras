@@ -177,6 +177,10 @@ classify_failure() {
     printf 'Too many redirects'
     return 0
   fi
+  if [ "$curl_exit" = "92" ]; then
+    printf 'HTTP/2 protocol error'
+    return 0
+  fi
 
   # Generic error
   if [ "$curl_exit" != "0" ]; then
@@ -221,6 +225,7 @@ short_reason() {
     "Connection refused") printf 'REFSD' ;;
     "TCP RST (DPI anomaly)") printf 'RST' ;;
     "Too many redirects") printf 'REDIR' ;;
+    "HTTP/2 protocol error") printf 'H2ERR' ;;
     "Connection error"*) printf 'ERR' ;;
     "Content anomaly"*) printf 'ANOML' ;;
     "Content mismatch") printf 'MISMT' ;;

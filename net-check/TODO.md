@@ -14,7 +14,7 @@
 
 ## Future
 
-- [ ] опрделять ► по следующему хопу !
+- [x] ~~определять ► по следующему хопу~~ — **Сделано (2026-08-01):** `nexthop_active_dev()` в `wan.sh` — traceroute first-hop (эмпирический, без `--interface`) → `ip route get $FIRST_HOP` → dev. Per-run cache. Заменяет FIB fallback в `active_dev_for_target()`.
 - [ ] **`dns-providers.conf` unification** — consider merging IP prefix and ASN sections
   into ASN-only approach; IP globs may become redundant if ASN matching is sufficient
   for both `identify_dns_provider()` and `_is_known_dns_provider()`.

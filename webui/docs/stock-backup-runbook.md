@@ -107,6 +107,7 @@ grep -qF 'this.templateMap.get' "$BUNDLE" \
 | 5.0.8 | mipsel | KN-1011 | `4QPHZXFY` | `D5VNMMPD` | v1 | `stock-backup-5.0.8-mipsel/` |
 | 5.0.10 | mipsel | KN-2310 | `TXLLNFBH` | `DKYWR66I` | v1 | `stock-backup-5.0.10-mipsel/` |
 | 5.0.11 | mipsel | KN-1011 | `JELMZ7TJ` | `DKYWR66I` | v1 | `stock-backup-5.0.11-mipsel/` |
+| 5.0.12 | aarch64 | KN-2710 | `BRZQI6FO` | `DKYWR66I` | v1 | `stock-backup-5.0.12-aarch64/` |
 | 5.1 Beta 3 | mipsel | KN-2310 | `3FF05DF` | `3FF05DF` | v2 | `stock-backup-5.1-beta3-mipsel/` |
 | 5.1.0 | mipsel | KN-2310 | `8787931` | `8787931` | v3 | `stock-backup-5.1.0-mipsel/` |
 | 5.1.1 | mipsel | KN-2310 | `553997B` | `553997B` | v4 | `stock-backup-5.1.1-mipsel/` |

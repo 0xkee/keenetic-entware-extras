@@ -5,6 +5,21 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.37.0] - 2026-08-04
+
+### Added
+- **System info: CPU temperature** in sysinfo header bar (between CPU load and RAM).
+  Reads `/sys/class/thermal/thermal_zone*/temp`, auto-detects CPU zone by `type`.
+  Thermal zone path resolved once per worker lifetime (zero overhead after probe).
+  Graceful degradation: element hidden when SoC has no thermal zone.
+- **SoC-specific thermal thresholds** from datasheets — `THERMAL_SPECS` table maps
+  zone type substring to warn/crit/Tj_max. Known SoCs: MT7621/MT7628/MT7620 MIPS
+  (105°C), MT7622BV ARM (105°C), MT7986/MT7981 Filogic (115°C), Qualcomm IPQ (110°C).
+  Also detects `soc-thermal` zones. Unknown SoCs use conservative defaults (100°C).
+  Thresholds resolved once at init, sent as `cpu_temp_limits` in API response.
+- **CPU core count cached per worker** — `_cpu_cores` upvalue avoids re-reading
+  `/proc/cpuinfo` on every poll (core count never changes at runtime).
+
 ## [0.36.2] - 2026-07-31
 
 ### Changed

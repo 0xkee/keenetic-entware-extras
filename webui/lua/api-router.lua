@@ -27,6 +27,58 @@ local ENDPOINT_TTLS = {
     ["/api/webui/status"]             = 5,   -- netstat + pidof (fast)
 }
 
+-- ── Per-worker cached hardware info (resolved once, never changes) ────────────
+-- Thermal zone: nil = not probed, false = not found, string = path to temp file.
+local _thermal_path
+-- Pre-built JSON fragment for thermal limits (resolved at probe time).
+-- Contains warn/crit/max thresholds + zone type for frontend tooltip.
+local _thermal_limits_json = "null"
+-- CPU core count: nil = not probed, number = core count.
+local _cpu_cores
+
+-- SoC thermal limits from datasheets: {substring, warn, crit, Tj_max}.
+-- First match wins (plain substring on lowercased zone type). Order matters.
+local THERMAL_SPECS = {
+    { "mtktscpu",    85, 100, 105 },  -- MT7621/MT7628/MT7620 MIPS
+    { "mt7622",      85, 100, 105 },  -- MT7622BV ARM Cortex-A53
+    { "cpu-thermal", 90, 105, 115 },  -- Filogic 830/820 (MT7986/MT7981)
+    { "cpu_thermal", 90, 105, 115 },  -- alternative DT naming
+    { "cpu-",        85, 100, 110 },  -- Qualcomm IPQ (cpu-0-0-usr etc)
+    { "soc",         85, 100, 105 },  -- soc-thermal / soc_thermal
+}
+
+--- Scan /sys/class/thermal/ for a CPU/SoC thermal zone.
+-- Matches zone type containing "cpu" or "soc", resolves SoC-specific limits.
+-- @return string|false — path to temp file, or false if not found
+local function resolve_thermal_path()
+    for i = 0, 9 do
+        local prefix = "/sys/class/thermal/thermal_zone" .. i
+        local ztype = io.open(prefix .. "/type", "r")
+        if not ztype then break end  -- no more zones
+        local tname = ztype:read("*a")
+        ztype:close()
+        if tname then
+            local tl = tname:lower()
+            if tl:find("cpu", 1, true) or tl:find("soc", 1, true) then
+                local zone_type = tname:gsub("%s+$", "")
+                -- Lookup limits: first matching substring wins, else conservative default
+                local w, c, m = 70, 85, 100
+                for _, spec in ipairs(THERMAL_SPECS) do
+                    if tl:find(spec[1], 1, true) then
+                        w, c, m = spec[2], spec[3], spec[4]
+                        break
+                    end
+                end
+                _thermal_limits_json = '{"warn":' .. w
+                    .. ',"crit":' .. c .. ',"max":' .. m
+                    .. ',"type":"' .. zone_type .. '"}'
+                return prefix .. "/temp"
+            end
+        end
+    end
+    return false
+end
+
 --- Read entire file contents or return nil.
 -- @param path string — absolute file path
 -- @return string|nil
@@ -193,14 +245,17 @@ local function system_info()
         if l1 then load1 = l1; load5 = l5 end
     end
 
-    -- CPU core count from /proc/cpuinfo
-    local cpu_cores = 1
-    local cpuinfo = read_file("/proc/cpuinfo")
-    if cpuinfo then
-        local count = 0
-        for _ in cpuinfo:gmatch("processor%s*:") do count = count + 1 end
-        if count > 0 then cpu_cores = count end
+    -- CPU core count (cached per worker — never changes at runtime)
+    if not _cpu_cores then
+        _cpu_cores = 1
+        local cpuinfo = read_file("/proc/cpuinfo")
+        if cpuinfo then
+            local count = 0
+            for _ in cpuinfo:gmatch("processor%s*:") do count = count + 1 end
+            if count > 0 then _cpu_cores = count end
+        end
     end
+    local cpu_cores = _cpu_cores
 
     -- Actual CPU utilization from /proc/stat delta.
     -- Load average includes I/O-waiting processes (USB, DNS, network) and
@@ -237,11 +292,26 @@ local function system_info()
         end
     end
 
+    -- CPU temperature from thermal zone (path + limits resolved once per worker).
+    -- Returns integer °C or JSON null if no CPU thermal zone on this SoC.
+    local cpu_temp_json = "null"
+    if _thermal_path == nil then
+        _thermal_path = resolve_thermal_path()
+    end
+    if _thermal_path then
+        local raw = read_file(_thermal_path)
+        if raw then
+            local md = tonumber(raw:match("(%d+)"))
+            if md then cpu_temp_json = tostring(math.floor(md / 1000)) end
+        end
+    end
+
     return '{"ok":true,'
         .. '"hostname":"' .. json_escape(hostname) .. '",'
         .. '"uptime":"' .. json_escape(uptime_str) .. '",'
         .. '"cpu_load":{"load1":' .. load1 .. ',"load5":' .. load5
         .. ',"cores":' .. cpu_cores .. ',"cpu_pct":' .. cpu_pct .. '},'
+        .. '"cpu_temp":' .. cpu_temp_json .. ',"cpu_temp_limits":' .. _thermal_limits_json .. ','
         .. '"memory":{"total_kb":' .. mem_total .. ',"available_kb":' .. mem_available .. '},'
         .. '"disk_opt":{"total_kb":' .. disk_total .. ',"used_kb":' .. disk_used .. ',"free_kb":' .. disk_free .. '}'
         .. '}'

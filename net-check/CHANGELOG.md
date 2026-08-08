@@ -5,6 +5,20 @@ All notable changes to `net-check` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.1.0] - 2026-08-08
+
+### Changed
+- **i18n: worldwide check-targets** — `check-targets.conf` expanded to 40+ country
+  zones with runtime zone filtering via `_cat_config()` (only active zone loaded)
+- **i18n: worldwide cdn-domains** — `cdn-domains.conf` expanded with zone CDN
+  entries for 12+ countries, runtime zone filtering
+- **i18n: CHECK_ZONE** — new `CHECK_ZONE="auto"` setting in `defaults.conf`;
+  set to any ISO code or union name for standalone use without smartdns-geo-conf
+- **i18n: custom targets** — user customizations now go into `*-custom.conf`
+  (conffiles); main configs updated with package, not conffiles
+- `anomaly-markers.conf`: added international block page markers (TR, IR, CN, IN)
+- `_get_isp_dns()`: fallback to `/etc/resolv.conf` for non-Keenetic routers
+
 ## [0.0.5] - 2026-08-01
 
 ### Added

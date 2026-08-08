@@ -73,15 +73,24 @@ _resolve_a_cached() {
   printf '%s' "$_ip"
 }
 
-# Get ISP upstream DNS IPs from Keenetic ndnproxymain.conf.
-# Filters out SmartDNS-forwarding entries (:6053) and loopback.
+# Get ISP upstream DNS IPs.
+# Primary: Keenetic ndnproxymain.conf (filters SmartDNS-forwarding and loopback).
+# Fallback: /etc/resolv.conf nameservers (for non-Keenetic routers).
 # stdout: space-separated IPs (up to 2)
 _get_isp_dns() {
+  local _result=""
   if [ -f "$KEENETIC_DNS_CONF" ]; then
-    grep '^dns_server' "$KEENETIC_DNS_CONF" 2>/dev/null | \
+    _result=$(grep '^dns_server' "$KEENETIC_DNS_CONF" 2>/dev/null | \
       awk '{print $3}' | grep -v ":${SMARTDNS_PORT}" | sed 's/:.*//' | \
-      grep -v '^127\.' | head -2 | tr '\n' ' ' | sed 's/ $//'
+      grep -v '^127\.' | head -2 | tr '\n' ' ' | sed 's/ $//')
   fi
+  # Fallback: /etc/resolv.conf (non-Keenetic systems)
+  if [ -z "$_result" ] && [ -f /etc/resolv.conf ]; then
+    _result=$(grep '^nameserver' /etc/resolv.conf 2>/dev/null | \
+      awk '{print $2}' | grep -v '^127\.' | grep -v '^::' | \
+      head -2 | tr '\n' ' ' | sed 's/ $//')
+  fi
+  printf '%s' "$_result"
 }
 
 # Check if an IP is a bogon/redirect (ISP blocking pattern).
@@ -97,9 +106,8 @@ _is_bogon() {
 # Preserves config order for category group separators; deduplicates by hostname.
 # stdout: lines of "hostname|category" (one per line)
 _load_check_domains() {
-  local _f="${_CONFIG_DIR}/check-targets.conf"
-  [ -f "$_f" ] || return 0
-  awk -F'|' '
+  [ -f "$_CONFIG_DIR/check-targets.conf" ] || return 0
+  _cat_config check-targets | awk -F'|' '
     /^#/ || /^$/ || $2 == "geo" { next }
     {
       host = $1
@@ -109,7 +117,7 @@ _load_check_domains() {
       cat = ($3 != "" ? $3 : "global")
       if (host != "" && !seen[host]++) print host "|" cat
     }
-  ' "$_f"
+  '
 }
 
 # ─── Command: dns ─────────────────────────────────────────────────────────────

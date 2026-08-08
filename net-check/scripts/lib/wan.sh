@@ -162,7 +162,20 @@ load_zone_context() {
   local _gs_dir="$SCRIPT_DIR/../../geo-split/config"
 
   # ── 1. DNS zone label + CC list ──
-  if [ -f "$SCRIPT_DIR/../../lib/geo.sh" ] && [ -f "$_sg_dir/defaults.conf" ]; then
+  # Priority: CHECK_ZONE (net-check config) > DNS_ZONE (smartdns-geo-conf)
+  local _check_zone="${CHECK_ZONE:-auto}"
+
+  if [ "$_check_zone" != "auto" ]; then
+    # Explicit zone from net-check config (or empty = no zone targets)
+    if [ -n "$_check_zone" ] && [ -f "$SCRIPT_DIR/../../lib/geo.sh" ]; then
+      # shellcheck source=../../../lib/geo.sh
+      . "$SCRIPT_DIR/../../lib/geo.sh"
+      _ZONE_LABEL="$_check_zone"
+      _ZONE_CC_LIST=$(resolve_geo_zone "$_ZONE_LABEL")
+    fi
+    # If _check_zone="" → _ZONE_LABEL="" and _ZONE_CC_LIST="" (no zone targets)
+  elif [ -f "$SCRIPT_DIR/../../lib/geo.sh" ] && [ -f "$_sg_dir/defaults.conf" ]; then
+    # Auto: read DNS_ZONE from smartdns-geo-conf (existing logic)
     # shellcheck source=../../../lib/geo.sh
     . "$SCRIPT_DIR/../../lib/geo.sh"
     _ZONE_LABEL=$(grep '^DNS_ZONE=' "$_sg_dir/defaults.conf" 2>/dev/null \

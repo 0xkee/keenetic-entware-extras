@@ -322,9 +322,8 @@ cmd_tls_check() {
 cmd_tls_check_targets() {
   check_cmd openssl "opkg install openssl-util" || return 1
 
-  local targets_file="$_CONFIG_DIR/check-targets.conf"
-  if [ $# -eq 0 ] && [ ! -f "$targets_file" ]; then
-    emit_error "Targets file not found: $targets_file"
+  if [ $# -eq 0 ] && [ ! -f "$_CONFIG_DIR/check-targets.conf" ]; then
+    emit_error "Targets file not found: check-targets.conf"
     return 1
   fi
 
@@ -368,7 +367,7 @@ cmd_tls_check_targets() {
       printf '%s' "check" > "${_RUN_DIR}/tls-cat-${host}"
     done
   else
-    # Default: load from check-targets.conf
+    # Default: load from check-targets.conf (zone-filtered by _cat_config)
     while IFS='|' read -r url check_type _category _description _expected; do
       case "$url" in "#"*|"") continue ;; esac
       [ "$check_type" = "geo" ] && continue
@@ -377,7 +376,9 @@ cmd_tls_check_targets() {
       _tls_total=$((_tls_total + 1))
       _tls_hosts="${_tls_hosts} ${host}"
       printf '%s' "${_category:-global}" > "${_RUN_DIR}/tls-cat-${host}"
-    done < "$targets_file"
+    done <<EOF
+$(_cat_config check-targets)
+EOF
   fi
 
   # ── Phase 2: Batched parallel TLS probes (PARALLEL_BATCH_SIZE hosts at a time) ──

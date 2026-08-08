@@ -347,9 +347,8 @@ _cdn_format_cell() {
 }
 
 cmd_cdn_all() {
-  local cdn_file="$_CONFIG_DIR/cdn-domains.conf"
-  if [ $# -eq 0 ] && [ ! -f "$cdn_file" ]; then
-    emit_error "CDN domains file not found: $cdn_file"
+  if [ $# -eq 0 ] && [ ! -f "$_CONFIG_DIR/cdn-domains.conf" ]; then
+    emit_error "CDN domains file not found: cdn-domains.conf"
     return 1
   fi
 
@@ -385,14 +384,16 @@ cmd_cdn_all() {
       _cdn_domains="${_cdn_domains} ${_cdh}"
     done
   else
-    # Default: load from cdn-domains.conf
+    # Default: load from cdn-domains.conf (zone-filtered by _cat_config)
     while IFS='|' read -r domain _category _description _custom_headers; do
       case "$domain" in "#"*|"") continue ;; esac
       local extra_curl=""
       extra_curl=$(_cdn_build_extra_curl "${_custom_headers:-}")
       printf '%s' "$extra_curl" > "${_RUN_DIR}/cdncurl-${domain}"
       _cdn_domains="${_cdn_domains} ${domain}"
-    done < "$cdn_file"
+    done <<EOF
+$(_cat_config cdn-domains)
+EOF
   fi
 
   # ── Phase 2: Batched parallel probes (2 domains at a time to avoid geoIP rate-limit) ──

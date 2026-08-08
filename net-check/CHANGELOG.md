@@ -5,6 +5,12 @@ All notable changes to `net-check` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.1.1] - 2026-08-08
+
+### Added
+- CDN table (`cdn-all`): category group separators (`── Global ──`,
+  `── International ──`, `── Zone ──`) matching other comparison tables
+
 ## [0.1.0] - 2026-08-08
 
 ### Changed

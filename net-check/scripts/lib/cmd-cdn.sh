@@ -368,6 +368,7 @@ cmd_cdn_all() {
     printf 'Per-interface CDN edge country via EDNS Client Subnet.\n\n'
   fi
   cmp_header "Domain" "$ifaces"
+  tbl_group_reset
 
   local json_results=""
   local _cdn_total=0 _cdn_geo_steer=0 _cdn_same=0 _cdn_error=0
@@ -381,6 +382,7 @@ cmd_cdn_all() {
       _cdh=$(url_to_host "$_cd")
       [ -z "$_cdh" ] && continue
       printf '' > "${_RUN_DIR}/cdncurl-${_cdh}"
+      printf '%s' "check" > "${_RUN_DIR}/cdn-cat-${_cdh}"
       _cdn_domains="${_cdn_domains} ${_cdh}"
     done
   else
@@ -390,6 +392,7 @@ cmd_cdn_all() {
       local extra_curl=""
       extra_curl=$(_cdn_build_extra_curl "${_custom_headers:-}")
       printf '%s' "$extra_curl" > "${_RUN_DIR}/cdncurl-${domain}"
+      printf '%s' "${_category:-global}" > "${_RUN_DIR}/cdn-cat-${domain}"
       _cdn_domains="${_cdn_domains} ${domain}"
     done <<EOF
 $(_cat_config cdn-domains)
@@ -432,6 +435,14 @@ EOF
 
   # ── Phase 3: Collect results and render table (in original domain order) ──
   for domain in $_cdn_domains; do
+    # Category group separator (reads category saved during domain loading)
+    local _cdn_cat="global"
+    if [ -f "${_RUN_DIR}/cdn-cat-${domain}" ]; then
+      _cdn_cat=$(cat "${_RUN_DIR}/cdn-cat-${domain}")
+      rm -f "${_RUN_DIR}/cdn-cat-${domain}"
+    fi
+    tbl_group_sep "$_cdn_cat"
+
     rm -f "${_RUN_DIR}/cdncurl-${domain}" 2>/dev/null
 
     local _all_cc="" _error_reasons="" _warn_reasons="" json_paths=""

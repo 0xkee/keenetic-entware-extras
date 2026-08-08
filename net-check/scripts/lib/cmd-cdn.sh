@@ -446,7 +446,7 @@ EOF
     rm -f "${_RUN_DIR}/cdncurl-${domain}" 2>/dev/null
 
     local _all_cc="" _error_reasons="" _warn_reasons="" json_paths=""
-    local _has_error=0 _has_warn=0 _active_reason=""
+    local _has_error=0 _has_warn=0 _active_reason="" _any_cached=0
 
     # Determine active route device for this domain (for cell marker).
     # CDN domains don't carry check-targets category — falls back to kernel FIB.
@@ -497,6 +497,7 @@ EOF
       if [ "$cdn_ip" != "-" ]; then
         if is_cache_fresh "$(ipgeo_cache_file "$cdn_ip")" "${IPGEO_CACHE_TTL:-86400}"; then
           cc_cached=1
+          _any_cached=1
         fi
         cdn_cc=$(geolocate_ip "$cdn_ip")
       fi
@@ -602,6 +603,7 @@ EOF
     else
       _verdict_text=$(printf '%s %s' "$(color_status "$_vst" "$_verdict")" "$_cc_list")
     fi
+    [ "$_any_cached" = 1 ] && _verdict_text="${_verdict_text} $(cache_mark)"
     cmp_row_end "$_verdict_text"
 
     local _dom_ok=0

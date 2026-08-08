@@ -41,6 +41,37 @@ ensure_data_dir() {
   [ -d "$DATA_DIR" ] || mkdir -p "$DATA_DIR"
 }
 
+# Output zone-filtered content of a config file + optional custom overlay.
+# For pipe-delimited configs (check-targets, cdn-domains): filters zone-XX
+# entries by active _ZONE_CC_LIST. Non-zone lines (global, intl-*) always included.
+# Appends user custom file if present (${name}-custom.conf).
+# Args: $1 - config name (e.g. "check-targets", "cdn-domains")
+# stdout: combined content (comments and blank lines stripped)
+_cat_config() {
+  local _file="$_CONFIG_DIR/${1}.conf"
+  [ -f "$_file" ] || return 0
+
+  if [ -n "${_ZONE_CC_LIST:-}" ]; then
+    # Build zone pattern: zone-ru|zone-by|zone-kz...
+    local _zpat="" _cc
+    for _cc in $_ZONE_CC_LIST; do
+      _zpat="${_zpat:+${_zpat}|}zone-${_cc}"
+    done
+    # Non-zone lines (global, intl-*)
+    grep -v '^#' "$_file" | grep -v '^$' | grep -v '|zone-'
+    # Matching zone-CC lines
+    grep -E "\|(${_zpat})\|" "$_file" 2>/dev/null || true
+  else
+    # No zone — skip all zone-XX entries, keep global + intl
+    grep -v '^#' "$_file" | grep -v '^$' | grep -v '|zone-'
+  fi
+
+  # Append user custom file (optional, conffile)
+  if [ -f "$_CONFIG_DIR/${1}-custom.conf" ]; then
+    grep -v '^#' "$_CONFIG_DIR/${1}-custom.conf" | grep -v '^$' || true
+  fi
+}
+
 # ─── Spinner ──────────────────────────────────────────────────────────────────
 
 # Start a background spinner on stderr (text mode + tty only).
@@ -222,7 +253,7 @@ Bulk checks (all targets from config):
   comp             HTTP reachability table across WAN paths + diff (L4–7)
   dns              DNS resolution & ISP filtering detection (L7)
   dns-leak         DNS leak test — resolver chain discovery (L7)
-  cdn              CDN edge geo-steering for cdn-domains.conf (L3+7)
+  cdn              CDN edge geo-steering analysis (L3+7)
   tls              TLS certificate MITM detection (L5–7)
 
 Single/multi target:
@@ -241,7 +272,8 @@ Options:
 Exit codes: 0 = ok, 1 = degraded, 2 = critical
 
 Config: ${_CONFIG_DIR}/
-  defaults.conf, config.conf, check-targets.conf, cdn-domains.conf,
+  defaults.conf, config.conf,
+  check-targets.conf, cdn-domains.conf,
   anomaly-markers.conf, mitm-issuers.conf, privacy-providers.conf
 EOF
 }

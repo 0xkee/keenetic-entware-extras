@@ -197,9 +197,8 @@ cmd_check_target() {
 # ─── Command: domains (HTTP targets from config) ─────────────────────────────
 
 cmd_domains() {
-  local targets_file="$_CONFIG_DIR/check-targets.conf"
-  if [ ! -f "$targets_file" ]; then
-    emit_error "Targets file not found: $targets_file"
+  if [ ! -f "$_CONFIG_DIR/check-targets.conf" ]; then
+    emit_error "Targets file not found: check-targets.conf"
     return 1
   fi
 
@@ -221,7 +220,9 @@ cmd_domains() {
     first_result=0
 
     cmd_check_target "$url"
-  done < "$targets_file"
+  done <<EOF
+$(_cat_config check-targets)
+EOF
 
   [ "$OUTPUT_JSON" = 1 ] && printf ']\n'
   return 0
@@ -230,9 +231,8 @@ cmd_domains() {
 # ─── Command: compare (table + diff) ─────────────────────────────────────────
 
 cmd_compare() {
-  local targets_file="$_CONFIG_DIR/check-targets.conf"
-  if [ $# -eq 0 ] && [ ! -f "$targets_file" ]; then
-    emit_error "Targets file not found: $targets_file"
+  if [ $# -eq 0 ] && [ ! -f "$_CONFIG_DIR/check-targets.conf" ]; then
+    emit_error "Targets file not found: check-targets.conf"
     return 1
   fi
 
@@ -278,7 +278,7 @@ cmd_compare() {
       _tgt_hosts="${_tgt_hosts} ${host}"
     done
   else
-    # Default: load from check-targets.conf
+    # Default: load from check-targets.conf (zone-filtered by _cat_config)
     while IFS='|' read -r url check_type _category _description expected_string; do
       case "$url" in
         "#"*|"") continue ;;
@@ -298,7 +298,9 @@ cmd_compare() {
       printf '%s\t%s\t%s\t%s\t%s\n' "$url" "$host" "$target_need_body" "$expected_string" "${_category:-global}" \
         > "${_RUN_DIR}/tgtcfg-${host}"
       _tgt_hosts="${_tgt_hosts} ${host}"
-    done < "$targets_file"
+    done <<EOF
+$(_cat_config check-targets)
+EOF
   fi
 
   # ── Phase 2: Batched parallel curls (3 targets at a time to avoid bandwidth contention) ──

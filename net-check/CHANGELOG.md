@@ -5,6 +5,14 @@ All notable changes to `net-check` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.1.2] - 2026-08-08
+
+### Fixed
+- `cdn-all`: restored `ℹ️ cached` marker in CDN comparison table verdict —
+  `cc_cached` was computed but never displayed
+- `dns-leak`: added `ℹ️ cached` marker for GeoIP cache hits on resolver IPs —
+  `geolocate_ip()` was called without cache tracking
+
 ## [0.1.1] - 2026-08-08
 
 ### Added

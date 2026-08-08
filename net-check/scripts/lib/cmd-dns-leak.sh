@@ -128,17 +128,21 @@ _dns_leak_dnscheck() {
   _leak_source="dnscheck.tools"
   _leak_resolvers=""
 
-  local _rip _rcc _rasn _rprov
+  local _rip _rcc _rasn _rprov _rcc_cached
   for _rip in $_resolver_ips; do
     [ -z "$_rip" ] && continue
     _rprov=$(identify_dns_provider "$_rip") || _rprov=""
+    _rcc_cached=0
+    if is_cache_fresh "$(ipgeo_cache_file "$_rip")" "${IPGEO_CACHE_TTL:-86400}"; then
+      _rcc_cached=1
+    fi
     _rcc=$(geolocate_ip "$_rip") || _rcc="??"
     _rasn=""
     if geoip_read_full "$_rip"; then
       _rasn="$_enrich_asn"
       [ -z "$_rprov" ] && [ -n "$_enrich_org" ] && _rprov="$_enrich_org"
     fi
-    _leak_resolvers="${_leak_resolvers}${_rip}|${_rprov}|${_rcc}|${_rasn}
+    _leak_resolvers="${_leak_resolvers}${_rip}|${_rprov}|${_rcc}|${_rasn}|${_rcc_cached}
 "
   done
   [ -z "$_leak_resolvers" ] && return 1
@@ -196,17 +200,21 @@ _dns_leak_bashws() {
   _leak_source="bash.ws"
   _leak_resolvers=""
 
-  local _rip _rcc _rasn _rprov
+  local _rip _rcc _rasn _rprov _rcc_cached
   for _rip in $_resolver_ips; do
     [ -z "$_rip" ] && continue
     _rprov=$(identify_dns_provider "$_rip") || _rprov=""
+    _rcc_cached=0
+    if is_cache_fresh "$(ipgeo_cache_file "$_rip")" "${IPGEO_CACHE_TTL:-86400}"; then
+      _rcc_cached=1
+    fi
     _rcc=$(geolocate_ip "$_rip") || _rcc="??"
     _rasn=""
     if geoip_read_full "$_rip"; then
       _rasn="$_enrich_asn"
       [ -z "$_rprov" ] && [ -n "$_enrich_org" ] && _rprov="$_enrich_org"
     fi
-    _leak_resolvers="${_leak_resolvers}${_rip}|${_rprov}|${_rcc}|${_rasn}
+    _leak_resolvers="${_leak_resolvers}${_rip}|${_rprov}|${_rcc}|${_rasn}|${_rcc_cached}
 "
   done
   [ -z "$_leak_resolvers" ] && return 1
@@ -253,17 +261,21 @@ _dns_leak_whoami() {
   _leak_source="whoami queries"
   _leak_resolvers=""
 
-  local _rip _rcc _rasn _rprov
+  local _rip _rcc _rasn _rprov _rcc_cached
   for _rip in $_ips; do
     [ -z "$_rip" ] && continue
     _rprov=$(identify_dns_provider "$_rip") || _rprov=""
+    _rcc_cached=0
+    if is_cache_fresh "$(ipgeo_cache_file "$_rip")" "${IPGEO_CACHE_TTL:-86400}"; then
+      _rcc_cached=1
+    fi
     _rcc=$(geolocate_ip "$_rip") || _rcc="??"
     _rasn=""
     if geoip_read_full "$_rip"; then
       _rasn="$_enrich_asn"
       [ -z "$_rprov" ] && [ -n "$_enrich_org" ] && _rprov="$_enrich_org"
     fi
-    _leak_resolvers="${_leak_resolvers}${_rip}|${_rprov}|${_rcc}|${_rasn}
+    _leak_resolvers="${_leak_resolvers}${_rip}|${_rprov}|${_rcc}|${_rasn}|${_rcc_cached}
 "
   done
   [ -z "$_leak_resolvers" ] && return 1
@@ -337,12 +349,12 @@ cmd_dns_leak() {
   # _is_expected: 1=known provider, 2=tunnel exit resolver, 0=leak
   local _resolver_count=0 _leak_count=0 _tunnel_count=0
   local _leak_ips="" _all_expected=1
-  local _rline _rip _rprov _rcc _rasn _is_expected
+  local _rline _rip _rprov _rcc _rasn _rcc_cached _is_expected
   local _json_resolvers=""
 
   # Collect results for display
   local _display_lines=""
-  while IFS='|' read -r _rip _rprov _rcc _rasn; do
+  while IFS='|' read -r _rip _rprov _rcc _rasn _rcc_cached; do
     [ -z "$_rip" ] && continue
     _resolver_count=$((_resolver_count + 1))
 
@@ -402,7 +414,7 @@ cmd_dns_leak() {
       fi
     fi
 
-    _display_lines="${_display_lines}${_rip}|${_rprov}|${_rcc}|${_rasn}|${_is_expected}
+    _display_lines="${_display_lines}${_rip}|${_rprov}|${_rcc}|${_rasn}|${_rcc_cached}|${_is_expected}
 "
 
     # JSON resolver entry
@@ -454,7 +466,7 @@ EOF
 
     tbl_header "Resolver IP:24" "CC:4" "ASN:10" "Provider:50" "Status"
 
-    printf '%s' "$_display_lines" | while IFS='|' read -r _rip _rprov _rcc _rasn _is_expected; do
+    printf '%s' "$_display_lines" | while IFS='|' read -r _rip _rprov _rcc _rasn _rcc_cached _is_expected; do
       [ -z "$_rip" ] && continue
       local _st="ok" _status_cell
       if [ "$_is_expected" = 0 ]; then
@@ -473,6 +485,7 @@ EOF
           *)           _status_cell="direct $(status_mark ok)" ;;
         esac
       fi
+      [ "$_rcc_cached" = 1 ] && _status_cell="${_status_cell} $(cache_mark)"
       tbl_row "$(tbl_cell 24 "$_rip" "$_st")" "${_rcc:-—}" "${_rasn:-—}" "$(tbl_cell 50 "${_rprov:-—}")" "$_status_cell"
     done
 

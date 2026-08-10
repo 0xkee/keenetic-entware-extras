@@ -1,5 +1,5 @@
 Package: net-check
-Version: 0.2.3
+Version: 0.2.4
 Architecture: all
 Maintainer: 0xkee
 Depends: keenetic-entware-extras, curl, bind-dig, iputils-ping

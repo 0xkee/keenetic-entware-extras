@@ -1,5 +1,5 @@
 # net-check: DNS check — zone resolution verification + ISP blocking detection.
-# Resolves all domains from check-targets.conf via system DNS (:53) and ISP DNS.
+# Resolves all domains from check-targets.conf via active resolver and ISP DNS.
 # Geolocates resolved IPs, auto-classifies zone/intl, detects ISP filtering.
 # Single table: one line per domain.
 #
@@ -34,9 +34,15 @@ identify_dns_provider() {
   return 1
 }
 
+# Active resolver args for dig (set by cmd_dns/_dns_check_single at runtime).
+# When SmartDNS detected: "@127.0.0.1 -p 6053"; empty = system resolver (:53).
+_DNS_RESOLVER_ARGS=""
+
 # Resolve domain to first A record.
-# Args: $1 - domain, $2 - DNS server (optional; omit for system resolver),
+# Args: $1 - domain, $2 - DNS server (optional; omit for active resolver),
 #        $3 - timeout (optional)
+# When $2 is omitted: uses SmartDNS directly if _DNS_RESOLVER_ARGS is set
+# (populated by cmd_dns/_dns_check_single), otherwise system resolver (:53).
 # stdout: IPv4 address or empty
 _resolve_a() {
   local domain="$1" server="${2:-}" timeout="${3:-$DNS_TIMEOUT}"
@@ -44,15 +50,16 @@ _resolve_a() {
     dig +short "$domain" @"$server" A \
       +time="$timeout" +tries=1 2>/dev/null
   else
-    dig +short "$domain" A \
+    # shellcheck disable=SC2086
+    dig +short "$domain" ${_DNS_RESOLVER_ARGS:-} A \
       +time="$timeout" +tries=1 2>/dev/null
   fi | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1
 }
 
-# Cached DNS resolution via system resolver.
+# Cached DNS resolution via active resolver (SmartDNS or system :53).
 # File cache: ${DATA_DIR}/dns-<domain>, TTL=60s.
 # Shared across sections (dns, compare, tls, cdn).
-# For non-system server queries: no cache (ISP DNS check needs fresh results).
+# For explicit server queries: no cache (ISP DNS check needs fresh results).
 # Args: $1 - domain
 # stdout: IPv4 address or empty
 # Side effect: creates ${_RUN_DIR}/dns-hit-<domain> on cache hit (for cache markers).
@@ -127,12 +134,20 @@ _load_check_domains() {
 cmd_dns() {
   require_cmd dig
 
-  # Detect resolver
-  local dns_source _dns_info
-  _dns_info=$(detect_dns_port 2>/dev/null) || _dns_info=""
-  case "$_dns_info" in
-    6053*|6153*) dns_source="SmartDNS (via :53)" ;;
-    *)           dns_source="system DNS (:53)" ;;
+  # Detect resolver — query SmartDNS directly if running (PREROUTING DNAT
+  # does not intercept local dig; querying :53 would hit ndnproxymain).
+  local dns_source _dns_info _dns_port
+  _dns_info=$(detect_dns_port main 2>/dev/null) || _dns_info=""
+  _dns_port="${_dns_info%% *}"
+  case "$_dns_port" in
+    6053|6153)
+      dns_source="SmartDNS (:${_dns_port})"
+      _DNS_RESOLVER_ARGS="@127.0.0.1 -p ${_dns_port}"
+      ;;
+    *)
+      dns_source="system DNS (:53)"
+      _DNS_RESOLVER_ARGS=""
+      ;;
   esac
 
   section_title "$_TITLE_DNS"
@@ -439,12 +454,19 @@ _dns_check_single() {
 
   require_cmd dig
 
-  # ── Detect resolver ──
-  local dns_source _dns_info
-  _dns_info=$(detect_dns_port 2>/dev/null) || _dns_info=""
-  case "$_dns_info" in
-    6053*|6153*) dns_source="SmartDNS (via :53)" ;;
-    *)           dns_source="system DNS (:53)" ;;
+  # ── Detect resolver — query SmartDNS directly if running ──
+  local dns_source _dns_info _dns_port
+  _dns_info=$(detect_dns_port main 2>/dev/null) || _dns_info=""
+  _dns_port="${_dns_info%% *}"
+  case "$_dns_port" in
+    6053|6153)
+      dns_source="SmartDNS (:${_dns_port})"
+      _DNS_RESOLVER_ARGS="@127.0.0.1 -p ${_dns_port}"
+      ;;
+    *)
+      dns_source="system DNS (:53)"
+      _DNS_RESOLVER_ARGS=""
+      ;;
   esac
 
   # ── Zone context for auto-classification ──
@@ -465,7 +487,7 @@ _dns_check_single() {
     fi
   fi
 
-  # ── Resolve via system DNS (cached) ──
+  # ── Resolve via active resolver (cached) ──
   local resolved_ip resolved_cc _cc_cached=0
   resolved_ip=$(_resolve_a_cached "$domain") || resolved_ip=""
   resolved_cc=""

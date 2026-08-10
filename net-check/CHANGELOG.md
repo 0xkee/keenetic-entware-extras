@@ -5,6 +5,15 @@ All notable changes to `net-check` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.2.4] - 2026-08-10
+
+### Fixed
+- **DNS queries now use SmartDNS directly** — `dig` on the router goes through
+  `ndnproxymain` (:53), not SmartDNS, because PREROUTING DNAT only intercepts
+  LAN clients. DNS/check commands now query SmartDNS on its actual port
+  (`@127.0.0.1 -p 6053`) when detected. Label changed from misleading
+  `"SmartDNS (via :53)"` to accurate `"SmartDNS (:6053)"`.
+
 ## [0.2.3] - 2026-08-10
 
 ### Changed

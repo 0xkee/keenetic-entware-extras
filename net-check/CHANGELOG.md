@@ -5,6 +5,19 @@ All notable changes to `net-check` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.2.3] - 2026-08-10
+
+### Changed
+- **DRY batch runner** — extracted duplicated "batched parallel fetch with
+  progress" pattern (~200 lines across 4 files) into `batch_run_parallel()`
+  helper in `output.sh`. Callbacks: `_compare_run_batch`, `_tls_run_batch`,
+  `_cdn_run_batch`, `_dns_run_batch`.
+- **DRY auto-width** — extracted duplicated first-column width calculation
+  (~5 lines × 3 files) into `auto_label_width()` helper in `output.sh`.
+- **Progress shows section label** — progress indicator now displays section
+  name: `HTTP: 12/36...`, `TLS: 12/36...`, `CDN: 5/18...`, `DNS: 12/36...`
+  (was generic `Fetching: N/M...`).
+
 ## [0.2.2] - 2026-08-10
 
 ### Changed

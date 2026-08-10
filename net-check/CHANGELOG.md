@@ -5,6 +5,11 @@ All notable changes to `net-check` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.1.3] - 2026-08-10
+
+### Fixed
+- `load_zone_context()`: detect standby tunnel interfaces from source-based routing tables for non-geo segment enumeration
+
 ## [0.1.2] - 2026-08-08
 
 ### Fixed

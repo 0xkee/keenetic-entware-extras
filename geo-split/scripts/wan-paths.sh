@@ -75,6 +75,23 @@ for _t in $_vpn_tables; do
   fi
 done
 
+# 2b) Standby tunnel interfaces from source-based routing rules (prio >= 1000).
+# Keenetic assigns "from <tunnel_ip> lookup <table>" for each tunnel's own traffic.
+# Standby tunnels only have default routes in these tables, not in fwmark tables.
+_src_tables=$(ip rule show 2>/dev/null | grep -v 'fwmark' | \
+  sed -n 's/.*from [0-9][0-9]*\.[0-9].*lookup \([0-9]*\).*/\1/p' | \
+  awk '$1 >= 10000' | sort -u)
+for _t in $_src_tables; do
+  _route_info=$(ip route show table "$_t" 2>/dev/null | awk '/^default/{for(i=1;i<=NF;i++){if($i=="dev")d=$(i+1);if($i=="via")v=$(i+1)};print d" "v;exit}')
+  _tdev="${_route_info%% *}"
+  _tvia="${_route_info#* }"
+  [ "$_tvia" = "$_tdev" ] && _tvia=""
+  [ -z "$_tdev" ] && continue
+  if is_tunnel_iface "$_tdev"; then
+    _add_path "$_tdev" "${_tvia:-}" "tunnel"
+  fi
+done
+
 # 3) Main default route (if not already added)
 if [ -n "${dr_dev:-}" ]; then
   if ! is_tunnel_iface "$dr_dev"; then

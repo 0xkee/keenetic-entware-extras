@@ -258,6 +258,20 @@ load_zone_context() {
     _ngs_seen="${_ngs_seen}|${_ngs_dev}|"
     _NON_GEO_SEGMENTS="${_NON_GEO_SEGMENTS:+${_NON_GEO_SEGMENTS} }${_ngs_dev}"
   done
+  # Also scan source-based routing rules (standby tunnels: prio >= 1000).
+  # These tunnels are UP but only have default routes in their own source tables.
+  local _src_table _src_dev
+  for _src_table in $(ip rule show 2>/dev/null | grep -v 'fwmark' | \
+      sed -n 's/.*from [0-9][0-9]*\.[0-9].*lookup \([0-9]*\).*/\1/p' | \
+      awk '$1 >= 10000' | sort -u); do
+    _src_dev=$(ip route show table "$_src_table" 2>/dev/null \
+      | awk '/^default/{for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); exit}}')
+    [ -z "$_src_dev" ] && continue
+    is_tunnel_iface "$_src_dev" || continue
+    case "$_ngs_seen" in *"|${_src_dev}|"*) continue ;; esac
+    _ngs_seen="${_ngs_seen}|${_src_dev}|"
+    _NON_GEO_SEGMENTS="${_NON_GEO_SEGMENTS:+${_NON_GEO_SEGMENTS} }${_src_dev}"
+  done
   _NON_GEO_COUNT=$(printf '%s' "$_NON_GEO_SEGMENTS" | wc -w | tr -d ' ')
   [ "$_NON_GEO_COUNT" -eq 1 ] && _NON_GEO_SINGLE="$_NON_GEO_SEGMENTS"
 

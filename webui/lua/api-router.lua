@@ -324,6 +324,7 @@ local NDM_TYPE_TO_PREFIX = {
     Wireguard   = "nwg",
     AmneziaWG   = "awg",
     UsbLte      = "lte_br",
+    UsbQmi      = "qmi_br",   -- QMI-based LTE modems (Keenetic Hero 4G)
     OpenVPN     = "ovpn_br",
     PPPoE       = "ppp",
     PPTP        = "ppp",
@@ -362,7 +363,27 @@ local function get_iface_labels()
                     if cur_link == "up" then
                         local parent_idx = cur_id:match("^%a+(%d+)/")
                         if parent_idx then
-                            labels[NDM_TYPE_TO_PREFIX[cur_type] .. parent_idx] = lbl
+                            local prefix = NDM_TYPE_TO_PREFIX[cur_type]
+                            local dev_name = prefix .. parent_idx
+                            -- WifiStation: on mipsel, actual WISP device is apcli, not wwan.
+                            -- Detect by checking if wwan{N} is a slave (master X) of another device.
+                            if cur_type == "WifiStation" then
+                                local link_info = run_cmd("ip -o link show " .. dev_name .. " 2>/dev/null")
+                                if link_info and link_info:find("master ", 1, true) then
+                                    -- wwan0 is a QMI modem slave — WISP is actually apcli{idx}
+                                    local apcli_name = "apcli" .. parent_idx
+                                    local apcli_info = run_cmd("ip -o link show " .. apcli_name .. " 2>/dev/null")
+                                    if apcli_info and apcli_info:find("UP", 1, true) then
+                                        labels[apcli_name] = lbl
+                                    else
+                                        labels[dev_name] = lbl  -- fallback: normal assignment
+                                    end
+                                else
+                                    labels[dev_name] = lbl  -- aarch64: wwan IS the WISP device
+                                end
+                            else
+                                labels[dev_name] = lbl
+                            end
                         end
                     end
                 elseif cur_addr then
@@ -408,7 +429,25 @@ local function get_iface_labels()
             if cur_link == "up" then
                 local parent_idx = cur_id:match("^%a+(%d+)/")
                 if parent_idx then
-                    labels[NDM_TYPE_TO_PREFIX[cur_type] .. parent_idx] = lbl
+                    local prefix = NDM_TYPE_TO_PREFIX[cur_type]
+                    local dev_name = prefix .. parent_idx
+                    -- WifiStation: on mipsel, actual WISP device is apcli, not wwan.
+                    if cur_type == "WifiStation" then
+                        local link_info = run_cmd("ip -o link show " .. dev_name .. " 2>/dev/null")
+                        if link_info and link_info:find("master ", 1, true) then
+                            local apcli_name = "apcli" .. parent_idx
+                            local apcli_info = run_cmd("ip -o link show " .. apcli_name .. " 2>/dev/null")
+                            if apcli_info and apcli_info:find("UP", 1, true) then
+                                labels[apcli_name] = lbl
+                            else
+                                labels[dev_name] = lbl
+                            end
+                        else
+                            labels[dev_name] = lbl
+                        end
+                    else
+                        labels[dev_name] = lbl
+                    end
                 end
             end
         elseif cur_addr then
@@ -452,7 +491,7 @@ local function system_interfaces()
                 name:match("^ethoip") or name:match("^dummy") or
                 name:match("^ezcfg") or name:match("^ifb") or
                 name:match("^ra%d") or name:match("^rai%d") or
-                name:match("^rax%d") or name:match("^apcli") or
+                name:match("^rax%d") or
                 name:match("^xfrm") or
                 name:match("%.%d+$")          -- VLAN sub-interfaces (eth2.1, ra7.1)
             )
@@ -461,7 +500,8 @@ local function system_interfaces()
             if not excluded and not labels[name] and (
                 name:match("^eth%d+$") or
                 name:match("^usb%d") or
-                name:match("^wwan%d")
+                name:match("^wwan%d") or
+                name:match("^apcli%d")   -- WISP radio: show only if labeled
             ) then
                 excluded = true
             end

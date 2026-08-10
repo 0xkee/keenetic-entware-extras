@@ -5,6 +5,13 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.37.1] - 2026-08-10
+
+### Fixed
+- Fix WISP label on mipsel routers: `apcli0` now gets WISP description instead of `wwan0` (which is the LTE modem slave device)
+- Fix `apcli` interfaces excluded from `/api/system/interfaces` — now included when NDM label is available
+- Add `UsbQmi = "qmi_br"` to NDM type mapping (was relying on IP-address fallback, fragile on cold boot)
+
 ## [0.37.0] - 2026-08-04
 
 ### Added

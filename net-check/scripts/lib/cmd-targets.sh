@@ -302,50 +302,17 @@ $(_cat_config check-targets)
 EOF
   fi
 
-  # Auto-width first column (min 20, max 30)
-  local _label_w=20
-  for _h in $_tgt_hosts; do
-    [ "${#_h}" -gt "$_label_w" ] && _label_w="${#_h}"
-  done
-  _label_w=$((_label_w + 2))
-  [ "$_label_w" -gt 30 ] && _label_w=30
+  # Auto-width first column
+  local _label_w
+  _label_w=$(auto_label_width "$_tgt_hosts")
   cmp_header "Resource" "$ifaces" "" "$_label_w"
 
-  # ── Phase 2: Batched parallel curls (3 targets at a time to avoid bandwidth contention) ──
-  local _batch_n=0 _batch_hosts="" _progress_done=0
-  for host in $_tgt_hosts; do
-    _batch_hosts="${_batch_hosts} ${host}"
-    _batch_n=$((_batch_n + 1))
-    if [ "$_batch_n" -ge "$PARALLEL_BATCH_SIZE" ]; then
-      (
-      trap 'kill 0 2>/dev/null; exit 130' INT TERM
-      for _bh in $_batch_hosts; do
-        _tcf="${_RUN_DIR}/tgtcfg-${_bh}"
-        [ -f "$_tcf" ] || continue
-        _turl=$(cut -f1 "$_tcf"); _tnb=$(cut -f3 "$_tcf")
-        for iface in $ifaces; do
-          ( _ce=0
-            if [ "$_tnb" = 1 ]; then _bf="${_RUN_DIR}/body-${_bh}-${iface}"; _co=$(check_target_via_iface "$_turl" "$iface" "$_bf") || _ce=$?
-            else _co=$(check_target_via_iface "$_turl" "$iface") || _ce=$?; _bf=""; fi
-            printf '%s\n%s\n%s' "$_ce" "$_bf" "$_co" > "${_RUN_DIR}/par-${_bh}-${iface}"
-          ) &
-        done
-      done
-      wait
-      )
-      # Progress counter (text mode, tty only)
-      _progress_done=$((_progress_done + _batch_n))
-      if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
-        printf '\r  Fetching: %d/%d...' "$_progress_done" "$_total_targets" >&2
-      fi
-      _batch_n=0; _batch_hosts=""
-    fi
-  done
-  # Flush remaining batch
-  if [ -n "$_batch_hosts" ]; then
-    (
-    trap 'kill 0 2>/dev/null; exit 130' INT TERM
-    for _bh in $_batch_hosts; do
+  # ── Phase 2: Batched parallel curls ──
+  # shellcheck disable=SC2329
+  _compare_run_batch() {
+    local _hosts="$1"
+    local _bh _tcf _turl _tnb
+    for _bh in $_hosts; do
       _tcf="${_RUN_DIR}/tgtcfg-${_bh}"
       [ -f "$_tcf" ] || continue
       _turl=$(cut -f1 "$_tcf"); _tnb=$(cut -f3 "$_tcf")
@@ -357,19 +324,8 @@ EOF
         ) &
       done
     done
-    wait
-    )
-    # Progress counter (text mode, tty only)
-    _progress_done=$((_progress_done + _batch_n))
-    if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
-      printf '\r  Fetching: %d/%d...' "$_progress_done" "$_total_targets" >&2
-    fi
-  fi
-
-  # Clear progress line
-  if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
-    printf '\r\033[2K' >&2
-  fi
+  }
+  batch_run_parallel "HTTP" "$PARALLEL_BATCH_SIZE" "$_tgt_hosts" _compare_run_batch
 
   # ── Phase 3: Collect results and render table (in original target order) ──
   tbl_group_reset

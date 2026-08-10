@@ -383,60 +383,18 @@ $(_cat_config check-targets)
 EOF
   fi
 
-  # Auto-width first column (min 20, max 30)
-  local _label_w=20
-  for _h in $_tls_hosts; do
-    [ "${#_h}" -gt "$_label_w" ] && _label_w="${#_h}"
-  done
-  _label_w=$((_label_w + 2))
-  [ "$_label_w" -gt 30 ] && _label_w=30
+  # Auto-width first column
+  local _label_w
+  _label_w=$(auto_label_width "$_tls_hosts")
   cmp_header "Host" "$ifaces" "" "$_label_w"
   tbl_group_reset
 
-  # ── Phase 2: Batched parallel TLS probes (PARALLEL_BATCH_SIZE hosts at a time) ──
-  local _tls_bn=0 _tls_batch="" _progress_done=0
-  for host in $_tls_hosts; do
-    _tls_batch="${_tls_batch} ${host}"
-    _tls_bn=$((_tls_bn + 1))
-    if [ "$_tls_bn" -ge "$PARALLEL_BATCH_SIZE" ]; then
-      (
-      trap 'kill 0 2>/dev/null; exit 130' INT TERM
-      for _bh in $_tls_batch; do
-        for iface in $ifaces; do
-          (
-            _resolved=""
-            if [ "$has_dig" = 1 ]; then
-              if ! is_tunnel_iface "$iface"; then
-                if [ -n "$_cached_isp_dns" ]; then
-                  _resolved=$(_resolve_a "$_bh" "$_cached_isp_dns") || _resolved=""
-                fi
-              fi
-              [ -z "$_resolved" ] && { _resolved=$(_resolve_a "$_bh") || _resolved=""; }
-            fi
-            if [ -n "$_resolved" ]; then _tgt="${_resolved}:443"
-            else _resolved="(system)"; _tgt="${_bh}:443"; fi
-
-            _probe_out="${_RUN_DIR}/tls-par-${_bh}-${iface}"
-            _tls_probe "$_bh" "$_tgt" "$_probe_out" "$iface"
-            printf '%s\n' "$_resolved" >> "$_probe_out"
-          ) &
-        done
-      done
-      wait
-      )
-      # Progress counter (text mode, tty only)
-      _progress_done=$((_progress_done + _tls_bn))
-      if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
-        printf '\r  Fetching: %d/%d...' "$_progress_done" "$_tls_total" >&2
-      fi
-      _tls_bn=0; _tls_batch=""
-    fi
-  done
-  # Flush remaining batch
-  if [ -n "$_tls_batch" ]; then
-    (
-    trap 'kill 0 2>/dev/null; exit 130' INT TERM
-    for _bh in $_tls_batch; do
+  # ── Phase 2: Batched parallel TLS probes ──
+  # shellcheck disable=SC2329
+  _tls_run_batch() {
+    local _hosts="$1"
+    local _bh
+    for _bh in $_hosts; do
       for iface in $ifaces; do
         (
           _resolved=""
@@ -457,19 +415,8 @@ EOF
         ) &
       done
     done
-    wait
-    )
-    # Progress counter (text mode, tty only)
-    _progress_done=$((_progress_done + _tls_bn))
-    if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
-      printf '\r  Fetching: %d/%d...' "$_progress_done" "$_tls_total" >&2
-    fi
-  fi
-
-  # Clear progress line
-  if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
-    printf '\r\033[2K' >&2
-  fi
+  }
+  batch_run_parallel "TLS" "$PARALLEL_BATCH_SIZE" "$_tls_hosts" _tls_run_batch
 
   # ── Phase 3: Collect results and render table (in original host order) ──
   for host in $_tls_hosts; do

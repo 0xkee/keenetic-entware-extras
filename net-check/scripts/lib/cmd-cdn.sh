@@ -3,7 +3,7 @@
 # Dependencies: lib/output.sh (emit_error, color_status, status_mark, is_quiet),
 #   lib/wan.sh (get_wan_interfaces, iface_type, geo_cached_ip, geo_cached_cc),
 #   lib/geoip.sh (geolocate_ip),
-#   lib/http-core.sh (http_probe, format_size_bytes, classify_failure, short_reason),
+#   lib/http-core.sh (http_probe, format_size_bytes, classify_failure, short_reason, long_reason),
 #   lib/common.sh (json_kv, json_kv_bool, require_cmd)
 # Globals used: OUTPUT_JSON, VERBOSITY, _EXIT_CODE,
 #   CDN_ECS_RESOLVER, DNS_TIMEOUT, CONNECT_TIMEOUT, HTTP_TIMEOUT,
@@ -13,29 +13,6 @@
 # shellcheck disable=SC3043
 
 # ─── CDN Helpers ──────────────────────────────────────────────────────────────
-
-# Expand short CDN http tag back to descriptive reason for verdict display.
-# Mirrors classify_failure() descriptions from http-core.sh.
-# Args: $1 - short tag or numeric HTTP code
-# stdout: human-readable reason
-_cdn_long_reason() {
-  case "$1" in
-    TMOUT) printf 'Timeout / Filtered or shaped' ;;
-    DPI)   printf 'DPI/SNI anomaly' ;;
-    TLS)   printf 'TLS anomaly' ;;
-    MITM)  printf 'MITM detected' ;;
-    GEO)   printf 'Geo-restricted' ;;
-    FILTR) printf 'Filtered' ;;
-    REDIR) printf 'Redirect' ;;
-    REFSD) printf 'Connection refused' ;;
-    RST)   printf 'TCP RST' ;;
-    ERR)   printf 'Connection error' ;;
-    ANOML) printf 'Content anomaly' ;;
-    MISMT) printf 'Content mismatch' ;;
-    FAIL)  printf 'Failed' ;;
-    *)     printf '%s' "$1" ;;
-  esac
-}
 
 # ─── CDN Probe Helper ────────────────────────────────────────────────────────
 
@@ -525,7 +502,7 @@ EOF
         [0-9][0-9][0-9]|REDIR)
           _has_warn=1
           local _long_w
-          _long_w=$(_cdn_long_reason "$http_code")
+          _long_w=$(long_reason "$http_code")
           case "$_warn_reasons" in
             *"$_long_w"*) ;;
             "") _warn_reasons="$_long_w" ;;
@@ -536,7 +513,7 @@ EOF
         *)
           _has_error=1
           local _long_e
-          _long_e=$(_cdn_long_reason "$http_code")
+          _long_e=$(long_reason "$http_code")
           case "$_error_reasons" in
             *"$_long_e"*) ;;
             "") _error_reasons="$_long_e" ;;

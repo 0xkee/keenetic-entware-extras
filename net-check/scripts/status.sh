@@ -21,6 +21,7 @@ _CONFIG_DIR="${SCRIPT_DIR%/*}/config"
 status_setup_colors "$(_status_parse_color_arg "$@")"
 
 STATUS_OK=0
+_FAIL_REASONS=""
 OUTPUT_JSON=0
 
 # Parse args
@@ -61,7 +62,28 @@ check_ping() {
       _ck_ping_results="${_ck_ping_results}${iface}:—
 "
       STATUS_OK=1
+      _FAIL_REASONS="${_FAIL_REASONS:+${_FAIL_REASONS}, }${iface} unreachable"
     fi
+  done
+}
+
+# Sets: _ck_geo_info (newline-separated "iface|ext_ip|cc" lines)
+check_geo_info() {
+  _ck_geo_info=""
+  local iface _json _ip _cc
+  for iface in $_ck_ifaces; do
+    _json=""
+    _json=$(geo_read_cache "$iface" 2>/dev/null) || \
+      _json=$(geo_read_stale "$iface" 2>/dev/null) || _json=""
+    _ip="—"
+    _cc="—"
+    if [ -n "$_json" ]; then
+      parse_geo_json "$_json"
+      [ -n "$_geo_ip" ] && _ip="$_geo_ip"
+      [ -n "$_geo_country" ] && _cc="$_geo_country"
+    fi
+    _ck_geo_info="${_ck_geo_info}${iface}|${_ip}|${_cc}
+"
   done
 }
 
@@ -110,7 +132,8 @@ check_cached_results() {
 }
 
 # Quick DNS leak probe: query whoami.akamai.net to see which resolver is used.
-# Sets: _ck_dns_leak ("resolver: <IP>"|"skipped"|"query failed")
+# Enriches with provider name (from dns-providers.conf) and CC (from ipgeo cache).
+# Sets: _ck_dns_leak ("resolver: <IP>"|"<IP> (<CC>, <provider>)"|"skipped"|"query failed")
 check_dns_leak() {
   _ck_dns_leak="skipped (no dig)"
   command -v dig >/dev/null 2>&1 || return 0
@@ -119,9 +142,105 @@ check_dns_leak() {
   resolver_ip=$(dig +short +time=2 +tries=1 "$DNS_LEAK_CHECK_DOMAIN" 2>/dev/null | head -1) || resolver_ip=""
 
   if [ -n "$resolver_ip" ]; then
-    _ck_dns_leak="resolver: ${resolver_ip}"
+    local _provider="" _prefix _name
+    if [ -f "${_CONFIG_DIR}/dns-providers.conf" ]; then
+      while IFS='|' read -r _prefix _name; do
+        case "$_prefix" in \#*|""|AS*) continue ;; esac
+        # shellcheck disable=SC2254
+        case "$resolver_ip" in $_prefix) _provider="$_name"; break ;; esac
+      done < "${_CONFIG_DIR}/dns-providers.conf"
+    fi
+    # Try ipgeo cache for CC
+    local _leak_cc=""
+    local _ipgeo_file="${DATA_DIR}/ipgeo-${resolver_ip}.json"
+    if [ -f "$_ipgeo_file" ]; then
+      _leak_cc=$(sed -n 's/.*"cc"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_ipgeo_file")
+    fi
+    # Build display string
+    local _extra=""
+    [ -n "$_leak_cc" ] && _extra="$_leak_cc"
+    [ -n "$_provider" ] && _extra="${_extra:+${_extra}, }${_provider}"
+    if [ -n "$_extra" ]; then
+      _ck_dns_leak="${resolver_ip} (${_extra})"
+    else
+      _ck_dns_leak="resolver: ${resolver_ip}"
+    fi
   else
     _ck_dns_leak="query failed"
+  fi
+}
+
+# IPv6 leak check: attempt IPv6 connection to detect leaks.
+# Sets: _ck_ipv6_leak ("none"|"<ipv6_addr>"|"skipped")
+check_ipv6_leak() {
+  _ck_ipv6_leak="skipped"
+  local _v6_addr
+  _v6_addr=$(curl -6 -sS --max-time 2 -H "User-Agent: $CURL_UA" "$IPV6_CHECK_URL" 2>/dev/null) || _v6_addr=""
+  if [ -n "$_v6_addr" ]; then
+    _ck_ipv6_leak="$_v6_addr"
+    STATUS_OK=1
+    _FAIL_REASONS="${_FAIL_REASONS:+${_FAIL_REASONS}, }IPv6 leak"
+  else
+    _ck_ipv6_leak="none"
+  fi
+}
+
+# Detect SmartDNS and geo-split status for context section.
+# Sets: _ck_smartdns_status, _ck_geosplit_status
+check_context() {
+  _ck_smartdns_status=""
+  _ck_geosplit_status=""
+
+  # SmartDNS: check if running
+  local _sd_pid=""
+  _sd_pid=$(pidof smartdns 2>/dev/null) || _sd_pid=""
+  if [ -n "$_sd_pid" ]; then
+    local _sd_port="6053"
+    # Try to detect actual port from config
+    local _sd_conf="/opt/etc/smartdns/smartdns.conf"
+    if [ -f "$_sd_conf" ]; then
+      local _p
+      _p=$(grep -m1 '^bind.*:' "$_sd_conf" 2>/dev/null | sed -n 's/.*:\([0-9]*\).*/\1/p') || _p=""
+      [ -n "$_p" ] && _sd_port="$_p"
+    fi
+    _ck_smartdns_status="running, port ${_sd_port}"
+  fi
+
+  # Geo-split: check route tables
+  local _gs_conf="$SCRIPT_DIR/../../geo-split/config/defaults.conf"
+  if [ -f "$_gs_conf" ]; then
+    local _sub_table _dom_table _zone _sub_count _dom_count _total
+    _sub_table=$(grep '^SUBNET_ROUTE_TABLE=' "$_gs_conf" | tail -1 | sed "s/^SUBNET_ROUTE_TABLE=//;s/[\"']//g") || _sub_table=""
+    _dom_table=$(grep '^DOMAIN_ROUTE_TABLE=' "$_gs_conf" | tail -1 | sed "s/^DOMAIN_ROUTE_TABLE=//;s/[\"']//g") || _dom_table=""
+    # Override from user config
+    local _gs_user="$SCRIPT_DIR/../../geo-split/config/config.conf"
+    if [ -f "$_gs_user" ]; then
+      local _ov
+      _ov=$(grep '^SUBNET_ROUTE_TABLE=' "$_gs_user" 2>/dev/null | tail -1 | sed "s/^SUBNET_ROUTE_TABLE=//;s/[\"']//g") || true
+      [ -n "$_ov" ] && _sub_table="$_ov"
+      _ov=$(grep '^DOMAIN_ROUTE_TABLE=' "$_gs_user" 2>/dev/null | tail -1 | sed "s/^DOMAIN_ROUTE_TABLE=//;s/[\"']//g") || true
+      [ -n "$_ov" ] && _dom_table="$_ov"
+    fi
+    _zone=$(grep '^GEO_ZONE=' "$_gs_conf" | tail -1 | sed "s/^GEO_ZONE=//;s/[\"']//g") || _zone=""
+    if [ -f "$_gs_user" ]; then
+      local _zov
+      _zov=$(grep '^GEO_ZONE=' "$_gs_user" 2>/dev/null | tail -1 | sed "s/^GEO_ZONE=//;s/[\"']//g") || true
+      [ -n "$_zov" ] && _zone="$_zov"
+    fi
+    _sub_count=0; _dom_count=0
+    [ -n "$_sub_table" ] && _sub_count=$(ip route show table "$_sub_table" 2>/dev/null | wc -l) || true
+    [ -n "$_dom_table" ] && _dom_count=$(ip route show table "$_dom_table" 2>/dev/null | wc -l) || true
+    _total=$((_sub_count + _dom_count))
+    if [ "$_total" -gt 0 ]; then
+      # Format count: 12345 → "12K"
+      local _display
+      if [ "$_total" -ge 1000 ]; then
+        _display="$((_total / 1000))K"
+      else
+        _display="$_total"
+      fi
+      _ck_geosplit_status="zone ${_zone:-?}, ${_display} routes"
+    fi
   fi
 }
 
@@ -152,10 +271,30 @@ cache_failures_for_iface() {
     sed 's/|\([^|]*\)$/ → \1/; s/|.*//' | head -5
 }
 
+# Get detailed interface type label.
+# Args: $1 - interface name
+# stdout: "isp", "wireguard", "openvpn", "gre", "l2tp", "pptp", "sstp", "ipsec", "tunnel"
+iface_type_label() {
+  case "$1" in
+    nwg*|awg*|wg*)       printf 'wireguard' ;;
+    ovpn*|tun[0-9]*)     printf 'openvpn' ;;
+    gre*|vti*)           printf 'gre' ;;
+    l2tp*)               printf 'l2tp' ;;
+    pptp*)               printf 'pptp' ;;
+    sstp*)               printf 'sstp' ;;
+    ipsec*|xfrm*)        printf 'ipsec' ;;
+    tap*|sit*|ip6tnl*)   printf 'tunnel' ;;
+    *)                    printf 'isp' ;;
+  esac
+}
+
 show_text() {
   # Header line matching kee-status.sh pattern
   local _status_word="✓ Alive"
-  [ "$STATUS_OK" -ne 0 ] && _status_word="✗ Fail"
+  if [ "$STATUS_OK" -ne 0 ]; then
+    _status_word="✗ Fail"
+    [ -n "$_FAIL_REASONS" ] && _status_word="✗ Fail (${_FAIL_REASONS})"
+  fi
 
   _text_buf="net-check status: ${_status_word}
 "
@@ -168,6 +307,7 @@ show_text() {
   else
     local iface ping_line latency itype
     local ok_count total path_status path_value counts
+    local ext_ip ext_cc geo_line latency_display
 
     for iface in $_ck_ifaces; do
       # Get ping for this iface
@@ -177,23 +317,34 @@ show_text() {
         latency="${ping_line#*:}"
       fi
 
-      itype="isp"
-      is_tunnel_iface "$iface" && itype="tunnel"
+      itype=$(iface_type_label "$iface")
 
-      # Build value string: "tunnel, ping 153ms | 7/9"
-      if [ "$latency" = "—" ]; then
-        path_value="${itype}, ping —"
-        path_status="fail"
-      else
-        path_value="${itype}, ping ${latency}ms"
-        path_status="ok"
+      # Get ext IP + CC from geo info
+      ext_ip="—"
+      ext_cc="—"
+      geo_line=$(printf '%s' "$_ck_geo_info" | grep "^${iface}|" | head -1)
+      if [ -n "$geo_line" ]; then
+        ext_ip=$(printf '%s' "$geo_line" | cut -d'|' -f2)
+        ext_cc=$(printf '%s' "$geo_line" | cut -d'|' -f3)
       fi
 
-      # Append cached results: | ok/total (or ?/? when no cache)
+      # Build formatted path value with printf alignment
+      if [ "$latency" = "—" ]; then
+        latency_display="—"
+        path_status="fail"
+      else
+        latency_display="${latency}ms"
+        path_status="ok"
+      fi
+      path_value=$(printf '%-10s %-16s %-3s ping %-6s' "$itype" "$ext_ip" "$ext_cc" "$latency_display")
+
+      # Append cached results: N/M targets (only when cache available)
       counts=$(cache_counts_for_iface "$iface")
       ok_count="${counts% *}"
       total="${counts#* }"
-      path_value="${path_value} | ${ok_count}/${total}"
+      if [ "$ok_count" != "?" ] && [ "$total" != "?" ]; then
+        path_value="${path_value} ${ok_count}/${total} targets"
+      fi
 
       # Determine mark: ✓ all ok, ⚠ partial, ✗ none/ping fail
       if [ "$ok_count" != "?" ] && [ "$total" != "?" ]; then
@@ -220,20 +371,36 @@ show_text() {
     done
   fi
 
+  # --- Context section (only if any context available) ---
+  if [ -n "$_ck_smartdns_status" ] || [ -n "$_ck_geosplit_status" ]; then
+    status_blank
+    status_section "Context"
+    if [ -n "$_ck_smartdns_status" ]; then
+      status_line "SmartDNS" "$_ck_smartdns_status" "ok"
+    fi
+    if [ -n "$_ck_geosplit_status" ]; then
+      status_line "Geo-split" "$_ck_geosplit_status" "ok"
+    fi
+  fi
+
   # --- System section ---
   status_blank
   status_section "System"
 
   case "$_ck_dns_leak" in
-    resolver:*) status_line "DNS leak" "$_ck_dns_leak" "ok" ;;
     query*)     status_line "DNS leak" "$_ck_dns_leak" "fail" ;;
-    *)          status_line "DNS leak" "$_ck_dns_leak" ;;
+    skipped*)   status_line "DNS leak" "$_ck_dns_leak" ;;
+    *)          status_line "DNS leak" "$_ck_dns_leak" "ok" ;;
+  esac
+
+  case "$_ck_ipv6_leak" in
+    none)    status_line "IPv6 leak" "none" "ok" ;;
+    skipped) status_line "IPv6 leak" "skipped" ;;
+    *)       status_line "IPv6 leak" "$_ck_ipv6_leak" "fail" ;;
   esac
 
   if [ -n "$_ck_cache_age" ]; then
     status_line "Last check" "$(format_age "$_ck_cache_age") ago"
-  else
-    status_line "Last check" "never"
   fi
 
   status_show_version
@@ -251,10 +418,12 @@ show_json() {
   fi
 
   status_detail "dns_leak" "$_ck_dns_leak"
+  status_detail "ipv6_leak" "$_ck_ipv6_leak"
 
   # Paths array
   local json_paths="" first_path=1
   local iface ping_line latency itype counts ok_count total
+  local ext_ip ext_cc geo_line
   for iface in $_ck_ifaces; do
     latency="0"
     ping_line=$(printf '%s' "$_ck_ping_results" | grep "^${iface}:" | head -1)
@@ -263,8 +432,18 @@ show_json() {
       [ "$raw_lat" != "—" ] && latency="$raw_lat"
     fi
 
-    itype="isp"
-    is_tunnel_iface "$iface" && itype="tunnel"
+    itype=$(iface_type_label "$iface")
+
+    # Get ext IP + CC from geo info
+    ext_ip=""
+    ext_cc=""
+    geo_line=$(printf '%s' "$_ck_geo_info" | grep "^${iface}|" | head -1)
+    if [ -n "$geo_line" ]; then
+      ext_ip=$(printf '%s' "$geo_line" | cut -d'|' -f2)
+      ext_cc=$(printf '%s' "$geo_line" | cut -d'|' -f3)
+      [ "$ext_ip" = "—" ] && ext_ip=""
+      [ "$ext_cc" = "—" ] && ext_cc=""
+    fi
 
     counts=$(cache_counts_for_iface "$iface")
     ok_count="${counts% *}"
@@ -273,9 +452,11 @@ show_json() {
     [ "$total" = "?" ] && total="0"
 
     local path_json
-    path_json=$(printf '{%s,%s,%s,%s,%s}' \
+    path_json=$(printf '{%s,%s,%s,%s,%s,%s,%s}' \
       "$(json_kv "dev" "$iface")" \
-      "$(json_kv "type" "$itype")" \
+      "$(json_kv "iface_type" "$itype")" \
+      "$(json_kv "ext_ip" "$ext_ip")" \
+      "$(json_kv "cc" "$ext_cc")" \
       "$(json_kv_num "ping_ms" "$latency")" \
       "$(json_kv_num "ok" "$ok_count")" \
       "$(json_kv_num "total" "$total")")
@@ -301,10 +482,13 @@ show_json() {
 check_version
 check_interfaces
 check_ping
+check_geo_info
 check_cache
 flatten_cache
 check_cached_results
 check_dns_leak
+check_ipv6_leak
+check_context
 
 if [ "$OUTPUT_JSON" = 1 ]; then
   show_json

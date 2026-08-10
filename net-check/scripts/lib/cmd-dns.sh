@@ -195,7 +195,14 @@ EOF
     printf '\n'
   fi
 
-  tbl_header "Domain:22" "Resolved IP:18" "CC:4" "Type:8" "Status"
+  # Auto-width Domain column (min 22, max 32)
+  local _domain_w=22
+  for _d in $all_domains; do
+    [ "${#_d}" -gt "$_domain_w" ] && _domain_w="${#_d}"
+  done
+  _domain_w=$((_domain_w + 2))
+  [ "$_domain_w" -gt 32 ] && _domain_w=32
+  tbl_header "Domain:${_domain_w}" "Resolved IP:24" "CC:4" "Type:8" "Status"
   tbl_group_reset
 
   local json_results="" json_first=1
@@ -203,8 +210,12 @@ EOF
   local _zone_ok=0 _isp_filtered=0
   local domain
 
+  # Count total for progress display
+  local _dns_host_total=0
+  for _d in $all_domains; do _dns_host_total=$((_dns_host_total + 1)); done
+
   # ── Batched parallel DNS probes (PARALLEL_BATCH_SIZE domains at a time) ──
-  local _dns_bn=0 _dns_batch=""
+  local _dns_bn=0 _dns_batch="" _progress_done=0
   for domain in $all_domains; do
     _dns_batch="${_dns_batch} ${domain}"
     _dns_bn=$((_dns_bn + 1))
@@ -229,6 +240,11 @@ EOF
       done
       wait
       )
+      # Progress counter (text mode, tty only)
+      _progress_done=$((_progress_done + _dns_bn))
+      if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
+        printf '\r  Fetching: %d/%d...' "$_progress_done" "$_dns_host_total" >&2
+      fi
       _dns_bn=0; _dns_batch=""
     fi
   done
@@ -252,6 +268,16 @@ EOF
     done
     wait
     )
+    # Progress counter (text mode, tty only)
+    _progress_done=$((_progress_done + _dns_bn))
+    if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
+      printf '\r  Fetching: %d/%d...' "$_progress_done" "$_dns_host_total" >&2
+    fi
+  fi
+
+  # Clear progress line
+  if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
+    printf '\r\033[2K' >&2
   fi
 
   # ── Collect parallel results (in domain order for stable output) ──
@@ -373,9 +399,9 @@ EOF
         _dns_cm=" $(cache_mark)"
       fi
       tbl_row "$domain" \
-        "$(tbl_cell 18 "$resolved_ip" "$status_val")" \
+        "$(tbl_cell 24 "$resolved_ip" "$status_val")" \
         "$(tbl_cell 4 "$resolved_cc" "$status_val")" \
-        "$dns_type" \
+        "$(tbl_cell 8 "$dns_type")" \
         "$(status_mark "$status_val") ${status_label}${_dns_cm}"
     fi
   done
@@ -581,7 +607,7 @@ _dns_check_single() {
       fi
       printf '\n'
 
-      tbl_header "Domain:22" "Resolved IP:18" "CC:4" "Type:8" "Status"
+      tbl_header "Domain:22" "Resolved IP:24" "CC:4" "Type:8" "Status"
 
       local _dns_cm=""
       if [ -f "${_RUN_DIR:-/tmp}/dns-hit-${domain}" ]; then
@@ -591,9 +617,9 @@ _dns_check_single() {
         _dns_cm=" $(cache_mark)"
       fi
       tbl_row "$domain" \
-        "$(tbl_cell 18 "$resolved_ip" "$status_val")" \
+        "$(tbl_cell 24 "$resolved_ip" "$status_val")" \
         "$(tbl_cell 4 "$resolved_cc" "$status_val")" \
-        "$dns_type" \
+        "$(tbl_cell 8 "$dns_type")" \
         "$(status_mark "$status_val") ${status_label}${_dns_cm}"
 
       # ISP filtering summary

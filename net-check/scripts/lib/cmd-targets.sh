@@ -257,7 +257,6 @@ cmd_compare() {
   if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
     printf 'HTTP reachability across all paths. Detects middlebox anomalies (DPI/SNI), MITM, geo-restrictions.\n\n'
   fi
-  cmp_header "Resource" "$ifaces"
 
   local json_results=""
   local _total_targets=0 _ok_targets=0
@@ -303,8 +302,17 @@ $(_cat_config check-targets)
 EOF
   fi
 
+  # Auto-width first column (min 20, max 30)
+  local _label_w=20
+  for _h in $_tgt_hosts; do
+    [ "${#_h}" -gt "$_label_w" ] && _label_w="${#_h}"
+  done
+  _label_w=$((_label_w + 2))
+  [ "$_label_w" -gt 30 ] && _label_w=30
+  cmp_header "Resource" "$ifaces" "" "$_label_w"
+
   # ── Phase 2: Batched parallel curls (3 targets at a time to avoid bandwidth contention) ──
-  local _batch_n=0 _batch_hosts=""
+  local _batch_n=0 _batch_hosts="" _progress_done=0
   for host in $_tgt_hosts; do
     _batch_hosts="${_batch_hosts} ${host}"
     _batch_n=$((_batch_n + 1))
@@ -325,6 +333,11 @@ EOF
       done
       wait
       )
+      # Progress counter (text mode, tty only)
+      _progress_done=$((_progress_done + _batch_n))
+      if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
+        printf '\r  Fetching: %d/%d...' "$_progress_done" "$_total_targets" >&2
+      fi
       _batch_n=0; _batch_hosts=""
     fi
   done
@@ -346,6 +359,16 @@ EOF
     done
     wait
     )
+    # Progress counter (text mode, tty only)
+    _progress_done=$((_progress_done + _batch_n))
+    if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
+      printf '\r  Fetching: %d/%d...' "$_progress_done" "$_total_targets" >&2
+    fi
+  fi
+
+  # Clear progress line
+  if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
+    printf '\r\033[2K' >&2
   fi
 
   # ── Phase 3: Collect results and render table (in original target order) ──

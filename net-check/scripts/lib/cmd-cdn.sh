@@ -344,14 +344,12 @@ cmd_cdn_all() {
   if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
     printf 'Per-interface CDN edge country via EDNS Client Subnet.\n\n'
   fi
-  cmp_header "Domain" "$ifaces"
-  tbl_group_reset
 
   local json_results=""
   local _cdn_total=0 _cdn_geo_steer=0 _cdn_same=0 _cdn_error=0
 
   # ── Phase 1: Read all domains + build extra curl flags ──
-  local _cdn_domains=""
+  local _cdn_domains="" _cdn_host_total=0
   if [ $# -gt 0 ]; then
     # Deep check mode: use passed domains
     local _cd _cdh
@@ -361,6 +359,7 @@ cmd_cdn_all() {
       printf '' > "${_RUN_DIR}/cdncurl-${_cdh}"
       printf '%s' "check" > "${_RUN_DIR}/cdn-cat-${_cdh}"
       _cdn_domains="${_cdn_domains} ${_cdh}"
+      _cdn_host_total=$((_cdn_host_total + 1))
     done
   else
     # Default: load from cdn-domains.conf (zone-filtered by _cat_config)
@@ -371,13 +370,24 @@ cmd_cdn_all() {
       printf '%s' "$extra_curl" > "${_RUN_DIR}/cdncurl-${domain}"
       printf '%s' "${_category:-global}" > "${_RUN_DIR}/cdn-cat-${domain}"
       _cdn_domains="${_cdn_domains} ${domain}"
+      _cdn_host_total=$((_cdn_host_total + 1))
     done <<EOF
 $(_cat_config cdn-domains)
 EOF
   fi
 
+  # Auto-width first column (min 20, max 30)
+  local _label_w=20
+  for _h in $_cdn_domains; do
+    [ "${#_h}" -gt "$_label_w" ] && _label_w="${#_h}"
+  done
+  _label_w=$((_label_w + 2))
+  [ "$_label_w" -gt 30 ] && _label_w=30
+  cmp_header "Domain" "$ifaces" "" "$_label_w"
+  tbl_group_reset
+
   # ── Phase 2: Batched parallel probes (2 domains at a time to avoid geoIP rate-limit) ──
-  local _cdn_bn=0 _cdn_batch=""
+  local _cdn_bn=0 _cdn_batch="" _progress_done=0
   for domain in $_cdn_domains; do
     _cdn_batch="${_cdn_batch} ${domain}"
     _cdn_bn=$((_cdn_bn + 1))
@@ -393,6 +403,11 @@ EOF
       done
       wait
       )
+      # Progress counter (text mode, tty only)
+      _progress_done=$((_progress_done + _cdn_bn))
+      if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
+        printf '\r  Fetching: %d/%d...' "$_progress_done" "$_cdn_host_total" >&2
+      fi
       _cdn_bn=0; _cdn_batch=""
     fi
   done
@@ -408,6 +423,16 @@ EOF
     done
     wait
     )
+    # Progress counter (text mode, tty only)
+    _progress_done=$((_progress_done + _cdn_bn))
+    if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
+      printf '\r  Fetching: %d/%d...' "$_progress_done" "$_cdn_host_total" >&2
+    fi
+  fi
+
+  # Clear progress line
+  if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
+    printf '\r\033[2K' >&2
   fi
 
   # ── Phase 3: Collect results and render table (in original domain order) ──

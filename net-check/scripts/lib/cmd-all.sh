@@ -34,13 +34,12 @@ cmd_all() {
   if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
     section_banner 1 "$_steps" "$_TITLE_GEO"
   fi
-  start_spinner "Checking egress points..."
-  if cmd_geo > "$_tmpout" 2>&1; then _step_ok=$((_step_ok + 1)); else _step_fail=$((_step_fail + 1)); fi
-  stop_spinner
   if [ "$OUTPUT_JSON" = 1 ]; then
+    if cmd_geo > "$_tmpout"; then _step_ok=$((_step_ok + 1)); else _step_fail=$((_step_fail + 1)); fi
     _json_geo=$(_out_section < "$_tmpout")
   else
-    _out_section < "$_tmpout"
+    { cmd_geo; echo $? > "$_tmpout"; } | _out_section
+    [ "$(cat "$_tmpout")" = "0" ] && _step_ok=$((_step_ok + 1)) || _step_fail=$((_step_fail + 1))
   fi
 
   # ── Fail-fast: filter out unreachable interfaces ──
@@ -71,14 +70,13 @@ cmd_all() {
       printf '\n'
       section_banner "$_sn" "$_steps" "$_banner_title"
     fi
-    start_spinner "$_sm"
-    if "$_sf" > "$_tmpout" 2>&1; then _step_ok=$((_step_ok + 1)); else _step_fail=$((_step_fail + 1)); fi
-    stop_spinner
     if [ "$OUTPUT_JSON" = 1 ]; then
+      if "$_sf" > "$_tmpout"; then _step_ok=$((_step_ok + 1)); else _step_fail=$((_step_fail + 1)); fi
       _step_json_val=$(_out_section < "$_tmpout")
       eval "_json_${_sk}=\"\$_step_json_val\""
     else
-      _out_section < "$_tmpout"
+      { "$_sf"; echo $? > "$_tmpout"; } | _out_section
+      [ "$(cat "$_tmpout")" = "0" ] && _step_ok=$((_step_ok + 1)) || _step_fail=$((_step_fail + 1))
     fi
   done <<'_STEPS_EOF'
 2|conn|_TITLE_CONN|Testing TCP/TLS connectivity...|cmd_connectivity

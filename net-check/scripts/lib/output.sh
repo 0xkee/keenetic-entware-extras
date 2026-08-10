@@ -392,7 +392,11 @@ tbl_cell() {
   local _w="$1" _text="$2" _st="${3:-}"
   local _padded
   if [ "$_w" -gt 0 ] 2>/dev/null; then
-    _padded=$(printf "%-${_w}s" "$_text")
+    # Compensate multi-byte UTF-8: em-dash "—" = 3 bytes, 1 visual column.
+    # printf "%-Ns" counts bytes, not visual width → add +2 per em-dash.
+    local _extra=0
+    case "$_text" in *—*) _extra=2 ;; esac
+    _padded=$(printf "%-$((_w + _extra))s" "$_text")
   else
     _padded="$_text"
   fi
@@ -446,9 +450,10 @@ tbl_group_reset() {
 cmp_header() {
   [ "$OUTPUT_JSON" = 1 ] && return 0
   is_quiet && return 0
-  local _label="$1" _ifaces="$2" _col_w="${3:-19}"
+  local _label="$1" _ifaces="$2" _col_w="${3:-19}" _label_w="${4:-20}"
   _CMP_COL_W="$_col_w"
-  printf '%-20s' "$_label"
+  _CMP_LABEL_W="$_label_w"
+  printf "%-${_label_w}s" "$_label"
   local _hdr_iface _hdr_cc
   for _hdr_iface in $_ifaces; do
     _hdr_cc=$(geo_cached_cc "$_hdr_iface")
@@ -458,7 +463,7 @@ cmp_header() {
   printf ' | %s\n' "Verdict"
   local _n_ifaces _sep_len
   _n_ifaces=$(printf '%s' "$_ifaces" | wc -w | tr -d ' ')
-  _sep_len=$((20 + (_col_w + 4) * _n_ifaces + 12))
+  _sep_len=$((_label_w + (_col_w + 4) * _n_ifaces + 12))
   printf '%*s\n' "$_sep_len" "" | tr ' ' '-'
 }
 
@@ -468,7 +473,7 @@ cmp_header() {
 cmp_row_start() {
   [ "$OUTPUT_JSON" = 1 ] && return 0
   is_quiet && return 0
-  printf '%-20s' "$1"
+  printf "%-${_CMP_LABEL_W:-20}s" "$1"
 }
 
 # Print one interface cell in the current row.

@@ -5,18 +5,21 @@ All notable changes to `geo-split` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
-## [0.18.2] - 2026-07-30
-
-### Changed
-- `status.sh`: colored status marks and bold section headers via `lib/status.sh` color system; `--color`/`--no-color` flag support
-- `status.sh`: `show_domain_sources()` migrated from raw `_text_buf` append to `status_line()` API
-
-## [Unreleased]
+## [0.18.3] - 2026-08-10
 
 ### Changed
 - `route-check.sh`: DNS port detection unified with `lib/ip.sh:detect_dns_port()` —
   replaces inline `/proc/net/tcp` grep. Now also falls back to SmartDNS main `:6053`
   if no-speed-check `:6153` is unavailable (previously skipped directly to system `:53`).
+
+### Fixed
+- `wan-paths.sh`: detect standby tunnel interfaces from source-based routing tables (Keenetic policy failover tunnels were invisible when not primary)
+
+## [0.18.2] - 2026-07-30
+
+### Changed
+- `status.sh`: colored status marks and bold section headers via `lib/status.sh` color system; `--color`/`--no-color` flag support
+- `status.sh`: `show_domain_sources()` migrated from raw `_text_buf` append to `status_line()` API
 
 ## [0.18.0] - 2026-07-28
 

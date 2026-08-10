@@ -12,6 +12,14 @@
 8. **tls** — TLS Certificate Check (Layers 5–7)
 9. **speed** — Throughput Test (Layers 4+7)
 
+## Optimization
+
+- [ ] **Fork-bomb audit** — проверить все вызовы `$(function)` в hot loops
+  (per-cell, per-row и т.д., типа тестов) по всему net-check; убедиться, что нет скрытых
+  fork-heavy паттернов (аналогично parse_curl_metrics, to_ms, json_kv
+  исправленным в v0.9.3). Кандидаты: `status_mark()`, `color_status()`,
+  `cache_mark()`, `format_size_bytes()`, `_issuer_short()`. 
+
 ## Future
 
 - [x] ~~определять ► по следующему хопу~~ — **Сделано (2026-08-01):** `nexthop_active_dev()` в `wan.sh` — traceroute first-hop (эмпирический, без `--interface`) → `ip route get $FIRST_HOP` → dev. Per-run cache. Заменяет FIB fallback в `active_dev_for_target()`.

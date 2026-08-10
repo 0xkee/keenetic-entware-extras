@@ -189,18 +189,10 @@ cmd_cdn() {
     esac
 
     if [ "$OUTPUT_JSON" = 1 ]; then
-      local path_json
-      path_json=$(printf '{%s,%s,%s,%s,%s,%s,%s,%s,%s,%s}' \
-        "$(json_kv "dev" "$iface")" \
-        "$(json_kv "type" "$itype")" \
-        "$(json_kv "cc" "$cc")" \
-        "$(json_kv "cdn_ip" "$cdn_ip")" \
-        "$(json_kv "edge_cc" "$cdn_cc")" \
-        "$(json_kv "rtt" "$rtt")" \
-        "$(json_kv "ext_ip" "$ext_ip")" \
-        "$(json_kv "http_code" "$http_code")" \
-        "$(json_kv "http_size" "$http_size")" \
-        "$(json_kv_bool "active" "$([ "$is_active" = 1 ] && echo 0 || echo 1)")")
+      local path_json _active_jv="false"
+      [ "$is_active" = 1 ] && _active_jv="true"
+      path_json=$(printf '{"dev":"%s","type":"%s","cc":"%s","cdn_ip":"%s","edge_cc":"%s","rtt":"%s","ext_ip":"%s","http_code":"%s","http_size":"%s","active":%s}' \
+        "$iface" "$itype" "$cc" "$cdn_ip" "$cdn_cc" "$rtt" "$ext_ip" "$http_code" "$http_size" "$_active_jv")
       json_arr_add json_paths "$path_json"
     else
       local _st="ok"
@@ -227,10 +219,10 @@ cmd_cdn() {
       local _match_cell=""
       [ -n "$active_mark" ] && _match_cell="$(color_status ok "$active_mark")"
       [ "$cc_cached" = "1" ] && _match_cell="${_match_cell}${_match_cell:+ }$(cache_mark)"
-      tbl_row "$iface" "$cc" \
-        "$(tbl_cell 18 "$cdn_ip" "$_st")" \
-        "$(tbl_cell 4 "$cdn_cc" "$_cc_st")" "$rtt" \
-        "$(tbl_cell 5 "$http_code" "$_http_st")" "$http_size" \
+      tbl_cell_v 18 "$cdn_ip" "$_st"; local _c1="$_CELL"
+      tbl_cell_v 4 "$cdn_cc" "$_cc_st"; local _c2="$_CELL"
+      tbl_cell_v 5 "$http_code" "$_http_st"; local _c3="$_CELL"
+      tbl_row "$iface" "$cc" "$_c1" "$_c2" "$rtt" "$_c3" "$http_size" \
         "$_match_cell"
     fi
   done
@@ -299,6 +291,14 @@ _cdn_build_extra_curl() {
 # Args: $1 - edge_cc, $2 - http_code, $3 - rtt, $4 - cdn_ip
 # stdout: formatted cell string
 _cdn_format_cell() {
+  _cdn_format_cell_v "$@"
+  printf '%s' "$_CDN_CELL"
+}
+
+# Same as _cdn_format_cell but sets _CDN_CELL global (avoids outer subshell).
+# Args: $1 - edge_cc, $2 - http_code, $3 - rtt, $4 - cdn_ip
+# Sets: _CDN_CELL
+_cdn_format_cell_v() {
   local _cc="$1" _http="$2" _rtt="$3" _cdn_ip="$4"
   local _dns_st="ok" _http_st="ok"
   [ "$_cdn_ip" = "-" ] && _dns_st="fail"
@@ -317,10 +317,9 @@ _cdn_format_cell() {
       fail) _cc_st="fail" ;;
     esac
   fi
-  printf '%s %s %s' \
-    "$(tbl_cell 2 "$_cc" "$_cc_st")" \
-    "$(tbl_cell 5 "$_http" "$_http_st")" \
-    "$(printf '%*s' "$((_CMP_COL_W - 9))" "$_rtt")"
+  tbl_cell_v 2 "$_cc" "$_cc_st"; local _c1="$_CELL"
+  tbl_cell_v 5 "$_http" "$_http_st"; local _c2="$_CELL"
+  _CDN_CELL=$(printf '%s %s %*s' "$_c1" "$_c2" "$((_CMP_COL_W - 9))" "$_rtt")
 }
 
 cmd_cdn_all() {
@@ -339,6 +338,7 @@ cmd_cdn_all() {
 
   # Warm geo cache for accurate CC in comparison table headers
   ensure_geo_cache
+  precache_geo_cc
 
   section_title "$_TITLE_CDN"
   if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
@@ -513,20 +513,14 @@ EOF
       local _is_active=0 _is_recommended=0
       [ "$iface" = "$_active_route_dev" ] && _is_active=1
       [ "$iface" = "$_recommended_dev" ] && _is_recommended=1
-      cmp_cell "$(_cdn_format_cell "$cdn_cc" "$http_code" "$rtt" "$cdn_ip")" "$_is_active" "$_is_recommended"
+      _cdn_format_cell_v "$cdn_cc" "$http_code" "$rtt" "$cdn_ip"
+      cmp_cell "$_CDN_CELL" "$_is_active" "$_is_recommended"
 
       local _itype
       _itype=$(iface_type "$iface")
       local _pj
-      _pj=$(printf '{%s,%s,%s,%s,%s,%s,%s,%s}' \
-        "$(json_kv "dev" "$iface")" \
-        "$(json_kv "type" "$_itype")" \
-        "$(json_kv "cdn_ip" "$cdn_ip")" \
-        "$(json_kv "edge_cc" "$cdn_cc")" \
-        "$(json_kv "rtt" "$rtt")" \
-        "$(json_kv "ext_ip" "$ext_ip")" \
-        "$(json_kv "http_code" "$http_code")" \
-        "$(json_kv "http_size" "$http_size")")
+      _pj=$(printf '{"dev":"%s","type":"%s","cdn_ip":"%s","edge_cc":"%s","rtt":"%s","ext_ip":"%s","http_code":"%s","http_size":"%s"}' \
+        "$iface" "$_itype" "$cdn_ip" "$cdn_cc" "$rtt" "$ext_ip" "$http_code" "$http_size")
       json_arr_add json_paths "$_pj"
     done
 
@@ -572,12 +566,10 @@ EOF
 
     local _dom_ok=0
     [ "$_has_error" = 0 ] && _dom_ok=0 || _dom_ok=1
-    local _dj
-    _dj=$(printf '{%s,%s,%s,"paths":[%s]}' \
-      "$(json_kv_bool "ok" "$_dom_ok")" \
-      "$(json_kv "domain" "$domain")" \
-      "$(json_kv "verdict" "$_verdict")" \
-      "$json_paths")
+    local _dj _dom_ok_jv="false"
+    [ "$_dom_ok" = 0 ] && _dom_ok_jv="true"
+    _dj=$(printf '{"ok":%s,"domain":"%s","verdict":"%s","paths":[%s]}' \
+      "$_dom_ok_jv" "$domain" "$_verdict" "$json_paths")
     json_arr_add json_results "$_dj"
   done
 

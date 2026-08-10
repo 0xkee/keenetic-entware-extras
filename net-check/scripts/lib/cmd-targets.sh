@@ -11,22 +11,15 @@
 
 # ─── Historical Diff Helpers ──────────────────────────────────────────────────
 
-# Load previous compare results from cache file.
-# Sets: _prev_cache_data (raw file content)
+# Load previous compare results from cache file + pre-parse for O(1) lookup.
+# Sets: _prev_cache_data (raw file content), _pv_TARGET_IFACE vars
 load_prev_cache() {
   _prev_cache_data=""
   [ -f "$CACHE_FILE" ] || return 0
   _prev_cache_data=$(cat "$CACHE_FILE" 2>/dev/null) || _prev_cache_data=""
-}
-
-# Lookup previous verdict for target+iface from cached JSON.
-# Args: $1 - target host, $2 - iface name
-# stdout: previous verdict or empty
-prev_verdict_for() {
-  local _target="$1" _iface="$2"
   [ -z "$_prev_cache_data" ] && return 0
-  # Parse flat: extract target→dev→verdict from JSON text
-  printf '%s' "$_prev_cache_data" | tr '{' '\n' | awk -F'"' -v t="$_target" -v d="$_iface" '
+  # Pre-parse into _pv_HOST_IFACE variables for O(1) lookup
+  eval "$(printf '%s' "$_prev_cache_data" | tr '{' '\n' | awk -F'"' '
     /"target":/ {
       for (i=1;i<=NF;i++) if ($i=="target") { tgt=$(i+2); break }
     }
@@ -36,9 +29,23 @@ prev_verdict_for() {
         if ($i=="dev" && dev=="") dev=$(i+2)
         if ($i=="verdict" && vrd=="") { vrd=$(i+2); break }
       }
-      if (tgt==t && dev==d) { print vrd; exit }
+      if (tgt != "" && dev != "") {
+        gsub(/[^a-zA-Z0-9]/, "_", tgt)
+        gsub(/[^a-zA-Z0-9]/, "_", dev)
+        printf "_pv_%s_%s=%s\n", tgt, dev, vrd
+      }
     }
-  '
+  ')"
+}
+
+# Lookup previous verdict from pre-parsed cache (1 fork vs 4 original).
+# Args: $1 - target host, $2 - iface name
+# stdout: previous verdict or empty
+prev_verdict_for() {
+  [ -z "$_prev_cache_data" ] && return 0
+  local _pvk
+  _pvk=$(printf '%s_%s' "$1" "$2" | tr -c 'a-zA-Z0-9\n' '_')
+  eval "printf '%s' \"\${_pv_${_pvk}:-}\""
 }
 
 # Compute diff marker by comparing current and previous verdicts.
@@ -135,26 +142,23 @@ cmd_check_target() {
 "
 
     if [ "$OUTPUT_JSON" = 1 ]; then
-      local path_json
-      path_json=$(printf '{%s,%s,%s,%s,%s,%s,%s}' \
-        "$(json_kv "dev" "$iface")" \
-        "$(json_kv "type" "$itype")" \
-        "$(json_kv "cc" "$cc")" \
-        "$(json_kv_num "http_code" "$http_code")" \
-        "$(json_kv_bool "tls_ok" "$([ "$tls_ok" = "true" ] && echo 0 || echo 1)")" \
-        "$(json_kv_num "ttfb_ms" "$ttfb_ms")" \
-        "$(json_kv "verdict" "$reason")")
+      local path_json _tls_jv="false"
+      [ "$tls_ok" = "true" ] && _tls_jv="true"
+      path_json=$(printf '{"dev":"%s","type":"%s","cc":"%s","http_code":%s,"tls_ok":%s,"ttfb_ms":%s,"verdict":"%s"}' \
+        "$iface" "$itype" "$cc" "$http_code" "$_tls_jv" "$ttfb_ms" "$reason")
       json_arr_add json_paths "$path_json"
     else
       local _st="fail"
       [ "$path_ok" = "ok" ] && _st="ok"
       local _tls_st="fail"
       [ "$tls_ok" = "true" ] && _tls_st="ok"
-      tbl_row "$iface" "$cc" \
-        "$(tbl_cell 5 "$http_code" "$_st")" \
-        "$(tbl_cell 5 "$([ "$_tls_st" = ok ] && printf 'ok' || printf 'FAIL')" "$_tls_st")" \
-        "$(tbl_cell 8 "${dns_ms}ms" "$_st")" \
-        "$(tbl_cell 8 "${ttfb_ms}ms" "$_st")" \
+      local _tls_label="FAIL"
+      [ "$_tls_st" = "ok" ] && _tls_label="ok"
+      tbl_cell_v 5 "$http_code" "$_st"; local _c1="$_CELL"
+      tbl_cell_v 5 "$_tls_label" "$_tls_st"; local _c2="$_CELL"
+      tbl_cell_v 8 "${dns_ms}ms" "$_st"; local _c3="$_CELL"
+      tbl_cell_v 8 "${ttfb_ms}ms" "$_st"; local _c4="$_CELL"
+      tbl_row "$iface" "$cc" "$_c1" "$_c2" "$_c3" "$_c4" \
         "$(color_status "$_st" "$reason")"
     fi
   done
@@ -247,6 +251,7 @@ cmd_compare() {
 
   # Warm geo cache for accurate CC in comparison table headers
   ensure_geo_cache
+  precache_geo_cc
 
   # Check if we need body content
   local need_body=0
@@ -447,15 +452,11 @@ EOF
       verdict_input="${verdict_input}${iface}:${path_ok}:${ttfb_ms}:${reason}
 "
 
-      # Build JSON for cache
-      local path_json
-      path_json=$(printf '{%s,%s,%s,%s,%s,%s}' \
-        "$(json_kv "dev" "$iface")" \
-        "$(json_kv "type" "$itype")" \
-        "$(json_kv_num "http_code" "$http_code")" \
-        "$(json_kv_bool "tls_ok" "$([ "$tls_ok" = "true" ] && echo 0 || echo 1)")" \
-        "$(json_kv_num "ttfb_ms" "$ttfb_ms")" \
-        "$(json_kv "verdict" "$reason")")
+      # Build JSON for cache (inline printf, 0 forks)
+      local path_json _tls_jv="false"
+      [ "$tls_ok" = "true" ] && _tls_jv="true"
+      path_json=$(printf '{"dev":"%s","type":"%s","http_code":%s,"tls_ok":%s,"ttfb_ms":%s,"verdict":"%s"}' \
+        "$iface" "$itype" "$http_code" "$_tls_jv" "$ttfb_ms" "$reason")
       json_arr_add json_paths "$path_json"
 
       if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
@@ -489,10 +490,9 @@ EOF
         else
           _ttfb_part=$(printf '%*sms' "$((_CMP_COL_W - 12 - _diff_extra))" "$ttfb_ms")
         fi
-        _cell=$(printf '%s %s %s' \
-          "$(tbl_cell 3 "$http_code" "$_st")" \
-          "$(tbl_cell 5 "$_short_tag" "$_st")" \
-          "$_ttfb_part")
+        tbl_cell_v 3 "$http_code" "$_st"; local _c1="$_CELL"
+        tbl_cell_v 5 "$_short_tag" "$_st"; local _c2="$_CELL"
+        _cell=$(printf '%s %s %s' "$_c1" "$_c2" "$_ttfb_part")
 
         # Append diff marker if present
         if [ "$_diff_mark" = "NEW_FAIL" ]; then
@@ -533,33 +533,23 @@ EOF
           _route_info=$(printf ' %s⚠route:%s(exp %s)%s' "$C_YELLOW" "$_active_route_dev" "$_expected_rt" "$C_RST")
           [ "$_vst" = "ok" ] && _vst="warn"
         fi
-        _route_json=$(printf ',%s,%s,%s' \
-          "$(json_kv "route_dev" "$_active_route_dev")" \
-          "$(json_kv "route_type" "$_actual_rt")" \
-          "$(json_kv "route_expected" "$_expected_rt")")
+        _route_json=$(printf ',"route_dev":"%s","route_type":"%s","route_expected":"%s"' \
+          "$_active_route_dev" "$_actual_rt" "$_expected_rt")
       fi
     fi
 
     local ok_bool=1
     [ "$verdict" = "all_ok" ] && ok_bool=0
-    local result_json
+    local result_json _ok_jv="false"
+    [ "$ok_bool" = 0 ] && _ok_jv="true"
     if [ -n "$_fail_reasons" ]; then
-      result_json=$(printf '{%s,%s,%s,"paths":[%s],%s,%s%s}' \
-        "$(json_kv_bool "ok" "$ok_bool")" \
-        "$(json_kv "target" "$host")" \
-        "$(json_kv "category" "${_tgt_category:-global}")" \
-        "$json_paths" \
-        "$(json_kv "verdict" "$verdict")" \
-        "$(json_kv "fail_reason" "$_fail_reasons")" \
-        "$_route_json")
+      result_json=$(printf '{"ok":%s,"target":"%s","category":"%s","paths":[%s],"verdict":"%s","fail_reason":"%s"%s}' \
+        "$_ok_jv" "$host" "${_tgt_category:-global}" \
+        "$json_paths" "$verdict" "$_fail_reasons" "$_route_json")
     else
-      result_json=$(printf '{%s,%s,%s,"paths":[%s],%s%s}' \
-        "$(json_kv_bool "ok" "$ok_bool")" \
-        "$(json_kv "target" "$host")" \
-        "$(json_kv "category" "${_tgt_category:-global}")" \
-        "$json_paths" \
-        "$(json_kv "verdict" "$verdict")" \
-        "$_route_json")
+      result_json=$(printf '{"ok":%s,"target":"%s","category":"%s","paths":[%s],"verdict":"%s"%s}' \
+        "$_ok_jv" "$host" "${_tgt_category:-global}" \
+        "$json_paths" "$verdict" "$_route_json")
     fi
     json_arr_add json_results "$result_json"
 

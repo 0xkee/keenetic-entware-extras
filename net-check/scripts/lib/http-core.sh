@@ -84,22 +84,37 @@ http_probe() {
   return "$_exit"
 }
 
-# Parse curl -w JSON metrics into variables.
+# Parse curl -w JSON metrics into variables (single awk, BusyBox-safe).
 # Args: $1 - curl -w output JSON string
 # Sets: _cm_code, _cm_ssl, _cm_redirect, _cm_num_redirects,
 #        _cm_time_connect, _cm_time_starttfb, _cm_time_dns, _cm_time_app, _cm_time_total
 parse_curl_metrics() {
-  local _j="$1"
-  _cm_code=$(printf '%s' "$_j" | sed -n 's/.*"code":\([0-9]*\).*/\1/p')
-  _cm_ssl=$(printf '%s' "$_j" | sed -n 's/.*"ssl_verify":\([0-9]*\).*/\1/p')
-  _cm_redirect=$(printf '%s' "$_j" | sed -n 's/.*"redirect_url":"\([^"]*\)".*/\1/p')
-  _cm_num_redirects=$(printf '%s' "$_j" | sed -n 's/.*"num_redirects":\([0-9]*\).*/\1/p')
-  _cm_time_connect=$(printf '%s' "$_j" | sed -n 's/.*"time_connect":\([0-9.]*\).*/\1/p')
-  _cm_time_starttfb=$(printf '%s' "$_j" | sed -n 's/.*"time_starttfb":\([0-9.]*\).*/\1/p')
-  _cm_time_dns=$(printf '%s' "$_j" | sed -n 's/.*"time_namelookup":\([0-9.]*\).*/\1/p')
-  _cm_time_app=$(printf '%s' "$_j" | sed -n 's/.*"time_appconnect":\([0-9.]*\).*/\1/p')
-  _cm_time_total=$(printf '%s' "$_j" | sed -n 's/.*"time_total":\([0-9.]*\).*/\1/p')
-  # Defaults
+  eval "$(printf '%s' "$1" | awk '
+  function extract(s, key,   p, v, q) {
+    p = index(s, "\"" key "\":")
+    if (p == 0) return ""
+    v = substr(s, p + length(key) + 3)
+    if (substr(v,1,1) == "\"") {
+      v = substr(v, 2)
+      q = index(v, "\"")
+      if (q > 0) v = substr(v, 1, q-1)
+    } else {
+      gsub(/[,}\r\n].*/, "", v)
+    }
+    return v
+  }
+  {
+    s = $0
+    v = extract(s, "code");            if (v != "") printf "_cm_code=%s\n", v
+    v = extract(s, "ssl_verify");      if (v != "") printf "_cm_ssl=%s\n", v
+    v = extract(s, "redirect_url");    if (v != "") printf "_cm_redirect='"'"'%s'"'"'\n", v
+    v = extract(s, "num_redirects");   if (v != "") printf "_cm_num_redirects=%s\n", v
+    v = extract(s, "time_connect");    if (v != "") printf "_cm_time_connect=%s\n", v
+    v = extract(s, "time_starttfb");   if (v != "") printf "_cm_time_starttfb=%s\n", v
+    v = extract(s, "time_namelookup"); if (v != "") printf "_cm_time_dns=%s\n", v
+    v = extract(s, "time_appconnect"); if (v != "") printf "_cm_time_app=%s\n", v
+    v = extract(s, "time_total");      if (v != "") printf "_cm_time_total=%s\n", v
+  }')"
   _cm_code="${_cm_code:-0}"
   _cm_ssl="${_cm_ssl:-1}"
   _cm_redirect="${_cm_redirect:-}"
@@ -416,11 +431,27 @@ url_to_host() {
   printf '%s' "$1" | sed 's|https\{0,1\}://||; s|/.*||'
 }
 
-# Convert float seconds to integer milliseconds.
-# Args: $1 - float time (e.g. "0.145")
+# Convert float seconds to integer milliseconds (pure shell, no fork).
+# Args: $1 - float time (e.g. "0.145", "1.23", "0")
 # stdout: integer ms
 to_ms() {
-  awk "BEGIN { printf \"%d\", ${1:-0} * 1000 }"
+  local _v="${1:-0}"
+  case "$_v" in
+    *.*)
+      local _int="${_v%%.*}"
+      local _frac="${_v#*.}"
+      # Pad fraction to at least 3 digits
+      while [ "${#_frac}" -lt 3 ]; do _frac="${_frac}0"; done
+      # Trim to exactly 3 digits
+      _frac="${_frac%"${_frac#???}"}"
+      # Strip leading zeros to avoid octal interpretation
+      while [ "${#_frac}" -gt 1 ] && [ "${_frac#0}" != "$_frac" ]; do
+        _frac="${_frac#0}"
+      done
+      printf '%d' "$(( ${_int:-0} * 1000 + _frac ))"
+      ;;
+    *) printf '%d' "$(( _v * 1000 ))" ;;
+  esac
 }
 
 # Format byte size for human display.

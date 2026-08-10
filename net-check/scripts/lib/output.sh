@@ -407,6 +407,29 @@ tbl_cell() {
   fi
 }
 
+# Same as tbl_cell() but sets global _CELL instead of printing to stdout.
+# Avoids subshell overhead when used as: tbl_cell_v 3 "$code" "$st"; var="$_CELL"
+# Args: $1 - width, $2 - text, $3 - color status (optional)
+# Sets: _CELL
+tbl_cell_v() {
+  local _w="$1" _text="$2" _st="${3:-}"
+  if [ "$_w" -gt 0 ] 2>/dev/null; then
+    local _extra=0
+    case "$_text" in *—*) _extra=2 ;; esac
+    _CELL=$(printf "%-$((_w + _extra))s" "$_text")
+  else
+    _CELL="$_text"
+  fi
+  if [ -n "$_st" ]; then
+    case "$_st" in
+      ok)   _CELL="${C_GREEN}${_CELL}${C_RST}" ;;
+      warn) _CELL="${C_YELLOW}${_CELL}${C_RST}" ;;
+      fail) _CELL="${C_RED}${_CELL}${C_RST}" ;;
+      dim)  _CELL="${C_DIM}${_CELL}${C_RST}" ;;
+    esac
+  fi
+}
+
 # Print category group separator inside a table (e.g. "── Global ──").
 # Tracks previous group via _TBL_GROUP_PREV global; prints separator only on group change.
 # Call tbl_group_reset() before each new table to reset tracking.

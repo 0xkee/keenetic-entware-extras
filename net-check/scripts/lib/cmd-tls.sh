@@ -219,14 +219,9 @@ cmd_tls_check() {
 
     if [ "$OUTPUT_JSON" = 1 ]; then
       local entry_json
-      entry_json=$(printf '{%s,%s,%s,%s,%s,%s,%s}' \
-        "$(json_kv "dev" "$iface")" \
-        "$(json_kv "type" "$itype")" \
-        "$(json_kv "cc" "$cc")" \
-        "$(json_kv "resolved_ip" "$resolved_ip")" \
-        "$(json_kv "issuer" "$issuer")" \
-        "$(json_kv "fingerprint" "$fingerprint")" \
-        "$(json_kv "status" "$tls_status")")
+      entry_json=$(printf '{"dev":"%s","type":"%s","cc":"%s","resolved_ip":"%s","issuer":"%s","fingerprint":"%s","status":"%s"}' \
+        "$iface" "$itype" "$cc" "$resolved_ip" \
+        "$(json_escape_val "$issuer")" "$fingerprint" "$tls_status")
       json_arr_add json_results "$entry_json"
     else
       local _st="ok"
@@ -245,10 +240,9 @@ cmd_tls_check() {
       _fp_short=$(printf '%.16s' "$fingerprint")
       [ "$fingerprint" != "unknown" ] && _fp_short="${_fp_short}..."
 
-      tbl_row "$iface" "$cc" \
-        "$(tbl_cell 18 "$resolved_ip" dim)" \
-        "$_iss_short" \
-        "$(tbl_cell 20 "$_fp_short" "$_st")" \
+      tbl_cell_v 18 "$resolved_ip" dim; local _c1="$_CELL"
+      tbl_cell_v 20 "$_fp_short" "$_st"; local _c2="$_CELL"
+      tbl_row "$iface" "$cc" "$_c1" "$_iss_short" "$_c2" \
         "$(status_mark "$_st")"
     fi
   done
@@ -341,6 +335,7 @@ cmd_tls_check_targets() {
 
   # Warm geo cache for accurate CC in comparison table headers
   ensure_geo_cache
+  precache_geo_cc
 
   section_title "$_TITLE_TLS"
   if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
@@ -510,13 +505,9 @@ EOF
       local _itype
       _itype=$(iface_type "$iface")
       local _path_json
-      _path_json=$(printf '{%s,%s,%s,%s,%s,%s}' \
-        "$(json_kv "dev" "$iface")" \
-        "$(json_kv "type" "$_itype")" \
-        "$(json_kv "resolved_ip" "$_resolved")" \
-        "$(json_kv "issuer" "$_issuer")" \
-        "$(json_kv "fingerprint" "$_fp")" \
-        "$(json_kv "status" "$_path_st")")
+      _path_json=$(printf '{"dev":"%s","type":"%s","resolved_ip":"%s","issuer":"%s","fingerprint":"%s","status":"%s"}' \
+        "$iface" "$_itype" "$_resolved" \
+        "$(json_escape_val "$_issuer")" "$_fp" "$_path_st")
       json_arr_add _host_json_paths "$_path_json"
 
       # Table cell (text markers like cmd_compare for alignment)
@@ -534,10 +525,10 @@ EOF
           _iss_s=$(printf '%.*s..' "$((_iss_w - 2))" "$_iss_s")
         fi
 
+        tbl_cell_v 3 "$_short_st" "$_cell_st"; local _c1="$_CELL"
+        tbl_cell_v "$_iss_w" "$_iss_s"; local _c2="$_CELL"
         local _cell
-        _cell=$(printf '%s %s' \
-          "$(tbl_cell 3 "$_short_st" "$_cell_st")" \
-          "$(tbl_cell "$_iss_w" "$_iss_s")")
+        _cell=$(printf '%s %s' "$_c1" "$_c2")
         local _is_active=0 _is_recommended=0
         [ "$iface" = "$_active_route_dev" ] && _is_active=1
         [ "$iface" = "$_recommended_dev" ] && _is_recommended=1
@@ -575,12 +566,10 @@ EOF
     case "$_verdict" in
       different_certs|mitm_proxy) _host_ok_val=1 ;;
     esac
-    local _host_json
-    _host_json=$(printf '{%s,%s,%s,"paths":[%s]}' \
-      "$(json_kv_bool "ok" "$_host_ok_val")" \
-      "$(json_kv "target" "$host")" \
-      "$(json_kv "verdict" "$_verdict")" \
-      "$_host_json_paths")
+    local _host_json _ok_jv="false"
+    [ "$_host_ok_val" = 0 ] && _ok_jv="true"
+    _host_json=$(printf '{"ok":%s,"target":"%s","verdict":"%s","paths":[%s]}' \
+      "$_ok_jv" "$host" "$_verdict" "$_host_json_paths")
     json_arr_add json_results "$_host_json"
 
     local _vst="ok"

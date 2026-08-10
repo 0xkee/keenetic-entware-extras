@@ -5,6 +5,19 @@ All notable changes to `net-check` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.2.6] - 2026-08-10
+
+### Changed
+- **Fork/exec optimization for table rendering** — reduced ~3800 fork/exec
+  calls during compare/tls/cdn/dns table output (30 targets × 4 interfaces):
+  - `parse_curl_metrics()` → single awk (18→2 forks per call)
+  - `to_ms()` → pure shell arithmetic (1→0 forks per call)
+  - JSON construction in hot loops → inline printf (6-11→0 forks per cell)
+  - `prev_verdict_for()` → pre-parsed cache lookup (4→1 fork per cell)
+  - `tbl_cell_v()` — global-variable variant of `tbl_cell()` (1→0 forks)
+  - `precache_geo_cc()` / `geo_cc_fast()` — pre-cached CC lookup (3→0 forks)
+  - `_cdn_format_cell_v()` — global-variable variant for CDN cells
+
 ## [0.2.5] - 2026-08-10
 
 ### Changed

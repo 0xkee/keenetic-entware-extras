@@ -147,6 +147,23 @@ geo_cached_cc() {
   printf '%s' "$_gc_json" | sed -n 's/.*"country"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
 }
 
+# Pre-cache geo CC for all WAN interfaces into _GEO_CC_* globals (0 forks per lookup).
+# Call once after ensure_geo_cache() before rendering loops.
+precache_geo_cc() {
+  local _iface _cc
+  for _iface in $(get_wan_interfaces); do
+    _cc=$(geo_cached_cc "$_iface")
+    eval "_GEO_CC_$(printf '%s' "$_iface" | tr '.-' '__')=\"$_cc\""
+  done
+}
+
+# Fast CC lookup from pre-cached globals (0 forks).
+# Args: $1 - interface name
+# stdout: 2-letter CC or empty
+geo_cc_fast() {
+  eval "printf '%s' \"\${_GEO_CC_$(printf '%s' "$1" | tr '.-' '__'):-}\""
+}
+
 # ─── Geo-Zone Context ─────────────────────────────────────────────────────────
 
 # Load geo-zone context from smartdns-geo-conf and geo-split configs.

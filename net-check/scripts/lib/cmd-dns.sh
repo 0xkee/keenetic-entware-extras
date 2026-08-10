@@ -334,20 +334,14 @@ EOF
       fi
       local _isp_json=""
       if [ -n "$isp_dns_first" ]; then
-        local _bf=1
-        [ "$_isp_blocked" = 1 ] && _bf=0
-        _isp_json=$(printf ',"isp_dns":{%s,%s}' \
-          "$(json_kv "resolved_ip" "${_isp_ip:-NXDOMAIN}")" \
-          "$(json_kv_bool "filtered" "$_bf")")
+        local _filt_jv="false"
+        [ "$_isp_blocked" = 1 ] && _filt_jv="true"
+        _isp_json=$(printf ',"isp_dns":{"resolved_ip":"%s","filtered":%s}' \
+          "${_isp_ip:-NXDOMAIN}" "$_filt_jv")
       fi
       local ej
-      ej=$(printf '{%s,%s,%s,%s,%s%s}' \
-        "$(json_kv "domain" "$domain")" \
-        "$(json_kv "resolved_ip" "$resolved_ip")" \
-        "$(json_kv "cc" "$resolved_cc")" \
-        "$(json_kv "type" "$dns_type")" \
-        "\"in_zone\":${_in_zone}" \
-        "$_isp_json")
+      ej=$(printf '{"domain":"%s","resolved_ip":"%s","cc":"%s","type":"%s","in_zone":%s%s}' \
+        "$domain" "$resolved_ip" "$resolved_cc" "$dns_type" "$_in_zone" "$_isp_json")
       if [ "$json_first" = 1 ]; then
         json_results="$ej"
         json_first=0
@@ -363,10 +357,10 @@ EOF
       elif [ "$_cc_cached" = 1 ]; then
         _dns_cm=" $(cache_mark)"
       fi
-      tbl_row "$domain" \
-        "$(tbl_cell 24 "$resolved_ip" "$status_val")" \
-        "$(tbl_cell 4 "$resolved_cc" "$status_val")" \
-        "$(tbl_cell 8 "$dns_type")" \
+      tbl_cell_v 24 "$resolved_ip" "$status_val"; local _c1="$_CELL"
+      tbl_cell_v 4 "$resolved_cc" "$status_val"; local _c2="$_CELL"
+      tbl_cell_v 8 "$dns_type"; local _c3="$_CELL"
+      tbl_row "$domain" "$_c1" "$_c2" "$_c3" \
         "$(status_mark "$status_val") ${status_label}${_dns_cm}"
     fi
   done

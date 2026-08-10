@@ -1,9 +1,40 @@
-# Changelog
+1# Changelog
 
 All notable changes to `net-check` are documented here.
 
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
+
+## [0.2.2] - 2026-08-10
+
+### Changed
+- **`cmd_all` unbuffered text output** — in text mode, section output now streams
+  line-by-line via pipe instead of buffering to a temp file. JSON mode unchanged.
+
+### Fixed
+- **`cmd_all` progress visibility** — removed `2>&1` from step command
+  redirections so stderr (progress lines) goes to real terminal, not temp file.
+  `[ -t 2 ]` now correctly detects TTY during batch execution.
+- **DNS table: auto-width Domain column** — `console.cloud.google.com` (26 chars)
+  no longer overflows the 22-char column. Dynamic width (min 22, max 32).
+- **IPv6-ready IP columns** — `Resolved IP` widened from 18 to 24 chars in DNS
+  and TLS single-host tables. Accommodates shortened IPv6 addresses.
+
+## [0.2.1] - 2026-08-10
+
+### Changed
+- **Streaming output for single commands** — `net-check.sh geo`, `comp`, etc.
+  now stream table rows in real time (removed spinner + buffered output wrapper).
+  `_spinner_msg()` function removed from main dispatcher.
+- **Progress indicator for batch commands** — `comp`, `cdn`, `tls`, `dns`
+  show `Fetching: N/M...` on stderr during parallel phase (text mode, tty only;
+  suppressed for `--json` and non-tty). Replaces animated spinner.
+- **`cmd_all` runs without spinner** — `start_spinner`/`stop_spinner` removed
+  from Step 1 (geo) and data-driven loop (steps 2–9). `section_banner` suffices.
+- **Auto-width first column in comparison tables** — `cmp_header()` accepts
+  4th parameter `_label_w` (default 20). `cmd_compare`, `cmd_tls_check_targets`,
+  `cmd_cdn_all` compute max hostname length (min 20, max 30) before rendering.
+  `cmp_row_start()` uses `_CMP_LABEL_W` for consistent alignment.
 
 ## [0.2.0] - 2026-08-10
 

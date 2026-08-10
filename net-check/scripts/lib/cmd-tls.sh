@@ -150,7 +150,7 @@ cmd_tls_check() {
     printf 'Compares certificate fingerprints across WAN paths.\n'
     printf 'Detects MITM proxy CAs and certificate substitution by middlebox.\n\n'
   fi
-  tbl_header "Path:14" "CC:4" "Resolved IP:18" "Issuer:30" "Fingerprint:20" "Status"
+  tbl_header "Path:14" "CC:4" "Resolved IP:24" "Issuer:30" "Fingerprint:20" "Status"
 
   local iface
   for iface in $ifaces; do
@@ -347,8 +347,6 @@ cmd_tls_check_targets() {
     printf 'Compares certificate fingerprints across WAN paths per target.\n'
     printf 'Detects MITM proxy CAs and certificate substitution by middlebox.\n\n'
   fi
-  cmp_header "Host" "$ifaces"
-  tbl_group_reset
 
   local json_results=""
   local _tls_ok=0 _tls_total=0 _tls_mitm=0
@@ -385,8 +383,18 @@ $(_cat_config check-targets)
 EOF
   fi
 
+  # Auto-width first column (min 20, max 30)
+  local _label_w=20
+  for _h in $_tls_hosts; do
+    [ "${#_h}" -gt "$_label_w" ] && _label_w="${#_h}"
+  done
+  _label_w=$((_label_w + 2))
+  [ "$_label_w" -gt 30 ] && _label_w=30
+  cmp_header "Host" "$ifaces" "" "$_label_w"
+  tbl_group_reset
+
   # ── Phase 2: Batched parallel TLS probes (PARALLEL_BATCH_SIZE hosts at a time) ──
-  local _tls_bn=0 _tls_batch=""
+  local _tls_bn=0 _tls_batch="" _progress_done=0
   for host in $_tls_hosts; do
     _tls_batch="${_tls_batch} ${host}"
     _tls_bn=$((_tls_bn + 1))
@@ -416,6 +424,11 @@ EOF
       done
       wait
       )
+      # Progress counter (text mode, tty only)
+      _progress_done=$((_progress_done + _tls_bn))
+      if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
+        printf '\r  Fetching: %d/%d...' "$_progress_done" "$_tls_total" >&2
+      fi
       _tls_bn=0; _tls_batch=""
     fi
   done
@@ -446,6 +459,16 @@ EOF
     done
     wait
     )
+    # Progress counter (text mode, tty only)
+    _progress_done=$((_progress_done + _tls_bn))
+    if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
+      printf '\r  Fetching: %d/%d...' "$_progress_done" "$_tls_total" >&2
+    fi
+  fi
+
+  # Clear progress line
+  if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
+    printf '\r\033[2K' >&2
   fi
 
   # ── Phase 3: Collect results and render table (in original host order) ──

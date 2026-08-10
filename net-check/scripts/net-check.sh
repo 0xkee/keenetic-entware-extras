@@ -129,25 +129,6 @@ _priv_run() {
   fi
 }
 
-# Spinner message for a given command (used by single-command wrapper).
-# Args: $1 - command name
-# stdout: spinner message
-_spinner_msg() {
-  case "$1" in
-    geo)     printf 'Checking egress points...' ;;
-    conn)    printf 'Testing TCP/TLS connectivity...' ;;
-    dns)     printf 'Checking DNS routing...' ;;
-    dns-leak) printf 'Checking DNS resolvers...' ;;
-    ipv6)    printf 'Checking IPv6 leaks...' ;;
-    comp)    printf 'Checking HTTP targets...' ;;
-    cdn)     printf 'Analyzing CDN steering...' ;;
-    speed)   printf 'Measuring throughput...' ;;
-    tls)     printf 'Checking TLS certificates...' ;;
-    check)   printf 'Checking %s...' "${2:-target}" ;;
-    *)       printf 'Checking %s...' "$1" ;;
-  esac
-}
-
 # ─── Main Dispatcher ─────────────────────────────────────────────────────────
 
 main() {
@@ -229,15 +210,9 @@ main() {
     *)
       # Zone context header (idempotent via _ZONE_HEADER_PRINTED guard)
       print_zone_header_once
-      local _spin_msg _buf _t_start _elapsed
-      _spin_msg=$(_spinner_msg "$cmd")
-      _buf="${_RUN_DIR}/single-cmd.tmp"
+      local _t_start _elapsed
       _t_start=$(date +%s)
-      start_spinner "$_spin_msg"
-      _priv_run "$cmd" "$@" > "$_buf" 2>&1 || true
-      stop_spinner
-      cat "$_buf"
-      rm -f "$_buf"
+      _priv_run "$cmd" "$@" || true
       _elapsed=$(( $(date +%s) - _t_start ))
       local _s_ok=1
       [ "$_EXIT_CODE" -gt 0 ] && _s_ok=0

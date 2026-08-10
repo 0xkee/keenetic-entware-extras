@@ -130,8 +130,8 @@ cmd_check_target() {
       fi
     fi
 
-    # Collect verdict input
-    verdict_input="${verdict_input}${iface}:${path_ok}:${ttfb_ms}
+    # Collect verdict input (extended format: iface:status:ttfb:reason)
+    verdict_input="${verdict_input}${iface}:${path_ok}:${ttfb_ms}:${reason}
 "
 
     if [ "$OUTPUT_JSON" = 1 ]; then
@@ -465,7 +465,7 @@ EOF
         [ "$iface" = "$_active_route_dev" ] && _active_reason="$_warning"
       fi
 
-      verdict_input="${verdict_input}${iface}:${path_ok}:${ttfb_ms}
+      verdict_input="${verdict_input}${iface}:${path_ok}:${ttfb_ms}:${reason}
 "
 
       # Build JSON for cache
@@ -540,6 +540,7 @@ EOF
     case "$verdict" in
       all_ok) _vst="ok" ;;
       all_fail) _vst="fail" ;;
+      cert_issue|dns_issue|server_down) _vst="warn" ;;
       *) _vst="warn" ;;
     esac
     if [ -n "$_ZONE_LABEL" ] && [ -n "$_resolved_ip" ] && [ -n "$_active_route_dev" ]; then

@@ -11,7 +11,7 @@
 #   lib/ip.sh (is_tunnel_iface),
 #   lib/common.sh (json_kv, json_kv_num, json_kv_bool)
 # Globals used: OUTPUT_JSON, VERBOSITY, _EXIT_CODE, DNS_TIMEOUT, _CONFIG_DIR, DATA_DIR,
-#   MITM_ISSUERS_FILE, CONNECT_TIMEOUT, HTTP_TIMEOUT,
+#   MITM_ISSUERS_FILE, KNOWN_CAS_FILE, CONNECT_TIMEOUT, HTTP_TIMEOUT,
 #   C_GREEN, C_RED, C_YELLOW, C_DIM, C_RST, C_BOLD, C_CYAN
 # shellcheck disable=SC3043
 
@@ -200,11 +200,15 @@ cmd_tls_check() {
     if [ "$issuer" = "unknown" ] || [ "$fingerprint" = "unknown" ]; then
       tls_status="error"
     else
-      # Check for known MITM issuer
+      # Check for known MITM issuer first, then known national CA
       local _mitm_match=""
       _mitm_match=$(_check_mitm_issuer "$issuer") || true
       if [ -n "$_mitm_match" ]; then
         tls_status="mitm_proxy"
+      else
+        local _known_ca_match=""
+        _known_ca_match=$(_check_known_ca "$issuer") || true
+        [ -n "$_known_ca_match" ] && tls_status="known_ca"
       fi
     fi
 
@@ -454,7 +458,7 @@ EOF
     fi
     tbl_group_sep "$_tls_cat"
 
-    local _host_fps="" _host_mitm=0 _host_error=0
+    local _host_fps="" _host_mitm=0 _host_known_ca=0 _host_error=0
     local _host_json_paths=""
 
     # Determine active route device for this host (for cell marker).
@@ -519,6 +523,13 @@ EOF
         if [ -n "$_mitm_match" ]; then
           _path_st="mitm_proxy"
           _host_mitm=1
+        else
+          local _known_ca_match=""
+          _known_ca_match=$(_check_known_ca "$_issuer") || true
+          if [ -n "$_known_ca_match" ]; then
+            _path_st="known_ca"
+            _host_known_ca=1
+          fi
         fi
       fi
 
@@ -544,6 +555,7 @@ EOF
         case "$_path_st" in
           error)      _cell_st="fail"; _short_st="ERR" ;;
           mitm_proxy) _cell_st="warn"; _short_st="MIM" ;;
+          known_ca)   _cell_st="dim";  _short_st="NCA" ;;
         esac
 
         local _iss_s _iss_w=$((_CMP_COL_W - 4))
@@ -579,6 +591,10 @@ EOF
       # Multiple different valid fingerprints — real MITM suspected
       _verdict="different_certs"
       _tls_mitm=$((_tls_mitm + 1))
+    elif [ "$_host_known_ca" = 1 ]; then
+      # National/regional CA — not MITM, but not in standard trust store
+      _verdict="known_ca"
+      _tls_ok=$((_tls_ok + 1))
     else
       # Same valid FP across working paths (blocked paths don't count as MITM)
       _tls_ok=$((_tls_ok + 1))
@@ -601,6 +617,7 @@ EOF
     local _vtext="same"
     case "$_verdict" in
       same_cert)        _vst="ok";   _vtext="same" ;;
+      known_ca)         _vst="dim";  _vtext="NatCA" ;;
       mitm_proxy)       _vst="warn"; _vtext="MITM" ;;
       different_certs)  _vst="warn"; _vtext="differ" ;;
       all_error)        _vst="fail"; _vtext="error" ;;

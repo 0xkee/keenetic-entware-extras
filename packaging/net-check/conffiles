@@ -1,6 +1,7 @@
 /opt/keenetic-entware-extras/net-check/config/check-targets-custom.conf
 /opt/keenetic-entware-extras/net-check/config/cdn-domains-custom.conf
 /opt/keenetic-entware-extras/net-check/config/mitm-issuers.conf
+/opt/keenetic-entware-extras/net-check/config/known-cas.conf
 /opt/keenetic-entware-extras/net-check/config/privacy-providers.conf
 /opt/keenetic-entware-extras/net-check/config/dns-providers.conf
 /opt/keenetic-entware-extras/net-check/config/wellknown-ips.conf

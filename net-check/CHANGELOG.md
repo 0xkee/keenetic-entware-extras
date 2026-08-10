@@ -5,6 +5,33 @@ All notable changes to `net-check` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.2.0] - 2026-08-10
+
+### Added
+- **Granular TLS failure classification** — `classify_failure()` now sub-classifies
+  `ssl_verify_result` codes: `Untrusted CA` (18/19/20/21), `Cert expired` (10),
+  `Cert revoked` (23), `Hostname mismatch` (62). Only unknown codes → `MITM detected`.
+  Fixes sberbank.ru false positive (Russian national CA ≠ MITM).
+- **New per-path verdicts**: `DNS resolution failed` (curl exit 6),
+  `Server error (5xx)`, `Empty response` (curl exit 52),
+  `Partial transfer` (curl exit 18)
+- **New overall verdicts** in `determine_verdict()`: `cert_issue` (all paths fail
+  with same cert error), `dns_issue` (all DNS failures), `server_down` (all 5xx).
+  Sub-classifies `all_fail` to distinguish infra issues from network filtering.
+- **`known-cas.conf`** — allowlist of national/regional CAs (Russia НУЦ, Kazakhstan
+  QAZNET, China CFCA/CNNIC, Turkey TÜBİTAK, India NIC, Iran, Korea, Thailand,
+  Brazil ICP-Brasil). TLS check shows `NCA`/`NatCA` instead of flagging as MITM.
+- **`_check_known_ca()`** helper — issuer matching against `known-cas.conf`
+  (used by TLS comparison table to distinguish national CAs from MITM proxies)
+
+### Changed
+- `short_reason()`: new compact tags — `UNTCA`, `EXPRD`, `REVKD`, `SSLNM`,
+  `DNSFL`, `SVERR`, `EMPTY`, `PARTL`
+- `determine_verdict()`: extended input format `iface:status:ttfb:reason`
+  (backward-compatible — reason field optional)
+- TLS comparison table: `known_ca` path status (`NCA` tag, dim color),
+  `known_ca` per-host verdict (`NatCA` display)
+
 ## [0.1.3] - 2026-08-10
 
 ### Fixed

@@ -5,6 +5,19 @@ All notable changes to `net-check` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.2.7] - 2026-08-10
+
+### Changed
+- **Performance: GeoIP pre-warm** — after Phase 2 parallel probes in DNS and
+  CDN commands, all resolved IPs are batch-geolocated (deduplicated, sequential)
+  before Phase 3 rendering. Phase 3 `geolocate_ip()` calls now always hit
+  fresh cache — eliminates ~160 sequential HTTP requests on cold cache
+
+### Fixed
+- **Historical diff cache: quoted verdict values** — `load_prev_cache()` now
+  quotes verdict values in eval'd variable assignments, preventing shell errors
+  when verdict contains spaces (e.g. "Untrusted CA")
+
 ## [0.2.6] - 2026-08-10
 
 ### Changed

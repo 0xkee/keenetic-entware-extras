@@ -397,6 +397,18 @@ EOF
   }
   batch_run_parallel "CDN" "$CDN_BATCH_SIZE" "$_cdn_domains" _cdn_run_batch
 
+  # ── Phase 2.5: Pre-warm GeoIP cache for all CDN edge IPs ──
+  local _cdn_ips="" _pw_domain _pw_iface _pw_pf _pw_ip
+  for _pw_domain in $_cdn_domains; do
+    for _pw_iface in $ifaces; do
+      _pw_pf="${_RUN_DIR}/cdnall-${_pw_domain}-${_pw_iface}"
+      [ -f "$_pw_pf" ] || continue
+      _pw_ip=$(cut -f1 "$_pw_pf")
+      [ -n "$_pw_ip" ] && [ "$_pw_ip" != "-" ] && _cdn_ips="${_cdn_ips} ${_pw_ip}"
+    done
+  done
+  geoip_batch_prewarm "$_cdn_ips"
+
   # ── Phase 3: Collect results and render table (in original domain order) ──
   for domain in $_cdn_domains; do
     # Category group separator (reads category saved during domain loading)

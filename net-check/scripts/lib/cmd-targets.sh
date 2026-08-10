@@ -32,7 +32,7 @@ load_prev_cache() {
       if (tgt != "" && dev != "") {
         gsub(/[^a-zA-Z0-9]/, "_", tgt)
         gsub(/[^a-zA-Z0-9]/, "_", dev)
-        printf "_pv_%s_%s=%s\n", tgt, dev, vrd
+        printf "_pv_%s_%s='"'"'%s'"'"'\n", tgt, dev, vrd
       }
     }
   ')"

@@ -204,3 +204,21 @@ geolocate_ip() {
   fi
   printf '%s' "$cc"
 }
+
+# Pre-warm GeoIP cache for a list of IPs (sequential, deduplicated).
+# Skips IPs already in fresh cache. Respects rate limits.
+# Used by cmd_dns/cmd_cdn after Phase 2 to ensure Phase 3 is cache-only.
+# Args: $1 - space-separated IP list (may contain duplicates and "-")
+geoip_batch_prewarm() {
+  local _seen="" _ip
+  for _ip in $1; do
+    # Skip blanks, dashes, already-seen
+    case "$_ip" in ""|"-"|"—") continue ;; esac
+    case " $_seen " in *" $_ip "*) continue ;; esac
+    _seen="${_seen} ${_ip}"
+    # Skip if cache is fresh
+    is_cache_fresh "$(ipgeo_cache_file "$_ip")" "$IPGEO_CACHE_TTL" && continue
+    # Sequential call (respects rate limits automatically via _geoip_is_blocked)
+    geolocate_ip "$_ip" > /dev/null 2>&1 || true
+  done
+}

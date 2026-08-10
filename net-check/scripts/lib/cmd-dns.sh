@@ -245,6 +245,17 @@ EOF
   }
   batch_run_parallel "DNS" "$PARALLEL_BATCH_SIZE" "$all_domains" _dns_run_batch
 
+  # ── Phase 2.5: Pre-warm GeoIP cache for all resolved IPs ──
+  # Deduplicated sequential calls ensure Phase 3 rendering is cache-only.
+  local _dns_ips="" _pw_domain _pw_pf _pw_ip
+  for _pw_domain in $all_domains; do
+    _pw_pf="${_RUN_DIR}/dns-${_pw_domain}"
+    [ -f "$_pw_pf" ] || continue
+    _pw_ip=$(cut -f1 "$_pw_pf")
+    [ -n "$_pw_ip" ] && _dns_ips="${_dns_ips} ${_pw_ip}"
+  done
+  geoip_batch_prewarm "$_dns_ips"
+
   # ── Collect parallel results (in domain order for stable output) ──
   for domain in $all_domains; do
     # Category group separator (reads category saved during domain loading)

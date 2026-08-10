@@ -376,64 +376,26 @@ $(_cat_config cdn-domains)
 EOF
   fi
 
-  # Auto-width first column (min 20, max 30)
-  local _label_w=20
-  for _h in $_cdn_domains; do
-    [ "${#_h}" -gt "$_label_w" ] && _label_w="${#_h}"
-  done
-  _label_w=$((_label_w + 2))
-  [ "$_label_w" -gt 30 ] && _label_w=30
+  # Auto-width first column
+  local _label_w
+  _label_w=$(auto_label_width "$_cdn_domains")
   cmp_header "Domain" "$ifaces" "" "$_label_w"
   tbl_group_reset
 
-  # ── Phase 2: Batched parallel probes (2 domains at a time to avoid geoIP rate-limit) ──
-  local _cdn_bn=0 _cdn_batch="" _progress_done=0
-  for domain in $_cdn_domains; do
-    _cdn_batch="${_cdn_batch} ${domain}"
-    _cdn_bn=$((_cdn_bn + 1))
-    if [ "$_cdn_bn" -ge "$CDN_BATCH_SIZE" ]; then
-      (
-      trap 'kill 0 2>/dev/null; exit 130' INT TERM
-      for _bd in $_cdn_batch; do
-        _ec=$(cat "${_RUN_DIR}/cdncurl-${_bd}" 2>/dev/null) || _ec=""
-        for iface in $ifaces; do
-          ( _cdn_probe_iface "$_bd" "$iface" "$_ec" \
-              "${_RUN_DIR}/cdnall-${_bd}-${iface}" ) &
-        done
-      done
-      wait
-      )
-      # Progress counter (text mode, tty only)
-      _progress_done=$((_progress_done + _cdn_bn))
-      if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
-        printf '\r  Fetching: %d/%d...' "$_progress_done" "$_cdn_host_total" >&2
-      fi
-      _cdn_bn=0; _cdn_batch=""
-    fi
-  done
-  if [ -n "$_cdn_batch" ]; then
-    (
-    trap 'kill 0 2>/dev/null; exit 130' INT TERM
-    for _bd in $_cdn_batch; do
+  # ── Phase 2: Batched parallel probes ──
+  # shellcheck disable=SC2329
+  _cdn_run_batch() {
+    local _domains="$1"
+    local _bd _ec
+    for _bd in $_domains; do
       _ec=$(cat "${_RUN_DIR}/cdncurl-${_bd}" 2>/dev/null) || _ec=""
       for iface in $ifaces; do
         ( _cdn_probe_iface "$_bd" "$iface" "$_ec" \
             "${_RUN_DIR}/cdnall-${_bd}-${iface}" ) &
       done
     done
-    wait
-    )
-    # Progress counter (text mode, tty only)
-    _progress_done=$((_progress_done + _cdn_bn))
-    if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
-      printf '\r  Fetching: %d/%d...' "$_progress_done" "$_cdn_host_total" >&2
-    fi
-  fi
-
-  # Clear progress line
-  if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
-    printf '\r\033[2K' >&2
-  fi
+  }
+  batch_run_parallel "CDN" "$CDN_BATCH_SIZE" "$_cdn_domains" _cdn_run_batch
 
   # ── Phase 3: Collect results and render table (in original domain order) ──
   for domain in $_cdn_domains; do

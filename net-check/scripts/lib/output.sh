@@ -541,3 +541,61 @@ _out_section() {
     cat
   fi
 }
+
+# ─── Batch Runner & Auto-Width ────────────────────────────────────────────────
+
+# Compute auto-width for first table column from item list.
+# Args: $1 - space-separated items, $2 - min width (default 20), $3 - max width (default 30)
+# stdout: computed width (integer)
+auto_label_width() {
+  local _alw_items="$1" _alw_min="${2:-20}" _alw_max="${3:-30}" _alw_w _alw_h
+  _alw_w="$_alw_min"
+  for _alw_h in $_alw_items; do
+    [ "${#_alw_h}" -gt "$_alw_w" ] && _alw_w="${#_alw_h}"
+  done
+  _alw_w=$((_alw_w + 2))
+  [ "$_alw_w" -gt "$_alw_max" ] && _alw_w="$_alw_max"
+  printf '%d' "$_alw_w"
+}
+
+# Run items in parallel batches, showing progress with section label.
+# Wraps callback in ( trap ... ; callback ; wait ) subshell.
+# Args: $1 - progress label (e.g. "DNS", "HTTP", "CDN", "TLS")
+#        $2 - batch size (e.g. $PARALLEL_BATCH_SIZE)
+#        $3 - space-separated item list
+#        $4 - callback function name (receives one arg: space-separated batch items)
+# The callback function MUST background its work items with & (no wait inside).
+# batch_run_parallel handles the subshell trap + wait.
+# Globals: OUTPUT_JSON (for progress suppression)
+batch_run_parallel() {
+  local _brl="$1" _brs="$2" _brit="$3" _brcb="$4"
+  local _brt=0 _brn=0 _brb="" _brd=0 _bri
+  for _bri in $_brit; do _brt=$((_brt + 1)); done
+  [ "$_brt" = 0 ] && return 0
+  for _bri in $_brit; do
+    _brb="${_brb} ${_bri}"
+    _brn=$((_brn + 1))
+    if [ "$_brn" -ge "$_brs" ]; then
+      ( trap 'kill 0 2>/dev/null; exit 130' INT TERM
+        $_brcb "$_brb"
+        wait )
+      _brd=$((_brd + _brn))
+      if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
+        printf '\r  %s: %d/%d...' "$_brl" "$_brd" "$_brt" >&2
+      fi
+      _brn=0; _brb=""
+    fi
+  done
+  if [ -n "$_brb" ]; then
+    ( trap 'kill 0 2>/dev/null; exit 130' INT TERM
+      $_brcb "$_brb"
+      wait )
+    _brd=$((_brd + _brn))
+    if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
+      printf '\r  %s: %d/%d...' "$_brl" "$_brd" "$_brt" >&2
+    fi
+  fi
+  if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
+    printf '\r\033[2K' >&2
+  fi
+}

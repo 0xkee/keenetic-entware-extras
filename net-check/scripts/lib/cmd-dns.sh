@@ -196,12 +196,8 @@ EOF
   fi
 
   # Auto-width Domain column (min 22, max 32)
-  local _domain_w=22
-  for _d in $all_domains; do
-    [ "${#_d}" -gt "$_domain_w" ] && _domain_w="${#_d}"
-  done
-  _domain_w=$((_domain_w + 2))
-  [ "$_domain_w" -gt 32 ] && _domain_w=32
+  local _domain_w
+  _domain_w=$(auto_label_width "$all_domains" 22 32)
   tbl_header "Domain:${_domain_w}" "Resolved IP:24" "CC:4" "Type:8" "Status"
   tbl_group_reset
 
@@ -210,49 +206,12 @@ EOF
   local _zone_ok=0 _isp_filtered=0
   local domain
 
-  # Count total for progress display
-  local _dns_host_total=0
-  for _d in $all_domains; do _dns_host_total=$((_dns_host_total + 1)); done
-
-  # ── Batched parallel DNS probes (PARALLEL_BATCH_SIZE domains at a time) ──
-  local _dns_bn=0 _dns_batch="" _progress_done=0
-  for domain in $all_domains; do
-    _dns_batch="${_dns_batch} ${domain}"
-    _dns_bn=$((_dns_bn + 1))
-    if [ "$_dns_bn" -ge "$PARALLEL_BATCH_SIZE" ]; then
-      (
-      trap 'kill 0 2>/dev/null; exit 130' INT TERM
-      for _bd in $_dns_batch; do
-        (
-          _rip=$(_resolve_a_cached "$_bd") || _rip=""
-          _iip="" _iblk=0
-          if [ -n "$isp_dns_first" ]; then
-            _iip=$(_resolve_a "$_bd" "$isp_dns_first") || _iip=""
-            if [ -z "$_iip" ]; then _iblk=1
-            elif _is_bogon "$_iip"; then _iblk=1
-            fi
-          fi
-          # NOTE: geolocate_ip moved to sequential collection phase
-          # to avoid API rate-limits from parallel subshells.
-          printf '%s\t%s\t%s\n' "${_rip:-}" "${_iip:-}" "$_iblk" \
-            > "${_RUN_DIR}/dns-${_bd}"
-        ) &
-      done
-      wait
-      )
-      # Progress counter (text mode, tty only)
-      _progress_done=$((_progress_done + _dns_bn))
-      if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
-        printf '\r  Fetching: %d/%d...' "$_progress_done" "$_dns_host_total" >&2
-      fi
-      _dns_bn=0; _dns_batch=""
-    fi
-  done
-  # Flush remaining batch
-  if [ -n "$_dns_batch" ]; then
-    (
-    trap 'kill 0 2>/dev/null; exit 130' INT TERM
-    for _bd in $_dns_batch; do
+  # ── Batched parallel DNS probes ──
+  # shellcheck disable=SC2329
+  _dns_run_batch() {
+    local _domains="$1"
+    local _bd
+    for _bd in $_domains; do
       (
         _rip=$(_resolve_a_cached "$_bd") || _rip=""
         _iip="" _iblk=0
@@ -262,23 +221,14 @@ EOF
           elif _is_bogon "$_iip"; then _iblk=1
           fi
         fi
+        # NOTE: geolocate_ip moved to sequential collection phase
+        # to avoid API rate-limits from parallel subshells.
         printf '%s\t%s\t%s\n' "${_rip:-}" "${_iip:-}" "$_iblk" \
           > "${_RUN_DIR}/dns-${_bd}"
       ) &
     done
-    wait
-    )
-    # Progress counter (text mode, tty only)
-    _progress_done=$((_progress_done + _dns_bn))
-    if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
-      printf '\r  Fetching: %d/%d...' "$_progress_done" "$_dns_host_total" >&2
-    fi
-  fi
-
-  # Clear progress line
-  if [ "$OUTPUT_JSON" = 0 ] && [ -t 2 ]; then
-    printf '\r\033[2K' >&2
-  fi
+  }
+  batch_run_parallel "DNS" "$PARALLEL_BATCH_SIZE" "$all_domains" _dns_run_batch
 
   # ── Collect parallel results (in domain order for stable output) ──
   for domain in $all_domains; do

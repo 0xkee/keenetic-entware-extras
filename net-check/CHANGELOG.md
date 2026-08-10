@@ -5,6 +5,21 @@ All notable changes to `net-check` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.2.5] - 2026-08-10
+
+### Changed
+- **Rich status dashboard** — `status.sh` output significantly improved:
+  - Each WAN path shows external IP, country code, and detailed tunnel type
+    (wireguard/openvpn/gre/etc instead of generic "tunnel")
+  - Fail reason shown in header: `✗ Fail (nwg2 unreachable)`
+  - DNS leak enriched with provider name and country from cache
+  - IPv6 leak check added to System section
+  - Context section shows SmartDNS and geo-split status when available
+  - `?/?` no longer shown when no cache exists; `Last check: never` hidden
+  - Path columns aligned with printf formatting for readability
+- **JSON output enriched** — added `iface_type`, `ext_ip`, `cc`, `ipv6_leak`
+  fields to JSON output for WebUI consumption
+
 ## [0.2.4] - 2026-08-10
 
 ### Fixed

@@ -38,7 +38,7 @@ cmd_all() {
     if cmd_geo > "$_tmpout"; then _step_ok=$((_step_ok + 1)); else _step_fail=$((_step_fail + 1)); fi
     _json_geo=$(_out_section < "$_tmpout")
   else
-    { cmd_geo; echo $? > "$_tmpout"; } | _out_section
+    { set +e; cmd_geo; echo $? > "$_tmpout"; } | _out_section
     [ "$(cat "$_tmpout")" = "0" ] && _step_ok=$((_step_ok + 1)) || _step_fail=$((_step_fail + 1))
   fi
 
@@ -75,7 +75,7 @@ cmd_all() {
       _step_json_val=$(_out_section < "$_tmpout")
       eval "_json_${_sk}=\"\$_step_json_val\""
     else
-      { "$_sf"; echo $? > "$_tmpout"; } | _out_section
+      { set +e; "$_sf"; echo $? > "$_tmpout"; } | _out_section
       [ "$(cat "$_tmpout")" = "0" ] && _step_ok=$((_step_ok + 1)) || _step_fail=$((_step_fail + 1))
     fi
   done <<'_STEPS_EOF'

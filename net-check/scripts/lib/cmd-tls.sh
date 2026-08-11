@@ -118,145 +118,46 @@ _check_mitm_issuer() {
   return 1
 }
 
-# ─── Command: tls-check (certificate check for single host) ──────────────────
-# Args: $1 - hostname
+# ─── Shared TLS Helpers ───────────────────────────────────────────────────────
 
-cmd_tls_check() {
-  local host="${1:-}"
-  if [ -z "$host" ]; then
-    emit_error "Usage: net-check.sh tls-check <host>"
-    return 1
-  fi
-
-  check_cmd openssl "opkg install openssl-util" || return 1
-
-  local ifaces
-  ifaces=$(require_wan_ifaces) || return 1
-
-  local has_dig=0
-  command -v dig >/dev/null 2>&1 && has_dig=1
-
-  local json_results=""
-  local all_fingerprints="" all_issuers=""
-
-  # Cache ISP DNS once before the loop
-  local _cached_isp_dns=""
-  if [ "$has_dig" = 1 ]; then
-    _cached_isp_dns=$(_get_isp_dns | awk '{print $1}') || _cached_isp_dns=""
-  fi
-
-  section_title "${_TITLE_TLS}: $host"
-  if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
-    printf 'Compares certificate fingerprints across WAN paths.\n'
-    printf 'Detects MITM proxy CAs and certificate substitution by middlebox.\n\n'
-  fi
-  tbl_header "Path:14" "CC:4" "Resolved IP:24" "Issuer:30" "Fingerprint:20" "Status"
-
-  local iface
-  for iface in $ifaces; do
-    local issuer="" fingerprint="" tls_status="ok" resolved_ip=""
-    local itype cc
-    itype=$(iface_type "$iface")
-    cc=$(geo_cached_cc "$iface")
-    [ -z "$cc" ] && cc="—"
-
-    # Per-path DNS resolution: ISP → ISP upstream DNS, tunnel → system DNS
-    if [ "$has_dig" = 1 ]; then
-      if [ "$itype" = "isp" ]; then
-        # ISP interface: use ISP upstream DNS to see actual ISP view
-        local _isp_dns_ip="$_cached_isp_dns"
-        if [ -n "$_isp_dns_ip" ]; then
-          resolved_ip=$(_resolve_a "$host" "$_isp_dns_ip") || resolved_ip=""
-        fi
-      fi
-      # Fallback / tunnel: system DNS
-      if [ -z "$resolved_ip" ]; then
-        resolved_ip=$(_resolve_a "$host") || resolved_ip=""
-      fi
-    fi
-
-    local _tls_target=""
-    if [ -n "$resolved_ip" ]; then
-      _tls_target="${resolved_ip}:443"
+# Classify TLS probe result into status category.
+# Args: $1 - issuer, $2 - fingerprint
+# Sets: _tls_status ("ok", "error", "mitm_proxy", "known_ca")
+_tls_classify_status() {
+  local issuer="$1" fingerprint="$2"
+  _tls_status="ok"
+  if [ "$issuer" = "unknown" ] || [ "$fingerprint" = "unknown" ]; then
+    _tls_status="error"
+  else
+    local _mitm_match=""
+    _mitm_match=$(_check_mitm_issuer "$issuer") || true
+    if [ -n "$_mitm_match" ]; then
+      _tls_status="mitm_proxy"
     else
-      resolved_ip="(system)"
-      _tls_target="${host}:443"
+      local _known_ca_match=""
+      _known_ca_match=$(_check_known_ca "$issuer") || true
+      [ -n "$_known_ca_match" ] && _tls_status="known_ca"
     fi
+  fi
+}
 
-    # Probe TLS
-    local _probe_out="${_RUN_DIR}/tls-probe-${iface}"
-    _tls_probe "$host" "$_tls_target" "$_probe_out" "$iface"
+# ─── cmd_tls_check Helpers ────────────────────────────────────────────────────
 
-    if [ -f "$_probe_out" ]; then
-      issuer=$(cut -d'|' -f1 "$_probe_out")
-      fingerprint=$(cut -d'|' -f2 "$_probe_out")
-      rm -f "$_probe_out"
-    fi
+# Render text + JSON summary for cmd_tls_check (single-host check).
+# Args: $1 - host
+# Uses: _tc_all_fps, _tc_all_issuers, _tc_json_results
+_tls_check_summary() {
+  local host="$1"
 
-    issuer="${issuer:-unknown}"
-    fingerprint="${fingerprint:-unknown}"
-
-    # Determine status
-    if [ "$issuer" = "unknown" ] || [ "$fingerprint" = "unknown" ]; then
-      tls_status="error"
-    else
-      # Check for known MITM issuer first, then known national CA
-      local _mitm_match=""
-      _mitm_match=$(_check_mitm_issuer "$issuer") || true
-      if [ -n "$_mitm_match" ]; then
-        tls_status="mitm_proxy"
-      else
-        local _known_ca_match=""
-        _known_ca_match=$(_check_known_ca "$issuer") || true
-        [ -n "$_known_ca_match" ] && tls_status="known_ca"
-      fi
-    fi
-
-    all_fingerprints="${all_fingerprints}${iface}:${fingerprint}
-"
-    all_issuers="${all_issuers}${iface}:${issuer}
-"
-
-    if [ "$OUTPUT_JSON" = 1 ]; then
-      local entry_json
-      entry_json=$(printf '{"dev":"%s","type":"%s","cc":"%s","resolved_ip":"%s","issuer":"%s","fingerprint":"%s","status":"%s"}' \
-        "$iface" "$itype" "$cc" "$resolved_ip" \
-        "$(json_escape_val "$issuer")" "$fingerprint" "$tls_status")
-      json_arr_add json_results "$entry_json"
-    else
-      local _st="ok"
-      case "$tls_status" in
-        error) _st="fail" ;;
-        mitm_proxy) _st="warn" ;;
-      esac
-
-      local _iss_short _fp_short
-      _iss_short=$(_issuer_short "$issuer")
-      # Truncate issuer for display
-      if [ ${#_iss_short} -gt 28 ]; then
-        _iss_short=$(printf '%.25s...' "$_iss_short")
-      fi
-      # Show first 16 chars of fingerprint
-      _fp_short=$(printf '%.16s' "$fingerprint")
-      [ "$fingerprint" != "unknown" ] && _fp_short="${_fp_short}..."
-
-      tbl_cell_v 18 "$resolved_ip" dim; local _c1="$_CELL"
-      tbl_cell_v 20 "$_fp_short" "$_st"; local _c2="$_CELL"
-      tbl_row "$iface" "$cc" "$_c1" "$_iss_short" "$_c2" \
-        "$(status_mark "$_st")"
-    fi
-  done
-
-  # Summary: compare fingerprints across paths
   if [ "$OUTPUT_JSON" = 0 ]; then
     local unique_fps
-    unique_fps=$(printf '%s' "$all_fingerprints" | sed 's/^[^:]*://' | grep -v '^$' | sort -u | grep -c '.' 2>/dev/null) || unique_fps=0
+    unique_fps=$(printf '%s' "$_tc_all_fps" | sed 's/^[^:]*://' | grep -v '^$' | sort -u | grep -c '.' 2>/dev/null) || unique_fps=0
     local unknown_fps
-    unknown_fps=$(printf '%s' "$all_fingerprints" | grep -c ':unknown$' 2>/dev/null) || unknown_fps=0
+    unknown_fps=$(printf '%s' "$_tc_all_fps" | grep -c ':unknown$' 2>/dev/null) || unknown_fps=0
     # Check MITM issuers
     local mitm_found=0
-    local _ai_line _ai_issuer
-    printf '%s' "$all_issuers" | while IFS=: read -r _ _ai_issuer; do
+    local _ai_issuer
+    printf '%s' "$_tc_all_issuers" | while IFS=: read -r _ _ai_issuer; do
       [ -z "$_ai_issuer" ] && continue
       if _check_mitm_issuer "$_ai_issuer" >/dev/null 2>&1; then
         printf 'mitm'
@@ -295,12 +196,12 @@ cmd_tls_check() {
   if [ "$OUTPUT_JSON" = 1 ]; then
     local _ok_val=0 _verdict="same_cert"
     local _ufp
-    _ufp=$(printf '%s' "$all_fingerprints" | sed 's/^[^:]*://' | grep -v '^$' | sort -u | grep -c '.' 2>/dev/null) || _ufp=0
+    _ufp=$(printf '%s' "$_tc_all_fps" | sed 's/^[^:]*://' | grep -v '^$' | sort -u | grep -c '.' 2>/dev/null) || _ufp=0
     if [ "$_ufp" -gt 1 ]; then
       _ok_val=1
       _verdict="different_certs"
     fi
-    printf '%s' "$all_issuers" | while IFS=: read -r _ _ai_issuer; do
+    printf '%s' "$_tc_all_issuers" | while IFS=: read -r _ _ai_issuer; do
       [ -z "$_ai_issuer" ] && continue
       _check_mitm_issuer "$_ai_issuer" >/dev/null 2>&1 && printf 'mitm'
     done | grep -q 'mitm' && { _ok_val=1; _verdict="mitm_proxy"; }
@@ -308,7 +209,398 @@ cmd_tls_check() {
       "$(json_kv_bool "ok" "$_ok_val")" \
       "$(json_kv "host" "$host")" \
       "$(json_kv "verdict" "$_verdict")" \
-      "$json_results"
+      "$_tc_json_results"
+  fi
+}
+
+# Probe one interface: DNS resolve, TLS probe, classify, collect, render row.
+# Args: $1 - host, $2 - iface
+# Uses: has_dig, _cached_isp_dns, _tc_all_fps, _tc_all_issuers, _tc_json_results
+_tls_check_probe_iface() {
+  local host="$1" iface="$2"
+  local issuer="" fingerprint="" resolved_ip=""
+  local itype cc
+  itype=$(iface_type "$iface")
+  cc=$(geo_cached_cc "$iface")
+  [ -z "$cc" ] && cc="—"
+
+  # Per-path DNS resolution: ISP → ISP upstream DNS, tunnel → system DNS
+  if [ "$has_dig" = 1 ]; then
+    if [ "$itype" = "isp" ]; then
+      local _isp_dns_ip="$_cached_isp_dns"
+      if [ -n "$_isp_dns_ip" ]; then
+        resolved_ip=$(_resolve_a "$host" "$_isp_dns_ip") || resolved_ip=""
+      fi
+    fi
+    # Fallback / tunnel: system DNS
+    if [ -z "$resolved_ip" ]; then
+      resolved_ip=$(_resolve_a "$host") || resolved_ip=""
+    fi
+  fi
+
+  local _tls_target=""
+  if [ -n "$resolved_ip" ]; then
+    _tls_target="${resolved_ip}:443"
+  else
+    resolved_ip="(system)"
+    _tls_target="${host}:443"
+  fi
+
+  # Probe TLS
+  local _probe_out="${_RUN_DIR}/tls-probe-${iface}"
+  _tls_probe "$host" "$_tls_target" "$_probe_out" "$iface"
+
+  if [ -f "$_probe_out" ]; then
+    issuer=$(cut -d'|' -f1 "$_probe_out")
+    fingerprint=$(cut -d'|' -f2 "$_probe_out")
+    rm -f "$_probe_out"
+  fi
+
+  issuer="${issuer:-unknown}"
+  fingerprint="${fingerprint:-unknown}"
+
+  # Classify status
+  _tls_classify_status "$issuer" "$fingerprint"
+
+  _tc_all_fps="${_tc_all_fps}${iface}:${fingerprint}
+"
+  _tc_all_issuers="${_tc_all_issuers}${iface}:${issuer}
+"
+
+  if [ "$OUTPUT_JSON" = 1 ]; then
+    local entry_json
+    entry_json=$(printf '{"dev":"%s","type":"%s","cc":"%s","resolved_ip":"%s","issuer":"%s","fingerprint":"%s","status":"%s"}' \
+      "$iface" "$itype" "$cc" "$resolved_ip" \
+      "$(json_escape_val "$issuer")" "$fingerprint" "$_tls_status")
+    json_arr_add _tc_json_results "$entry_json"
+  else
+    local _st="ok"
+    case "$_tls_status" in
+      error) _st="fail" ;;
+      mitm_proxy) _st="warn" ;;
+    esac
+
+    local _iss_short _fp_short
+    _iss_short=$(_issuer_short "$issuer")
+    # Truncate issuer for display
+    if [ ${#_iss_short} -gt 28 ]; then
+      _iss_short=$(printf '%.25s...' "$_iss_short")
+    fi
+    # Show first 16 chars of fingerprint
+    _fp_short=$(printf '%.16s' "$fingerprint")
+    [ "$fingerprint" != "unknown" ] && _fp_short="${_fp_short}..."
+
+    tbl_cell_v 18 "$resolved_ip" dim; local _c1="$_CELL"
+    tbl_cell_v 20 "$_fp_short" "$_st"; local _c2="$_CELL"
+    tbl_row "$iface" "$cc" "$_c1" "$_iss_short" "$_c2" \
+      "$(status_mark "$_st")"
+  fi
+}
+
+# ─── Command: tls-check (certificate check for single host) ──────────────────
+# Args: $1 - hostname
+
+cmd_tls_check() {
+  local host="${1:-}"
+  if [ -z "$host" ]; then
+    emit_error "Usage: net-check.sh tls-check <host>"
+    return 1
+  fi
+
+  check_cmd openssl "opkg install openssl-util" || return 1
+
+  local ifaces
+  ifaces=$(require_wan_ifaces) || return 1
+
+  local has_dig=0
+  command -v dig >/dev/null 2>&1 && has_dig=1
+
+  _tc_json_results=""
+  _tc_all_fps=""
+  _tc_all_issuers=""
+
+  # Cache ISP DNS once before the loop
+  local _cached_isp_dns=""
+  if [ "$has_dig" = 1 ]; then
+    _cached_isp_dns=$(_get_isp_dns | awk '{print $1}') || _cached_isp_dns=""
+  fi
+
+  section_title "${_TITLE_TLS}: $host"
+  if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
+    printf 'Compares certificate fingerprints across WAN paths.\n'
+    printf 'Detects MITM proxy CAs and certificate substitution by middlebox.\n\n'
+  fi
+  tbl_header "Path:14" "CC:4" "Resolved IP:24" "Issuer:30" "Fingerprint:20" "Status"
+
+  local iface
+  for iface in $ifaces; do
+    _tls_check_probe_iface "$host" "$iface"
+  done
+
+  # Summary: compare fingerprints across paths
+  _tls_check_summary "$host"
+}
+
+# ─── cmd_tls_check_targets Helpers ────────────────────────────────────────────
+
+# Phase 1: Read all HTTPS hosts from arguments or config.
+# Args: $@ - optional domain list
+# Sets: _tls_hosts, _tls_total
+# Creates: _RUN_DIR/tls-cat-* files
+_tls_targets_load() {
+  _tls_hosts=""
+  _tls_total=0
+  local url check_type _category _description _expected host
+
+  if [ $# -gt 0 ]; then
+    # Deep check mode: use passed domains
+    for url in "$@"; do
+      host=$(url_to_host "$url")
+      [ -z "$host" ] && continue
+      _tls_total=$((_tls_total + 1))
+      _tls_hosts="${_tls_hosts} ${host}"
+      printf '%s' "check" > "${_RUN_DIR}/tls-cat-${host}"
+    done
+  else
+    # Default: load from check-targets.conf (zone-filtered by _cat_config)
+    while IFS='|' read -r url check_type _category _description _expected; do
+      case "$url" in "#"*|"") continue ;; esac
+      [ "$check_type" = "geo" ] && continue
+      host="${url#https://}"; host="${host#http://}"; host="${host%%/*}"; host="${host%%:*}"
+      [ -z "$host" ] && continue
+      _tls_total=$((_tls_total + 1))
+      _tls_hosts="${_tls_hosts} ${host}"
+      printf '%s' "${_category:-global}" > "${_RUN_DIR}/tls-cat-${host}"
+    done <<EOF
+$(_cat_config check-targets)
+EOF
+  fi
+}
+
+# Batch callback: parallel TLS probes for all hosts × all interfaces.
+# Args: $1 - space-separated host list (batch subset)
+# Uses: ifaces, has_dig, _cached_isp_dns (from caller scope)
+# shellcheck disable=SC2329
+_tls_targets_run_batch() {
+  local _hosts="$1"
+  local _bh
+  for _bh in $_hosts; do
+    for iface in $ifaces; do
+      (
+        _resolved=""
+        if [ "$has_dig" = 1 ]; then
+          if ! is_tunnel_iface "$iface"; then
+            if [ -n "$_cached_isp_dns" ]; then
+              _resolved=$(_resolve_a "$_bh" "$_cached_isp_dns") || _resolved=""
+            fi
+          fi
+          [ -z "$_resolved" ] && { _resolved=$(_resolve_a "$_bh") || _resolved=""; }
+        fi
+        if [ -n "$_resolved" ]; then _tgt="${_resolved}:443"
+        else _resolved="(system)"; _tgt="${_bh}:443"; fi
+
+        _probe_out="${_RUN_DIR}/tls-par-${_bh}-${iface}"
+        _tls_probe "$_bh" "$_tgt" "$_probe_out" "$iface"
+        printf '%s\n' "$_resolved" >> "$_probe_out"
+      ) &
+    done
+  done
+}
+
+# Pre-scan parallel results for a host: determine active route and recommended dev.
+# Args: $1 - host
+# Uses: ifaces (from caller scope)
+# Sets: _tt_active_route_dev, _tt_recommended_dev
+_tls_targets_prescan_host() {
+  local host="$1"
+
+  # Determine active route device
+  local _resolved_ip=""
+  _resolved_ip=$(_resolve_a_cached "$host" 2>/dev/null) || _resolved_ip=""
+  _tt_active_route_dev=$(active_dev_for_target "$_resolved_ip" "")
+
+  # Pre-scan: collect healthy fingerprints and pick recommended iface
+  _tt_recommended_dev=""
+  local _rec_ok_n=0 _ri _pre_fps=""
+  for _ri in $ifaces; do
+    local _rpf="${_RUN_DIR}/tls-par-${host}-${_ri}"
+    [ -f "$_rpf" ] || continue
+    local _r_line1 _r_issuer _r_fp
+    _r_line1=$(sed -n '1p' "$_rpf")
+    _r_issuer=$(printf '%s' "$_r_line1" | cut -d'|' -f1)
+    _r_fp=$(printf '%s' "$_r_line1" | cut -d'|' -f2)
+    { [ -z "$_r_issuer" ] || [ "$_r_issuer" = "unknown" ]; } && continue
+    { [ -z "$_r_fp" ] || [ "$_r_fp" = "unknown" ]; } && continue
+    # Skip MITM paths
+    _check_mitm_issuer "$_r_issuer" >/dev/null 2>&1 && continue
+    _rec_ok_n=$((_rec_ok_n + 1))
+    _pre_fps="${_pre_fps}${_r_fp}
+"
+    _tt_recommended_dev="$_ri"
+  done
+  # No ★ when single iface
+  local _n_ifc
+  _n_ifc=$(printf '%s' "$ifaces" | wc -w | tr -d ' ')
+  [ "$_n_ifc" -le 1 ] && _tt_recommended_dev=""
+  # No ★ when all fingerprints identical
+  local _pre_unique_fps
+  _pre_unique_fps=$(printf '%s' "$_pre_fps" | grep -v '^$' | sort -u | grep -c '.' 2>/dev/null) || _pre_unique_fps=0
+  [ "$_pre_unique_fps" -le 1 ] && _tt_recommended_dev=""
+}
+
+# Process one path: read par-file, classify, render cell, collect data.
+# Args: $1 - host, $2 - iface
+# Uses: _tt_active_route_dev, _tt_recommended_dev
+# Updates: _tt_host_fps, _tt_host_mitm, _tt_host_known_ca, _tt_host_error,
+#          _tt_host_json_paths
+_tls_targets_process_path() {
+  local host="$1" iface="$2"
+
+  local _pf="${_RUN_DIR}/tls-par-${host}-${iface}"
+  local _issuer="unknown" _fp="unknown" _resolved="(system)"
+
+  if [ -f "$_pf" ]; then
+    _issuer=$(sed -n '1p' "$_pf" | cut -d'|' -f1)
+    _fp=$(sed -n '1p' "$_pf" | cut -d'|' -f2)
+    _resolved=$(sed -n '2p' "$_pf")
+    rm -f "$_pf"
+  fi
+
+  _issuer="${_issuer:-unknown}"
+  _fp="${_fp:-unknown}"
+  _resolved="${_resolved:-(system)}"
+
+  # Classify per-path status
+  _tls_classify_status "$_issuer" "$_fp"
+  local _path_st="$_tls_status"
+  case "$_path_st" in
+    error)      _tt_host_error=$((_tt_host_error + 1)) ;;
+    mitm_proxy) _tt_host_mitm=1 ;;
+    known_ca)   _tt_host_known_ca=1 ;;
+  esac
+
+  _tt_host_fps="${_tt_host_fps}${_fp}
+"
+
+  # JSON path entry
+  local _itype
+  _itype=$(iface_type "$iface")
+  local _path_json
+  _path_json=$(printf '{"dev":"%s","type":"%s","resolved_ip":"%s","issuer":"%s","fingerprint":"%s","status":"%s"}' \
+    "$iface" "$_itype" "$_resolved" \
+    "$(json_escape_val "$_issuer")" "$_fp" "$_path_st")
+  json_arr_add _tt_host_json_paths "$_path_json"
+
+  # Table cell (text mode)
+  if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
+    local _cell_st="ok" _short_st="ok"
+    case "$_path_st" in
+      error)      _cell_st="fail"; _short_st="ERR" ;;
+      mitm_proxy) _cell_st="warn"; _short_st="MIM" ;;
+      known_ca)   _cell_st="dim";  _short_st="NCA" ;;
+    esac
+
+    local _iss_s _iss_w=$((_CMP_COL_W - 4))
+    _iss_s=$(_issuer_short "$_issuer")
+    if [ ${#_iss_s} -gt "$_iss_w" ]; then
+      _iss_s=$(printf '%.*s..' "$((_iss_w - 2))" "$_iss_s")
+    fi
+
+    tbl_cell_v 3 "$_short_st" "$_cell_st"; local _c1="$_CELL"
+    tbl_cell_v "$_iss_w" "$_iss_s"; local _c2="$_CELL"
+    local _cell
+    _cell=$(printf '%s %s' "$_c1" "$_c2")
+    local _is_active=0 _is_recommended=0
+    [ "$iface" = "$_tt_active_route_dev" ] && _is_active=1
+    [ "$iface" = "$_tt_recommended_dev" ] && _is_recommended=1
+    cmp_cell "$_cell" "$_is_active" "$_is_recommended"
+  fi
+}
+
+# Compute per-host verdict and render row end.
+# Args: $1 - host
+# Uses: _tt_host_fps, _tt_host_mitm, _tt_host_known_ca, _tt_host_error,
+#       _tt_host_json_paths
+# Updates: _tls_ok, _tls_mitm, _tls_json_results
+_tls_targets_host_verdict() {
+  local host="$1"
+
+  # Count unique VALID fingerprints (excluding "unknown")
+  local _unique_valid_fps _total_paths _verdict="same_cert"
+  _unique_valid_fps=$(printf '%s' "$_tt_host_fps" | grep -v '^$' | grep -v '^unknown$' | sort -u | grep -c '.' 2>/dev/null) || _unique_valid_fps=0
+  _total_paths=$(printf '%s' "$_tt_host_fps" | grep -v '^$' | grep -c '.' 2>/dev/null) || _total_paths=0
+
+  if [ "$_tt_host_mitm" = 1 ]; then
+    _verdict="mitm_proxy"
+    _tls_mitm=$((_tls_mitm + 1))
+  elif [ "$_total_paths" -gt 0 ] && [ "$_total_paths" -eq "$_tt_host_error" ]; then
+    _verdict="all_error"
+  elif [ "$_unique_valid_fps" -gt 1 ]; then
+    _verdict="different_certs"
+    _tls_mitm=$((_tls_mitm + 1))
+  elif [ "$_tt_host_known_ca" = 1 ]; then
+    _verdict="known_ca"
+    _tls_ok=$((_tls_ok + 1))
+  else
+    _tls_ok=$((_tls_ok + 1))
+  fi
+
+  # Build host JSON
+  local _host_ok_val=0
+  case "$_verdict" in
+    different_certs|mitm_proxy) _host_ok_val=1 ;;
+  esac
+  local _host_json _ok_jv="false"
+  [ "$_host_ok_val" = 0 ] && _ok_jv="true"
+  _host_json=$(printf '{"ok":%s,"target":"%s","verdict":"%s","paths":[%s]}' \
+    "$_ok_jv" "$host" "$_verdict" "$_tt_host_json_paths")
+  json_arr_add _tls_json_results "$_host_json"
+
+  # Render verdict text
+  local _vst="ok"
+  local _vtext="same"
+  case "$_verdict" in
+    same_cert)        _vst="ok";   _vtext="same" ;;
+    known_ca)         _vst="dim";  _vtext="NatCA" ;;
+    mitm_proxy)       _vst="warn"; _vtext="MITM" ;;
+    different_certs)  _vst="warn"; _vtext="differ" ;;
+    all_error)        _vst="fail"; _vtext="error" ;;
+  esac
+  # Annotate with blocked path count when some paths failed but cert matches
+  if [ "$_tt_host_error" -gt 0 ] && [ "$_verdict" != "all_error" ]; then
+    _vtext="${_vtext} (${_tt_host_error} blocked)"
+  fi
+  cmp_row_end "$(color_status "$_vst" "$_vtext")"
+}
+
+# Render final summary for cmd_tls_check_targets.
+# Uses: _tls_ok, _tls_total, _tls_mitm, _tls_json_results
+_tls_targets_render_summary() {
+  if [ "$OUTPUT_JSON" = 0 ]; then
+    if is_quiet; then
+      if [ "$_tls_mitm" -gt 0 ]; then
+        printf 'tls: %s %s/%s hosts have cert issues\n' "$(status_mark warn)" "$_tls_mitm" "$_tls_total"
+      else
+        printf 'tls: %s/%s hosts same cert %s\n' "$_tls_ok" "$_tls_total" "$(status_mark ok)"
+      fi
+    else
+      if [ "$_tls_mitm" -gt 0 ]; then
+        printf '→ %s%s %s/%s hosts have certificate discrepancies%s\n' \
+          "$C_RED" "$(status_mark warn)" "$_tls_mitm" "$_tls_total" "$C_RST"
+        [ "$_EXIT_CODE" -lt 1 ] && _EXIT_CODE=1
+      fi
+      summary_line "$_tls_ok" "$_tls_total" "hosts"
+    fi
+  fi
+
+  if [ "$OUTPUT_JSON" = 1 ]; then
+    local ok_val=0
+    [ "$_tls_mitm" -gt 0 ] && ok_val=1
+    printf '{%s,%s,%s,"hosts":[%s]}\n' \
+      "$(json_kv_bool "ok" "$ok_val")" \
+      "$(json_kv_num "total" "$_tls_total")" \
+      "$(json_kv_num "mitm_count" "$_tls_mitm")" \
+      "$_tls_json_results"
   fi
 }
 
@@ -343,8 +635,8 @@ cmd_tls_check_targets() {
     printf 'Detects MITM proxy CAs and certificate substitution by middlebox.\n\n'
   fi
 
-  local json_results=""
-  local _tls_ok=0 _tls_total=0 _tls_mitm=0
+  _tls_json_results=""
+  local _tls_ok=0 _tls_mitm=0
 
   # Cache ISP DNS once (shared across all hosts)
   local _cached_isp_dns=""
@@ -352,31 +644,8 @@ cmd_tls_check_targets() {
     _cached_isp_dns=$(_get_isp_dns | awk '{print $1}') || _cached_isp_dns=""
   fi
 
-  # ── Phase 1: Read all HTTPS hosts (from arguments or config) ──
-  local _tls_hosts="" url check_type _category _description _expected host
-  if [ $# -gt 0 ]; then
-    # Deep check mode: use passed domains
-    for url in "$@"; do
-      host=$(url_to_host "$url")
-      [ -z "$host" ] && continue
-      _tls_total=$((_tls_total + 1))
-      _tls_hosts="${_tls_hosts} ${host}"
-      printf '%s' "check" > "${_RUN_DIR}/tls-cat-${host}"
-    done
-  else
-    # Default: load from check-targets.conf (zone-filtered by _cat_config)
-    while IFS='|' read -r url check_type _category _description _expected; do
-      case "$url" in "#"*|"") continue ;; esac
-      [ "$check_type" = "geo" ] && continue
-      host="${url#https://}"; host="${host#http://}"; host="${host%%/*}"; host="${host%%:*}"
-      [ -z "$host" ] && continue
-      _tls_total=$((_tls_total + 1))
-      _tls_hosts="${_tls_hosts} ${host}"
-      printf '%s' "${_category:-global}" > "${_RUN_DIR}/tls-cat-${host}"
-    done <<EOF
-$(_cat_config check-targets)
-EOF
-  fi
+  # ── Phase 1: Read all HTTPS hosts ──
+  _tls_targets_load "$@"
 
   # Auto-width first column
   local _label_w
@@ -385,35 +654,10 @@ EOF
   tbl_group_reset
 
   # ── Phase 2: Batched parallel TLS probes ──
-  # shellcheck disable=SC2329
-  _tls_run_batch() {
-    local _hosts="$1"
-    local _bh
-    for _bh in $_hosts; do
-      for iface in $ifaces; do
-        (
-          _resolved=""
-          if [ "$has_dig" = 1 ]; then
-            if ! is_tunnel_iface "$iface"; then
-              if [ -n "$_cached_isp_dns" ]; then
-                _resolved=$(_resolve_a "$_bh" "$_cached_isp_dns") || _resolved=""
-              fi
-            fi
-            [ -z "$_resolved" ] && { _resolved=$(_resolve_a "$_bh") || _resolved=""; }
-          fi
-          if [ -n "$_resolved" ]; then _tgt="${_resolved}:443"
-          else _resolved="(system)"; _tgt="${_bh}:443"; fi
-
-          _probe_out="${_RUN_DIR}/tls-par-${_bh}-${iface}"
-          _tls_probe "$_bh" "$_tgt" "$_probe_out" "$iface"
-          printf '%s\n' "$_resolved" >> "$_probe_out"
-        ) &
-      done
-    done
-  }
-  batch_run_parallel "TLS" "$PARALLEL_BATCH_SIZE" "$_tls_hosts" _tls_run_batch
+  batch_run_parallel "TLS" "$PARALLEL_BATCH_SIZE" "$_tls_hosts" _tls_targets_run_batch
 
   # ── Phase 3: Collect results and render table (in original host order) ──
+  local host
   for host in $_tls_hosts; do
     # Category group separator
     local _tls_cat="global"
@@ -423,196 +667,25 @@ EOF
     fi
     tbl_group_sep "$_tls_cat"
 
-    local _host_fps="" _host_mitm=0 _host_known_ca=0 _host_error=0
-    local _host_json_paths=""
+    _tls_targets_prescan_host "$host"
 
-    # Determine active route device for this host (for cell marker).
-    # TLS targets don't carry check-targets category — falls back to kernel FIB.
-    local _active_route_dev=""
-    local _resolved_ip=""
-    _resolved_ip=$(_resolve_a_cached "$host" 2>/dev/null) || _resolved_ip=""
-    _active_route_dev=$(active_dev_for_target "$_resolved_ip" "")
-
-    # Pre-scan: collect healthy fingerprints and pick recommended iface
-    local _recommended_dev="" _rec_ok_n=0 _ri _pre_fps=""
-    for _ri in $ifaces; do
-      local _rpf="${_RUN_DIR}/tls-par-${host}-${_ri}"
-      [ -f "$_rpf" ] || continue
-      local _r_line1 _r_issuer _r_fp
-      _r_line1=$(sed -n '1p' "$_rpf")
-      _r_issuer=$(printf '%s' "$_r_line1" | cut -d'|' -f1)
-      _r_fp=$(printf '%s' "$_r_line1" | cut -d'|' -f2)
-      { [ -z "$_r_issuer" ] || [ "$_r_issuer" = "unknown" ]; } && continue
-      { [ -z "$_r_fp" ] || [ "$_r_fp" = "unknown" ]; } && continue
-      # Skip MITM paths
-      _check_mitm_issuer "$_r_issuer" >/dev/null 2>&1 && continue
-      _rec_ok_n=$((_rec_ok_n + 1))
-      _pre_fps="${_pre_fps}${_r_fp}
-"
-      _recommended_dev="$_ri"
-    done
-    # No ★ when single iface (no choice to show)
-    local _n_ifc
-    _n_ifc=$(printf '%s' "$ifaces" | wc -w | tr -d ' ')
-    [ "$_n_ifc" -le 1 ] && _recommended_dev=""
-    # No ★ when all fingerprints identical (nothing to recommend)
-    local _pre_unique_fps
-    _pre_unique_fps=$(printf '%s' "$_pre_fps" | grep -v '^$' | sort -u | grep -c '.' 2>/dev/null) || _pre_unique_fps=0
-    [ "$_pre_unique_fps" -le 1 ] && _recommended_dev=""
+    # Reset per-host accumulators
+    _tt_host_fps=""
+    _tt_host_mitm=0
+    _tt_host_known_ca=0
+    _tt_host_error=0
+    _tt_host_json_paths=""
 
     cmp_row_start "$host"
 
+    local iface
     for iface in $ifaces; do
-      local _pf="${_RUN_DIR}/tls-par-${host}-${iface}"
-      local _issuer="unknown" _fp="unknown" _resolved="(system)"
-
-      if [ -f "$_pf" ]; then
-        _issuer=$(sed -n '1p' "$_pf" | cut -d'|' -f1)
-        _fp=$(sed -n '1p' "$_pf" | cut -d'|' -f2)
-        _resolved=$(sed -n '2p' "$_pf")
-        rm -f "$_pf"
-      fi
-
-      _issuer="${_issuer:-unknown}"
-      _fp="${_fp:-unknown}"
-      _resolved="${_resolved:-(system)}"
-
-      # Determine per-path status
-      local _path_st="ok"
-      if [ "$_issuer" = "unknown" ] || [ "$_fp" = "unknown" ]; then
-        _path_st="error"
-        _host_error=$((_host_error + 1))
-      else
-        local _mitm_match=""
-        _mitm_match=$(_check_mitm_issuer "$_issuer") || true
-        if [ -n "$_mitm_match" ]; then
-          _path_st="mitm_proxy"
-          _host_mitm=1
-        else
-          local _known_ca_match=""
-          _known_ca_match=$(_check_known_ca "$_issuer") || true
-          if [ -n "$_known_ca_match" ]; then
-            _path_st="known_ca"
-            _host_known_ca=1
-          fi
-        fi
-      fi
-
-      _host_fps="${_host_fps}${_fp}
-"
-
-      # JSON path entry
-      local _itype
-      _itype=$(iface_type "$iface")
-      local _path_json
-      _path_json=$(printf '{"dev":"%s","type":"%s","resolved_ip":"%s","issuer":"%s","fingerprint":"%s","status":"%s"}' \
-        "$iface" "$_itype" "$_resolved" \
-        "$(json_escape_val "$_issuer")" "$_fp" "$_path_st")
-      json_arr_add _host_json_paths "$_path_json"
-
-      # Table cell (text markers like cmd_compare for alignment)
-      if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
-        local _cell_st="ok" _short_st="ok"
-        case "$_path_st" in
-          error)      _cell_st="fail"; _short_st="ERR" ;;
-          mitm_proxy) _cell_st="warn"; _short_st="MIM" ;;
-          known_ca)   _cell_st="dim";  _short_st="NCA" ;;
-        esac
-
-        local _iss_s _iss_w=$((_CMP_COL_W - 4))
-        _iss_s=$(_issuer_short "$_issuer")
-        if [ ${#_iss_s} -gt "$_iss_w" ]; then
-          _iss_s=$(printf '%.*s..' "$((_iss_w - 2))" "$_iss_s")
-        fi
-
-        tbl_cell_v 3 "$_short_st" "$_cell_st"; local _c1="$_CELL"
-        tbl_cell_v "$_iss_w" "$_iss_s"; local _c2="$_CELL"
-        local _cell
-        _cell=$(printf '%s %s' "$_c1" "$_c2")
-        local _is_active=0 _is_recommended=0
-        [ "$iface" = "$_active_route_dev" ] && _is_active=1
-        [ "$iface" = "$_recommended_dev" ] && _is_recommended=1
-        cmp_cell "$_cell" "$_is_active" "$_is_recommended"
-      fi
+      _tls_targets_process_path "$host" "$iface"
     done
 
-    # ── Per-host verdict ──
-    # Count unique VALID fingerprints (excluding "unknown" from failed/blocked paths)
-    local _unique_valid_fps _total_paths _verdict="same_cert"
-    _unique_valid_fps=$(printf '%s' "$_host_fps" | grep -v '^$' | grep -v '^unknown$' | sort -u | grep -c '.' 2>/dev/null) || _unique_valid_fps=0
-    _total_paths=$(printf '%s' "$_host_fps" | grep -v '^$' | grep -c '.' 2>/dev/null) || _total_paths=0
-
-    if [ "$_host_mitm" = 1 ]; then
-      _verdict="mitm_proxy"
-      _tls_mitm=$((_tls_mitm + 1))
-    elif [ "$_total_paths" -gt 0 ] && [ "$_total_paths" -eq "$_host_error" ]; then
-      # All paths failed — no cert data at all
-      _verdict="all_error"
-    elif [ "$_unique_valid_fps" -gt 1 ]; then
-      # Multiple different valid fingerprints — real MITM suspected
-      _verdict="different_certs"
-      _tls_mitm=$((_tls_mitm + 1))
-    elif [ "$_host_known_ca" = 1 ]; then
-      # National/regional CA — not MITM, but not in standard trust store
-      _verdict="known_ca"
-      _tls_ok=$((_tls_ok + 1))
-    else
-      # Same valid FP across working paths (blocked paths don't count as MITM)
-      _tls_ok=$((_tls_ok + 1))
-    fi
-
-    # Build host JSON
-    local _host_ok_val=0
-    case "$_verdict" in
-      different_certs|mitm_proxy) _host_ok_val=1 ;;
-    esac
-    local _host_json _ok_jv="false"
-    [ "$_host_ok_val" = 0 ] && _ok_jv="true"
-    _host_json=$(printf '{"ok":%s,"target":"%s","verdict":"%s","paths":[%s]}' \
-      "$_ok_jv" "$host" "$_verdict" "$_host_json_paths")
-    json_arr_add json_results "$_host_json"
-
-    local _vst="ok"
-    local _vtext="same"
-    case "$_verdict" in
-      same_cert)        _vst="ok";   _vtext="same" ;;
-      known_ca)         _vst="dim";  _vtext="NatCA" ;;
-      mitm_proxy)       _vst="warn"; _vtext="MITM" ;;
-      different_certs)  _vst="warn"; _vtext="differ" ;;
-      all_error)        _vst="fail"; _vtext="error" ;;
-    esac
-    # Annotate with blocked path count when some paths failed but cert matches
-    if [ "$_host_error" -gt 0 ] && [ "$_verdict" != "all_error" ]; then
-      _vtext="${_vtext} (${_host_error} blocked)"
-    fi
-    cmp_row_end "$(color_status "$_vst" "$_vtext")"
+    _tls_targets_host_verdict "$host"
   done
 
   # ── Summary ──
-  if [ "$OUTPUT_JSON" = 0 ]; then
-    if is_quiet; then
-      if [ "$_tls_mitm" -gt 0 ]; then
-        printf 'tls: %s %s/%s hosts have cert issues\n' "$(status_mark warn)" "$_tls_mitm" "$_tls_total"
-      else
-        printf 'tls: %s/%s hosts same cert %s\n' "$_tls_ok" "$_tls_total" "$(status_mark ok)"
-      fi
-    else
-      if [ "$_tls_mitm" -gt 0 ]; then
-        printf '→ %s%s %s/%s hosts have certificate discrepancies%s\n' \
-          "$C_RED" "$(status_mark warn)" "$_tls_mitm" "$_tls_total" "$C_RST"
-        [ "$_EXIT_CODE" -lt 1 ] && _EXIT_CODE=1
-      fi
-      summary_line "$_tls_ok" "$_tls_total" "hosts"
-    fi
-  fi
-
-  if [ "$OUTPUT_JSON" = 1 ]; then
-    local ok_val=0
-    [ "$_tls_mitm" -gt 0 ] && ok_val=1
-    printf '{%s,%s,%s,"hosts":[%s]}\n' \
-      "$(json_kv_bool "ok" "$ok_val")" \
-      "$(json_kv_num "total" "$_tls_total")" \
-      "$(json_kv_num "mitm_count" "$_tls_mitm")" \
-      "$json_results"
-  fi
+  _tls_targets_render_summary
 }

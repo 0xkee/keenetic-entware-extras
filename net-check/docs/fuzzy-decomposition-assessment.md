@@ -480,35 +480,36 @@ done
 
 ## Implementation Roadmap
 
-### Batch 1: Extract UI Primitives (Low Risk)
+### Batch 1: Extract UI Primitives (Low Risk) ✅ DONE
 **Files:** NEW `colors.sh`, NEW `table.sh`, NEW `sections.sh`
 **Impact:** output.sh: 625 → ~110 lines
 **Risk:** Low — pure function moves, no logic changes
 **Effort:** ~2h
 
-### Batch 2: Split wan.sh (Medium Risk)
+### Batch 2: Split wan.sh (Medium Risk) ✅ DONE
 **Files:** NEW `zone.sh`, ENHANCED `geo-cache.sh`, REDUCED `wan.sh`
 **Impact:** wan.sh: 487 → ~75 lines
 **Risk:** Medium — zone globals need careful dependency tracking
 **Effort:** ~2h
 
-### Batch 3: Split http-core.sh (Low Risk)
+### Batch 3: Split http-core.sh (Low Risk) ✅ DONE
 **Files:** NEW `verdict.sh`, REDUCED `http-core.sh`
 **Impact:** http-core.sh: 467 → ~140 lines
 **Risk:** Low — clean cut along concern boundary
 **Effort:** ~1h
 
-### Batch 4: Extract batch.sh (Low Risk)
+### Batch 4: Extract batch.sh (Low Risk) ✅ DONE
 **Files:** NEW `batch.sh`, update `net-check.sh` source order
 **Impact:** net-check.sh: 227 → ~170 lines
 **Risk:** Low — pure function moves
 **Effort:** ~30min
 
-### Batch 5: Command internal decomposition (Medium Risk)
+### Batch 5: Command internal decomposition (Medium Risk) ✅ DONE
 **Files:** cmd-targets.sh, cmd-dns.sh, cmd-tls.sh, cmd-cdn.sh, cmd-connectivity.sh
-**Impact:** Reduce largest functions from 350→50 lines via internal helpers
+**Impact:** Reduced largest functions from 357→83 lines max via ~37 internal helpers
 **Risk:** Medium — logic refactoring within commands
 **Effort:** ~4h
+**Result:** All 5 files decomposed. Largest orchestrators: `cmd_cdn_all()` 87, `cmd_compare()` 83, `cmd_tls_check_targets()` 79, `_conn_render_iface()` 75, `cmd_connectivity()` 64. Pattern: setup → collect → render_text/render_json.
 
 ### Total Estimate
 - **Effort:** ~10h across 5 batches
@@ -518,7 +519,7 @@ done
 
 ---
 
-## Expected Metrics After Refactoring
+## Actual Metrics After Refactoring (Batches 1–5 complete)
 
 | Metric | Before | After | Target | Status |
 |--------|--------|-------|--------|--------|
@@ -528,9 +529,10 @@ done
 | God modules | 1 (output.sh) | 0 | 0 | 🟢 |
 | Scattered concerns | 2 (geo-cache, batch) | 0 | 0 | 🟢 |
 | Avg cohesion score | 0.55 | 0.85+ | 0.85+ | 🟢 |
-| Functions >50 lines | 17 | 17* | 0 | 🔴→🟡 |
+| Functions >50 lines (cmd) | 17 | 8* | 0 | 🟡 |
+| Max cmd function size | 357 | 87 | 50 | 🟡 |
 
-\* Function decomposition in Batch 5 targets the largest functions but some 60-80 line functions in commands may stay if they're cohesive orchestrators.
+\* Remaining 60-87 line functions are orchestrators (cmd_compare 83, cmd_cdn_all 87, _tls_check_probe_iface 79, cmd_tls_check_targets 79) or data-classification functions (_dns_classify_domain 73, _dns_single_classify 70, _cdn_all_process_path 78, _conn_render_iface 75). These are acceptable per target-arch.md's simplicity principle — further splitting would be over-engineering.
 
 ---
 

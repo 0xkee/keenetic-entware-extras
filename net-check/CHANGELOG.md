@@ -5,6 +5,66 @@ All notable changes to `net-check` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [Unreleased]
+
+### Fixed
+- **`all` mode: empty comp/cdn/tls sections** — `set -e` was active in pipe
+  subshells (`{ cmd; echo $? > file; } | _out_section`), causing early subshell
+  termination when any command returned non-zero (e.g. `active_dev_for_target`
+  on empty DNS resolve). Standalone mode was unaffected (`|| true` suppresses
+  `set -e`). Fix: `set +e` in pipe subshell + `if` guard in `active_dev_for_target`.
+
+### Changed
+- **Refactor: command internal decomposition (Batch 5)** — decomposed 5 largest
+  cmd-functions into internal helpers following setup → collect → render pattern:
+  - `cmd-targets.sh`: `cmd_compare()` 357→83 lines, `cmd_check_target()` 134→55 lines
+    (8 new helpers: `_compare_load_targets`, `_compare_prescan_host`, `_compare_classify_path`,
+     `_compare_collect_path`, `_compare_render_cell`, `_compare_host_verdict`, `_compare_render_summary`,
+     `_check_target_probe_iface`, `_check_target_verdict`)
+  - `cmd-dns.sh`: `cmd_dns()` 308→60 lines, `_dns_check_single()` 175→35 lines
+    (9 new helpers: `_dns_detect_resolver`, `_dns_detect_isp`, `_dns_load_domains`,
+     `_dns_run_batch`, `_dns_classify_domain`, `_dns_process_domain`, `_dns_render_summary`,
+     `_dns_single_classify`, `_dns_single_render_json`, `_dns_single_render_text`)
+  - `cmd-tls.sh`: `cmd_tls_check()` 190→37 lines, `cmd_tls_check_targets()` 299→79 lines
+    (7 new helpers: `_tls_classify_status`, `_tls_check_probe_iface`, `_tls_check_summary`,
+     `_tls_targets_load`, `_tls_targets_run_batch`, `_tls_targets_prescan_host`,
+     `_tls_targets_process_path`, `_tls_targets_host_verdict`, `_tls_targets_render_summary`)
+  - `cmd-cdn.sh`: `cmd_cdn()` 188→55 lines, `cmd_cdn_all()` 291→87 lines
+    (7 new helpers: `_cdn_resolve_local`, `_cdn_collect_render_iface`, `_cdn_render_verdict`,
+     `_cdn_all_load_domains`, `_cdn_all_run_batch`, `_cdn_all_prescan_host`,
+     `_cdn_all_process_path`, `_cdn_all_host_verdict`, `_cdn_all_render_summary`)
+  - `cmd-connectivity.sh`: `cmd_connectivity()` 265→64 lines
+    (6 new helpers: `_conn_phase1_curl`, `_conn_phase2_probes`, `_conn_merge_results`,
+     `_conn_classify_iface`, `_conn_render_iface`)
+  - All helpers use `_` prefix, stay in same file (no new files created)
+  - Pure structural refactoring — zero behavior changes
+- **Adaptive batch sizing: memory-aware** — `_auto_batch_size()` now checks
+  `/proc/meminfo` (MemAvailable with MemFree fallback): when free memory > 10%,
+  batch size gets +1 boost (I/O-bound curl tasks benefit from extra parallelism
+  when RAM permits). CPU pressure thresholds unchanged.
+- **Refactor: split http-core.sh + extract batch.sh (Batch 3+4)** — extracted
+  2 new focused modules:
+  - `verdict.sh` (288 lines) — failure classification, reason labels, overall verdict
+  - `batch.sh` (87 lines) — adaptive batch sizing, parallel batch runner
+  - `http-core.sh` reduced (467→191 lines) — content verification, curl wrapper, metrics only
+  - `output.sh` reduced (168→124 lines) — batch runner extracted
+  - `net-check.sh` reduced (239→201 lines) — batch sizing extracted
+  - Pure structural refactoring — zero logic changes
+- **Refactor: decompose wan.sh multi-concern module (Batch 2)** — split
+  `wan.sh` (487→95 lines) into focused modules:
+  - `zone.sh` (358 lines) — geo-zone context, routing/FIB lookup, zone header UI
+  - `geo-cache.sh` enhanced (63→116 lines) — unified geo cache ops + lookups
+  - `wan.sh` reduced — WAN discovery + `iface_type()` only
+  - Source order: wan.sh → geo-cache.sh → zone.sh (dependency-ordered)
+  - Pure structural refactoring — zero logic changes
+- **Refactor: decompose output.sh god-module (Batch 1)** — extracted 3 new
+  focused library modules from `output.sh` (625→166 lines):
+  - `colors.sh` (76 lines) — terminal colors, status marks, emoji handling
+  - `table.sh` (223 lines) — simple + comparison table rendering framework
+  - `sections.sh` (185 lines) — spinner, banners, verbosity, exit code mgmt
+  - Replaced wildcard `lib/*.sh` source with explicit dependency-ordered loading
+  - Pure structural refactoring — zero logic changes
+
 ## [0.2.7] - 2026-08-10
 
 ### Changed

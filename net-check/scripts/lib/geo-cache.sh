@@ -1,9 +1,14 @@
-# net-check: File-based geo-location cache (read/write/stale).
+# net-check: File-based geo-location cache (read/write/stale) + geo cache lookups.
 # Per-interface cache: geo-<iface>.json with GEO_CACHE_TTL — full result per WAN path.
 # Per-IP unified cache moved to lib/geoip.sh (ipgeo-<ip>.json).
-# Dependencies: is_cache_fresh from lib/common.sh
-# Globals used: DATA_DIR, GEO_CACHE_TTL
+# Dependencies: is_cache_fresh from lib/common.sh,
+#   get_wan_interfaces from lib/wan.sh (for precache_geo_cc)
+# Runtime dependencies: cmd_geo from lib/cmd-geo.sh (for ensure_geo_cache,
+#   loaded after libs but called only at runtime)
+# Globals used: DATA_DIR, GEO_CACHE_TTL, _GEO_EXT_IPS, _EXIT_CODE
 # shellcheck disable=SC3043
+
+# ─── File Cache Operations ────────────────────────────────────────────────────
 
 # Get geo cache file path for an interface.
 # Args: $1 - interface name
@@ -60,4 +65,52 @@ parse_geo_json() {
   _geo_city=$(printf '%s' "$_j" | sed -n 's/.*"city"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
   _geo_asn=$(printf '%s' "$_j" | sed -n 's/.*"asn"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
   _geo_org=$(printf '%s' "$_j" | sed 's/\\"/§/g' | sed -n 's/.*"org"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | sed 's/§/"/g')
+}
+
+# ─── Geo Cache Lookups ────────────────────────────────────────────────────────
+
+# Ensure geo ext_ip cache is populated (runs cmd_geo silently if empty).
+# Preserves _EXIT_CODE from caller.
+# Depends: cmd_geo (from lib/cmd-geo.sh, loaded before this is called)
+ensure_geo_cache() {
+  [ -n "$_GEO_EXT_IPS" ] && return 0
+  local _saved_exit="$_EXIT_CODE"
+  cmd_geo > /dev/null 2>&1 || true
+  _EXIT_CODE="$_saved_exit"
+}
+
+# Lookup cached ext_ip for an interface from _GEO_EXT_IPS.
+# Args: $1 - interface name
+# stdout: ext_ip or empty string
+geo_cached_ip() {
+  [ -z "$_GEO_EXT_IPS" ] && return 0
+  printf '%s\n' "$_GEO_EXT_IPS" | sed -n "s/^${1}://p" | head -1
+}
+
+# Lookup cached country code for an interface from geo cache file.
+# Returns fresh cache if available, otherwise stale. Empty if no cache exists.
+# Args: $1 - interface name
+# stdout: 2-letter country code or empty string
+geo_cached_cc() {
+  local _gc_json=""
+  _gc_json=$(geo_read_cache "$1" 2>/dev/null) || \
+    _gc_json=$(geo_read_stale "$1" 2>/dev/null) || return 0
+  printf '%s' "$_gc_json" | sed -n 's/.*"country"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
+}
+
+# Pre-cache geo CC for all WAN interfaces into _GEO_CC_* globals (0 forks per lookup).
+# Call once after ensure_geo_cache() before rendering loops.
+precache_geo_cc() {
+  local _iface _cc
+  for _iface in $(get_wan_interfaces); do
+    _cc=$(geo_cached_cc "$_iface")
+    eval "_GEO_CC_$(printf '%s' "$_iface" | tr '.-' '__')=\"$_cc\""
+  done
+}
+
+# Fast CC lookup from pre-cached globals (0 forks).
+# Args: $1 - interface name
+# stdout: 2-letter CC or empty
+geo_cc_fast() {
+  eval "printf '%s' \"\${_GEO_CC_$(printf '%s' "$1" | tr '.-' '__'):-}\""
 }

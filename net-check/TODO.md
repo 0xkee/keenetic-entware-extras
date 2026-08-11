@@ -14,6 +14,10 @@
 
 ## Optimization
 
+- [ ] **Granular memory-aware batch sizing** — улучшить `_auto_batch_size()` в `batch.sh`:
+  сейчас фиксированные уровни (1-4 процесса). Сделать плавную шкалу 1–20 concurrent
+  процессов на основе комбинации CPU load + free memory %. Больше свободной памяти и
+  ниже CPU → больше параллельных curl. Учесть: роутеры с 128MB vs 256MB+ RAM.
 - [ ] **Fork-bomb audit** — проверить все вызовы `$(function)` в hot loops
   (per-cell, per-row и т.д., типа тестов) по всему net-check; убедиться, что нет скрытых
   fork-heavy паттернов (аналогично parse_curl_metrics, to_ms, json_kv

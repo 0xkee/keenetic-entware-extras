@@ -12,8 +12,6 @@
 #   C_GREEN, C_RED, C_YELLOW, C_DIM, C_RST, C_BOLD, C_CYAN
 # shellcheck disable=SC3043
 
-# ─── CDN Helpers ──────────────────────────────────────────────────────────────
-
 # ─── CDN Probe Helper ────────────────────────────────────────────────────────
 
 # Run CDN ECS resolve + HTTP probe for one domain/iface.
@@ -70,205 +68,7 @@ _cdn_probe_iface() {
     > "$_out"
 }
 
-# ─── Command: cdn (CDN geo-steering analysis) ────────────────────────────────
-
-# Analyze CDN geo-steering for a domain.
-# Phase 1: resolve via local DNS (actual result clients get).
-# Phase 2: EDNS Client Subnet per WAN interface (optimal CDN edge per path).
-# Phase 3: geolocate resolved IPs → country code per path.
-# Args: $1 - domain, $2 - optional extra curl flags (custom headers)
-# Args: $1 - domain, $2 - optional extra curl flags, $3 - "no_header" to skip title/description
-cmd_cdn() {
-  local domain="${1:-}"
-  local extra_curl="${2:-}"
-  local _skip_hdr="${3:-}"
-  if [ -z "$domain" ]; then
-    emit_error "Usage: net-check.sh cdn <domain>"
-    return 1
-  fi
-
-  require_cmd dig
-
-  local ifaces
-  ifaces=$(require_wan_ifaces) || return 1
-
-  # Phase 1: Local DNS resolution (what clients actually get)
-  local local_ip="" local_cc=""
-  local _dns_port="53"
-  for _p in $DNS_PROBE_PORTS; do
-    local_ip=$(dig @127.0.0.1 -p "$_p" "$domain" A +short +tries=1 +time="$DNS_TIMEOUT" 2>/dev/null \
-      | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-    if [ -n "$local_ip" ]; then
-      _dns_port="$_p"
-      break
-    fi
-  done
-  local_ip="${local_ip:--}"
-  local_cc=$(geolocate_ip "$local_ip")
-
-  # Phase 1b: Determine which interface local DNS IP routes through
-  local route_dev=""
-  if [ "$local_ip" != "-" ]; then
-    local _iif="$LAN_BRIDGE"
-    local _fake_src
-    _fake_src=$(ip -4 addr show "$_iif" 2>/dev/null | \
-      awk '/inet /{split($2,a,"/"); split(a[1],b,"."); printf "%s.%s.%s.%d", b[1],b[2],b[3],(b[4]%254)+1; exit}')
-    local _route_out=""
-    if [ -n "$_fake_src" ]; then
-      _route_out=$(ip route get "$local_ip" from "$_fake_src" iif "$_iif" 2>/dev/null) || _route_out=""
-    fi
-    [ -z "$_route_out" ] && _route_out=$(ip route get "$local_ip" 2>/dev/null) || true
-    route_dev=$(printf '%s' "$_route_out" | sed -n 's/.* dev \([^ ]*\).*/\1/p' | head -1)
-  fi
-
-  # Phase 2: ECS per interface - parallel
-  (
-  trap 'kill 0 2>/dev/null; exit 130' INT TERM
-  for iface in $ifaces; do
-    ( _cdn_probe_iface "$domain" "$iface" "$extra_curl" \
-        "${_RUN_DIR}/cdn-iface-${iface}" ) &
-  done
-  wait
-  )
-
-  # Phase 3: Output results
-  local json_paths=""
-  local _all_cc="" _active_cc=""
-
-  if [ "$_skip_hdr" != "no_header" ]; then
-    section_title "${_TITLE_CDN}: $domain"
-  fi
-  if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
-    if [ "$_skip_hdr" = "no_header" ]; then
-      printf '%s%s%s%s\n' "$C_BOLD" "$C_CYAN" "$domain" "$C_RST"
-    else
-      printf 'Per-interface CDN edge country via EDNS Client Subnet.\n'
-    fi
-    if [ -n "$route_dev" ]; then
-      printf 'Local DNS (:%-4s) → %s (%s) → routes via %s\n\n' "$_dns_port" "$local_ip" "$local_cc" "$route_dev"
-    else
-      printf 'Local DNS (:%-4s) → %s (%s)\n\n' "$_dns_port" "$local_ip" "$local_cc"
-    fi
-  fi
-  tbl_header "Path:14" "CC:4" "CDN Edge IP:18" "Edge:4" "RTT:10" "HTTP:5" "Size:8" "Match"
-
-  for iface in $ifaces; do
-    local _par_f="${_RUN_DIR}/cdn-iface-${iface}"
-    local cdn_ip="-" cdn_cc="??" rtt="-" ext_ip="-" http_code="-" http_size="-" cc_cached="0"
-    if [ -f "$_par_f" ]; then
-      cdn_ip=$(cut -f1 "$_par_f")
-      rtt=$(cut -f3 "$_par_f")
-      ext_ip=$(cut -f4 "$_par_f")
-      http_code=$(cut -f5 "$_par_f")
-      http_size=$(cut -f6 "$_par_f")
-      rm -f "$_par_f"
-    fi
-    # Sequential geolocate (moved out of parallel _cdn_probe_iface to avoid
-    # API rate-limits; also maximises cache hits for duplicate CDN edge IPs).
-    if [ "$cdn_ip" != "-" ]; then
-      if is_cache_fresh "$(ipgeo_cache_file "$cdn_ip")" "${IPGEO_CACHE_TTL:-86400}"; then
-        cc_cached=1
-      fi
-      cdn_cc=$(geolocate_ip "$cdn_ip")
-    fi
-
-    local itype cc
-    itype=$(iface_type "$iface")
-    cc=$(geo_cached_cc "$iface")
-    [ -z "$cc" ] && cc="-"
-
-    # Is this the active routing path?
-    local is_active=0
-    [ "$iface" = "$route_dev" ] && is_active=1
-    [ "$is_active" = 1 ] && _active_cc="$cdn_cc"
-
-    # Track unique country codes for summary
-    case " $_all_cc " in
-      *" $cdn_cc "*) ;;
-      *) _all_cc="${_all_cc:+${_all_cc} }${cdn_cc}" ;;
-    esac
-
-    if [ "$OUTPUT_JSON" = 1 ]; then
-      local path_json _active_jv="false"
-      [ "$is_active" = 1 ] && _active_jv="true"
-      path_json=$(printf '{"dev":"%s","type":"%s","cc":"%s","cdn_ip":"%s","edge_cc":"%s","rtt":"%s","ext_ip":"%s","http_code":"%s","http_size":"%s","active":%s}' \
-        "$iface" "$itype" "$cc" "$cdn_ip" "$cdn_cc" "$rtt" "$ext_ip" "$http_code" "$http_size" "$_active_jv")
-      json_arr_add json_paths "$path_json"
-    else
-      local _st="ok"
-      [ "$cdn_ip" = "-" ] && _st="fail"
-      local active_mark=""
-      [ "$is_active" = 1 ] && active_mark="active"
-      # Color HTTP code: any non-2xx numeric + REDIR = warn;
-      # curl failure tags (TMOUT, RST, etc.) = fail
-      local _http_st="ok"
-      case "$http_code" in
-        2[0-9][0-9])              _http_st="ok" ;;
-        0|-)                      _http_st="dim" ;;
-        [0-9][0-9][0-9]|REDIR)   _http_st="warn" ;;
-        *)                        _http_st="fail" ;;
-      esac
-      # CC color = worst of DNS resolution + HTTP status
-      local _cc_st="$_st"
-      if [ "$_cc_st" = "ok" ]; then
-        case "$_http_st" in
-          warn) _cc_st="warn" ;;
-          fail) _cc_st="fail" ;;
-        esac
-      fi
-      local _match_cell=""
-      [ -n "$active_mark" ] && _match_cell="$(color_status ok "$active_mark")"
-      [ "$cc_cached" = "1" ] && _match_cell="${_match_cell}${_match_cell:+ }$(cache_mark)"
-      tbl_cell_v 18 "$cdn_ip" "$_st"; local _c1="$_CELL"
-      tbl_cell_v 4 "$cdn_cc" "$_cc_st"; local _c2="$_CELL"
-      tbl_cell_v 5 "$http_code" "$_http_st"; local _c3="$_CELL"
-      tbl_row "$iface" "$cc" "$_c1" "$_c2" "$rtt" "$_c3" "$http_size" \
-        "$_match_cell"
-    fi
-  done
-
-  # Verdict
-  local _cc_count steering verdict
-  _cc_count=$(printf '%s' "$_all_cc" | wc -w | tr -d ' ')
-  steering="same_edge"
-  [ "$_cc_count" -gt 1 ] && steering="different_edges"
-
-  verdict="optimal"
-  if [ -n "$_active_cc" ] && [ "$_active_cc" != "??" ] && [ "$local_cc" != "??" ]; then
-    if [ "$local_cc" != "$_active_cc" ]; then
-      verdict="suboptimal"
-    fi
-  fi
-
-  if [ "$OUTPUT_JSON" = 0 ]; then
-    if is_quiet; then
-      printf 'cdn %s: %s (%s)\n' "$domain" "$verdict" "$_all_cc"
-    else
-      if [ "$verdict" = "suboptimal" ]; then
-        printf '→ %s⚠️  DNS→%s, but %s path expects %s%s\n' \
-          "$C_YELLOW" "$local_cc" "${route_dev:-?}" "$_active_cc" "$C_RST"
-      elif [ "$_cc_count" -gt 1 ]; then
-        printf '→ %sGeo-steering active%s (%s)\n' "$C_GREEN" "$C_RST" "$_all_cc"
-      else
-        printf '→ All paths: %s edge\n' "${_all_cc:-?}"
-      fi
-    fi
-  fi
-
-  if [ "$OUTPUT_JSON" = 1 ]; then
-    printf '{%s,%s,%s,%s,%s,%s,"paths":[%s],%s}\n' \
-      "$(json_kv_bool "ok" 0)" \
-      "$(json_kv "domain" "$domain")" \
-      "$(json_kv "local_ip" "$local_ip")" \
-      "$(json_kv "local_cc" "$local_cc")" \
-      "$(json_kv "route_dev" "${route_dev:-}")" \
-      "$(json_kv "verdict" "$verdict")" \
-      "$json_paths" \
-      "$(json_kv "steering" "$steering")"
-  fi
-}
-
-# ─── Command: cdn-all (CDN analysis for all configured domains) ──────────────
+# ─── CDN Cell Formatting ─────────────────────────────────────────────────────
 
 # Build extra curl flags from custom headers field in cdn-domains.conf.
 # Args: $1 - semicolon-separated headers (e.g., "H1: v1;H2: v2")
@@ -322,9 +122,180 @@ _cdn_format_cell_v() {
   _CDN_CELL=$(printf '%s %s %*s' "$_c1" "$_c2" "$((_CMP_COL_W - 9))" "$_rtt")
 }
 
-cmd_cdn_all() {
-  if [ $# -eq 0 ] && [ ! -f "$_CONFIG_DIR/cdn-domains.conf" ]; then
-    emit_error "CDN domains file not found: cdn-domains.conf"
+# ─── cmd_cdn Helpers ──────────────────────────────────────────────────────────
+
+# Phase 1: Local DNS resolve + route device detection for cmd_cdn.
+# Args: $1 - domain
+# Sets: _cdn_local_ip, _cdn_local_cc, _cdn_route_dev, _cdn_dns_port
+_cdn_resolve_local() {
+  local domain="$1"
+  _cdn_local_ip=""
+  _cdn_local_cc=""
+  _cdn_route_dev=""
+  _cdn_dns_port="53"
+
+  local _p
+  for _p in $DNS_PROBE_PORTS; do
+    _cdn_local_ip=$(dig @127.0.0.1 -p "$_p" "$domain" A +short +tries=1 +time="$DNS_TIMEOUT" 2>/dev/null \
+      | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    if [ -n "$_cdn_local_ip" ]; then
+      _cdn_dns_port="$_p"
+      break
+    fi
+  done
+  _cdn_local_ip="${_cdn_local_ip:--}"
+  _cdn_local_cc=$(geolocate_ip "$_cdn_local_ip")
+
+  # Determine which interface local DNS IP routes through
+  if [ "$_cdn_local_ip" != "-" ]; then
+    local _iif="$LAN_BRIDGE"
+    local _fake_src
+    _fake_src=$(ip -4 addr show "$_iif" 2>/dev/null | \
+      awk '/inet /{split($2,a,"/"); split(a[1],b,"."); printf "%s.%s.%s.%d", b[1],b[2],b[3],(b[4]%254)+1; exit}')
+    local _route_out=""
+    if [ -n "$_fake_src" ]; then
+      _route_out=$(ip route get "$_cdn_local_ip" from "$_fake_src" iif "$_iif" 2>/dev/null) || _route_out=""
+    fi
+    [ -z "$_route_out" ] && _route_out=$(ip route get "$_cdn_local_ip" 2>/dev/null) || true
+    _cdn_route_dev=$(printf '%s' "$_route_out" | sed -n 's/.* dev \([^ ]*\).*/\1/p' | head -1)
+  fi
+}
+
+# Render verdict + JSON for cmd_cdn (single-domain).
+# Args: $1 - domain
+# Uses: _cdn_all_cc, _cdn_active_cc, _cdn_local_cc, _cdn_route_dev,
+#       _cdn_local_ip, _cdn_json_paths
+_cdn_render_verdict() {
+  local domain="$1"
+
+  local _cc_count steering verdict
+  _cc_count=$(printf '%s' "$_cdn_all_cc" | wc -w | tr -d ' ')
+  steering="same_edge"
+  [ "$_cc_count" -gt 1 ] && steering="different_edges"
+
+  verdict="optimal"
+  if [ -n "$_cdn_active_cc" ] && [ "$_cdn_active_cc" != "??" ] && [ "$_cdn_local_cc" != "??" ]; then
+    if [ "$_cdn_local_cc" != "$_cdn_active_cc" ]; then
+      verdict="suboptimal"
+    fi
+  fi
+
+  if [ "$OUTPUT_JSON" = 0 ]; then
+    if is_quiet; then
+      printf 'cdn %s: %s (%s)\n' "$domain" "$verdict" "$_cdn_all_cc"
+    else
+      if [ "$verdict" = "suboptimal" ]; then
+        printf '→ %s⚠️  DNS→%s, but %s path expects %s%s\n' \
+          "$C_YELLOW" "$_cdn_local_cc" "${_cdn_route_dev:-?}" "$_cdn_active_cc" "$C_RST"
+      elif [ "$_cc_count" -gt 1 ]; then
+        printf '→ %sGeo-steering active%s (%s)\n' "$C_GREEN" "$C_RST" "$_cdn_all_cc"
+      else
+        printf '→ All paths: %s edge\n' "${_cdn_all_cc:-?}"
+      fi
+    fi
+  fi
+
+  if [ "$OUTPUT_JSON" = 1 ]; then
+    printf '{%s,%s,%s,%s,%s,%s,"paths":[%s],%s}\n' \
+      "$(json_kv_bool "ok" 0)" \
+      "$(json_kv "domain" "$domain")" \
+      "$(json_kv "local_ip" "$_cdn_local_ip")" \
+      "$(json_kv "local_cc" "$_cdn_local_cc")" \
+      "$(json_kv "route_dev" "${_cdn_route_dev:-}")" \
+      "$(json_kv "verdict" "$verdict")" \
+      "$_cdn_json_paths" \
+      "$(json_kv "steering" "$steering")"
+  fi
+}
+
+# Collect and render one interface result for cmd_cdn.
+# Args: $1 - domain, $2 - iface
+# Uses: _cdn_route_dev
+# Updates: _cdn_all_cc, _cdn_active_cc, _cdn_json_paths
+_cdn_collect_render_iface() {
+  local domain="$1" iface="$2"
+
+  local _par_f="${_RUN_DIR}/cdn-iface-${iface}"
+  local cdn_ip="-" cdn_cc="??" rtt="-" ext_ip="-" http_code="-" http_size="-" cc_cached="0"
+  if [ -f "$_par_f" ]; then
+    cdn_ip=$(cut -f1 "$_par_f")
+    rtt=$(cut -f3 "$_par_f")
+    ext_ip=$(cut -f4 "$_par_f")
+    http_code=$(cut -f5 "$_par_f")
+    http_size=$(cut -f6 "$_par_f")
+    rm -f "$_par_f"
+  fi
+  # Sequential geolocate
+  if [ "$cdn_ip" != "-" ]; then
+    if is_cache_fresh "$(ipgeo_cache_file "$cdn_ip")" "${IPGEO_CACHE_TTL:-86400}"; then
+      cc_cached=1
+    fi
+    cdn_cc=$(geolocate_ip "$cdn_ip")
+  fi
+
+  local itype cc
+  itype=$(iface_type "$iface")
+  cc=$(geo_cached_cc "$iface")
+  [ -z "$cc" ] && cc="-"
+
+  local is_active=0
+  [ "$iface" = "$_cdn_route_dev" ] && is_active=1
+  [ "$is_active" = 1 ] && _cdn_active_cc="$cdn_cc"
+
+  case " $_cdn_all_cc " in
+    *" $cdn_cc "*) ;;
+    *) _cdn_all_cc="${_cdn_all_cc:+${_cdn_all_cc} }${cdn_cc}" ;;
+  esac
+
+  if [ "$OUTPUT_JSON" = 1 ]; then
+    local path_json _active_jv="false"
+    [ "$is_active" = 1 ] && _active_jv="true"
+    path_json=$(printf '{"dev":"%s","type":"%s","cc":"%s","cdn_ip":"%s","edge_cc":"%s","rtt":"%s","ext_ip":"%s","http_code":"%s","http_size":"%s","active":%s}' \
+      "$iface" "$itype" "$cc" "$cdn_ip" "$cdn_cc" "$rtt" "$ext_ip" "$http_code" "$http_size" "$_active_jv")
+    json_arr_add _cdn_json_paths "$path_json"
+  else
+    local _st="ok"
+    [ "$cdn_ip" = "-" ] && _st="fail"
+    local active_mark=""
+    [ "$is_active" = 1 ] && active_mark="active"
+    local _http_st="ok"
+    case "$http_code" in
+      2[0-9][0-9])              _http_st="ok" ;;
+      0|-)                      _http_st="dim" ;;
+      [0-9][0-9][0-9]|REDIR)   _http_st="warn" ;;
+      *)                        _http_st="fail" ;;
+    esac
+    local _cc_st="$_st"
+    if [ "$_cc_st" = "ok" ]; then
+      case "$_http_st" in
+        warn) _cc_st="warn" ;;
+        fail) _cc_st="fail" ;;
+      esac
+    fi
+    local _match_cell=""
+    [ -n "$active_mark" ] && _match_cell="$(color_status ok "$active_mark")"
+    [ "$cc_cached" = "1" ] && _match_cell="${_match_cell}${_match_cell:+ }$(cache_mark)"
+    tbl_cell_v 18 "$cdn_ip" "$_st"; local _c1="$_CELL"
+    tbl_cell_v 4 "$cdn_cc" "$_cc_st"; local _c2="$_CELL"
+    tbl_cell_v 5 "$http_code" "$_http_st"; local _c3="$_CELL"
+    tbl_row "$iface" "$cc" "$_c1" "$_c2" "$rtt" "$_c3" "$http_size" \
+      "$_match_cell"
+  fi
+}
+
+# ─── Command: cdn (CDN geo-steering analysis) ────────────────────────────────
+
+# Analyze CDN geo-steering for a domain.
+# Phase 1: resolve via local DNS (actual result clients get).
+# Phase 2: EDNS Client Subnet per WAN interface (optimal CDN edge per path).
+# Phase 3: geolocate resolved IPs → country code per path.
+# Args: $1 - domain, $2 - optional extra curl flags, $3 - "no_header" to skip title/description
+cmd_cdn() {
+  local domain="${1:-}"
+  local extra_curl="${2:-}"
+  local _skip_hdr="${3:-}"
+  if [ -z "$domain" ]; then
+    emit_error "Usage: net-check.sh cdn <domain>"
     return 1
   fi
 
@@ -333,23 +304,60 @@ cmd_cdn_all() {
   local ifaces
   ifaces=$(require_wan_ifaces) || return 1
 
-  # Load geo-zone context for zone header
-  load_zone_context
+  # Phase 1: Local DNS resolution + route detection
+  _cdn_resolve_local "$domain"
 
-  # Warm geo cache for accurate CC in comparison table headers
-  ensure_geo_cache
-  precache_geo_cc
+  # Phase 2: ECS per interface - parallel
+  (
+  trap 'kill 0 2>/dev/null; exit 130' INT TERM
+  for iface in $ifaces; do
+    ( _cdn_probe_iface "$domain" "$iface" "$extra_curl" \
+        "${_RUN_DIR}/cdn-iface-${iface}" ) &
+  done
+  wait
+  )
 
-  section_title "$_TITLE_CDN"
-  if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
-    printf 'Per-interface CDN edge country via EDNS Client Subnet.\n\n'
+  # Phase 3: Output results
+  local _cdn_json_paths=""
+  _cdn_all_cc=""
+  _cdn_active_cc=""
+
+  if [ "$_skip_hdr" != "no_header" ]; then
+    section_title "${_TITLE_CDN}: $domain"
   fi
+  if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
+    if [ "$_skip_hdr" = "no_header" ]; then
+      printf '%s%s%s%s\n' "$C_BOLD" "$C_CYAN" "$domain" "$C_RST"
+    else
+      printf 'Per-interface CDN edge country via EDNS Client Subnet.\n'
+    fi
+    if [ -n "$_cdn_route_dev" ]; then
+      printf 'Local DNS (:%-4s) → %s (%s) → routes via %s\n\n' "$_cdn_dns_port" "$_cdn_local_ip" "$_cdn_local_cc" "$_cdn_route_dev"
+    else
+      printf 'Local DNS (:%-4s) → %s (%s)\n\n' "$_cdn_dns_port" "$_cdn_local_ip" "$_cdn_local_cc"
+    fi
+  fi
+  tbl_header "Path:14" "CC:4" "CDN Edge IP:18" "Edge:4" "RTT:10" "HTTP:5" "Size:8" "Match"
 
-  local json_results=""
-  local _cdn_total=0 _cdn_geo_steer=0 _cdn_same=0 _cdn_error=0
+  local iface
+  for iface in $ifaces; do
+    _cdn_collect_render_iface "$domain" "$iface"
+  done
 
-  # ── Phase 1: Read all domains + build extra curl flags ──
-  local _cdn_domains="" _cdn_host_total=0
+  # Verdict
+  _cdn_render_verdict "$domain"
+}
+
+# ─── cmd_cdn_all Helpers ──────────────────────────────────────────────────────
+
+# Phase 1: Load CDN domains from arguments or cdn-domains.conf.
+# Args: $@ - optional domain list
+# Sets: _ca_domains, _ca_host_total
+# Creates: _RUN_DIR/cdncurl-*, _RUN_DIR/cdn-cat-* files
+_cdn_all_load_domains() {
+  _ca_domains=""
+  _ca_host_total=0
+
   if [ $# -gt 0 ]; then
     # Deep check mode: use passed domains
     local _cd _cdh
@@ -358,235 +366,227 @@ cmd_cdn_all() {
       [ -z "$_cdh" ] && continue
       printf '' > "${_RUN_DIR}/cdncurl-${_cdh}"
       printf '%s' "check" > "${_RUN_DIR}/cdn-cat-${_cdh}"
-      _cdn_domains="${_cdn_domains} ${_cdh}"
-      _cdn_host_total=$((_cdn_host_total + 1))
+      _ca_domains="${_ca_domains} ${_cdh}"
+      _ca_host_total=$((_ca_host_total + 1))
     done
   else
     # Default: load from cdn-domains.conf (zone-filtered by _cat_config)
+    local domain _category _description _custom_headers
     while IFS='|' read -r domain _category _description _custom_headers; do
       case "$domain" in "#"*|"") continue ;; esac
       local extra_curl=""
       extra_curl=$(_cdn_build_extra_curl "${_custom_headers:-}")
       printf '%s' "$extra_curl" > "${_RUN_DIR}/cdncurl-${domain}"
       printf '%s' "${_category:-global}" > "${_RUN_DIR}/cdn-cat-${domain}"
-      _cdn_domains="${_cdn_domains} ${domain}"
-      _cdn_host_total=$((_cdn_host_total + 1))
+      _ca_domains="${_ca_domains} ${domain}"
+      _ca_host_total=$((_ca_host_total + 1))
     done <<EOF
 $(_cat_config cdn-domains)
 EOF
   fi
+}
 
-  # Auto-width first column
-  local _label_w
-  _label_w=$(auto_label_width "$_cdn_domains")
-  cmp_header "Domain" "$ifaces" "" "$_label_w"
-  tbl_group_reset
-
-  # ── Phase 2: Batched parallel probes ──
-  # shellcheck disable=SC2329
-  _cdn_run_batch() {
-    local _domains="$1"
-    local _bd _ec
-    for _bd in $_domains; do
-      _ec=$(cat "${_RUN_DIR}/cdncurl-${_bd}" 2>/dev/null) || _ec=""
-      for iface in $ifaces; do
-        ( _cdn_probe_iface "$_bd" "$iface" "$_ec" \
-            "${_RUN_DIR}/cdnall-${_bd}-${iface}" ) &
-      done
-    done
-  }
-  batch_run_parallel "CDN" "$CDN_BATCH_SIZE" "$_cdn_domains" _cdn_run_batch
-
-  # ── Phase 2.5: Pre-warm GeoIP cache for all CDN edge IPs ──
-  local _cdn_ips="" _pw_domain _pw_iface _pw_pf _pw_ip
-  for _pw_domain in $_cdn_domains; do
-    for _pw_iface in $ifaces; do
-      _pw_pf="${_RUN_DIR}/cdnall-${_pw_domain}-${_pw_iface}"
-      [ -f "$_pw_pf" ] || continue
-      _pw_ip=$(cut -f1 "$_pw_pf")
-      [ -n "$_pw_ip" ] && [ "$_pw_ip" != "-" ] && _cdn_ips="${_cdn_ips} ${_pw_ip}"
-    done
-  done
-  geoip_batch_prewarm "$_cdn_ips"
-
-  # ── Phase 3: Collect results and render table (in original domain order) ──
-  for domain in $_cdn_domains; do
-    # Category group separator (reads category saved during domain loading)
-    local _cdn_cat="global"
-    if [ -f "${_RUN_DIR}/cdn-cat-${domain}" ]; then
-      _cdn_cat=$(cat "${_RUN_DIR}/cdn-cat-${domain}")
-      rm -f "${_RUN_DIR}/cdn-cat-${domain}"
-    fi
-    tbl_group_sep "$_cdn_cat"
-
-    rm -f "${_RUN_DIR}/cdncurl-${domain}" 2>/dev/null
-
-    local _all_cc="" _error_reasons="" _warn_reasons="" json_paths=""
-    local _has_error=0 _has_warn=0 _active_reason="" _any_cached=0
-
-    # Determine active route device for this domain (for cell marker).
-    # CDN domains don't carry check-targets category — falls back to kernel FIB.
-    local _active_route_dev=""
-    local _resolved_ip=""
-    _resolved_ip=$(_resolve_a_cached "$domain" 2>/dev/null) || _resolved_ip=""
-    _active_route_dev=$(active_dev_for_target "$_resolved_ip" "")
-
-    # Pre-scan: pick recommended iface (best OK path by RTT)
-    local _recommended_dev="" _rec_best_rtt=999999 _rec_ok_n=0 _ri
-    for _ri in $ifaces; do
-      local _rpf="${_RUN_DIR}/cdnall-${domain}-${_ri}"
-      [ -f "$_rpf" ] || continue
-      local _r_ip _r_http _r_rtt_raw _r_rtt_ms
-      _r_ip=$(cut -f1 "$_rpf")
-      [ "$_r_ip" = "-" ] && continue
-      _r_http=$(cut -f5 "$_rpf")
-      # Accept any numeric HTTP code or REDIR (server responded);
-      # reject curl failure tags: TMOUT, TLS, ERR, RST, REFSD, etc.
-      case "$_r_http" in [1-9][0-9][0-9]|REDIR) ;; *) continue ;; esac
-      _rec_ok_n=$((_rec_ok_n + 1))
-      _r_rtt_raw=$(cut -f3 "$_rpf")
-      _r_rtt_ms=$(printf '%s' "$_r_rtt_raw" | sed 's/ms$//')
-      case "$_r_rtt_ms" in ''|'-') continue ;; esac
-      if [ "$_r_rtt_ms" -lt "$_rec_best_rtt" ] 2>/dev/null; then
-        _rec_best_rtt="$_r_rtt_ms"
-        _recommended_dev="$_ri"
-      fi
-    done
-    # No ★ when single iface (no choice to show)
-    local _n_ifc
-    _n_ifc=$(printf '%s' "$ifaces" | wc -w | tr -d ' ')
-    [ "$_n_ifc" -le 1 ] && _recommended_dev=""
-
-    cmp_row_start "$domain"
-
+# Batch callback: parallel CDN probes for all domains × all interfaces.
+# Args: $1 - space-separated domain list (batch subset)
+# Uses: ifaces (from caller scope)
+# shellcheck disable=SC2329
+_cdn_all_run_batch() {
+  local _domains="$1"
+  local _bd _ec
+  for _bd in $_domains; do
+    _ec=$(cat "${_RUN_DIR}/cdncurl-${_bd}" 2>/dev/null) || _ec=""
     for iface in $ifaces; do
-      local _pf="${_RUN_DIR}/cdnall-${domain}-${iface}"
-      local cdn_ip="-" cdn_cc="??" rtt="-" ext_ip="-"
-      local http_code="-" http_size="-" cc_cached="0"
-      if [ -f "$_pf" ]; then
-        cdn_ip=$(cut -f1 "$_pf")
-        rtt=$(cut -f3 "$_pf"); ext_ip=$(cut -f4 "$_pf")
-        http_code=$(cut -f5 "$_pf"); http_size=$(cut -f6 "$_pf")
-        rm -f "$_pf"
-      fi
-      # Sequential geolocate (moved out of parallel probe — same reason as cmd_cdn)
-      if [ "$cdn_ip" != "-" ]; then
-        if is_cache_fresh "$(ipgeo_cache_file "$cdn_ip")" "${IPGEO_CACHE_TTL:-86400}"; then
-          cc_cached=1
-          _any_cached=1
-        fi
-        cdn_cc=$(geolocate_ip "$cdn_ip")
-      fi
-
-      case " $_all_cc " in
-        *" $cdn_cc "*) ;;
-        *) _all_cc="${_all_cc:+${_all_cc} }${cdn_cc}" ;;
-      esac
-
-      # Track DNS resolution failures
-      if [ "$cdn_ip" = "-" ]; then
-        _has_error=1
-        case "$_error_reasons" in
-          *"no_resolve"*) ;;
-          "") _error_reasons="no_resolve" ;;
-          *) _error_reasons="${_error_reasons}, no_resolve" ;;
-        esac
-        [ "$iface" = "$_active_route_dev" ] && _active_reason="no_resolve"
-      fi
-
-      # Classify HTTP: non-2xx numeric + REDIR → warn;
-      # curl failure tags (TMOUT, RST, etc.) → error
-      case "$http_code" in
-        2[0-9][0-9]|-) ;;  # ok or no data - skip
-        [0-9][0-9][0-9]|REDIR)
-          _has_warn=1
-          local _long_w
-          _long_w=$(long_reason "$http_code")
-          case "$_warn_reasons" in
-            *"$_long_w"*) ;;
-            "") _warn_reasons="$_long_w" ;;
-            *) _warn_reasons="${_warn_reasons}, ${_long_w}" ;;
-          esac
-          [ "$iface" = "$_active_route_dev" ] && _active_reason="$_long_w"
-          ;;
-        *)
-          _has_error=1
-          local _long_e
-          _long_e=$(long_reason "$http_code")
-          case "$_error_reasons" in
-            *"$_long_e"*) ;;
-            "") _error_reasons="$_long_e" ;;
-            *) _error_reasons="${_error_reasons}, ${_long_e}" ;;
-          esac
-          [ "$iface" = "$_active_route_dev" ] && _active_reason="$_long_e"
-          ;;
-      esac
-
-      local _is_active=0 _is_recommended=0
-      [ "$iface" = "$_active_route_dev" ] && _is_active=1
-      [ "$iface" = "$_recommended_dev" ] && _is_recommended=1
-      _cdn_format_cell_v "$cdn_cc" "$http_code" "$rtt" "$cdn_ip"
-      cmp_cell "$_CDN_CELL" "$_is_active" "$_is_recommended"
-
-      local _itype
-      _itype=$(iface_type "$iface")
-      local _pj
-      _pj=$(printf '{"dev":"%s","type":"%s","cdn_ip":"%s","edge_cc":"%s","rtt":"%s","ext_ip":"%s","http_code":"%s","http_size":"%s"}' \
-        "$iface" "$_itype" "$cdn_ip" "$cdn_cc" "$rtt" "$ext_ip" "$http_code" "$http_size")
-      json_arr_add json_paths "$_pj"
+      ( _cdn_probe_iface "$_bd" "$iface" "$_ec" \
+          "${_RUN_DIR}/cdnall-${_bd}-${iface}" ) &
     done
-
-    # Verdict: combine geo-steering info with error/warning status
-    local _cc_count _verdict="same_edge" _vst="dim"
-    _cc_count=$(printf '%s' "$_all_cc" | wc -w | tr -d ' ')
-    _cdn_total=$((_cdn_total + 1))
-    if [ "$_has_error" = 1 ] && [ "$_cc_count" -le 1 ] && [ "$_cc_count" -eq 0 ] 2>/dev/null; then
-      _cdn_error=$((_cdn_error + 1))
-    elif [ "$_cc_count" -gt 1 ]; then
-      _verdict="geo_steering"; _vst="ok"
-      _cdn_geo_steer=$((_cdn_geo_steer + 1))
-    elif [ "$_has_error" = 1 ]; then
-      _cdn_error=$((_cdn_error + 1))
-    else
-      _cdn_same=$((_cdn_same + 1))
-    fi
-    # Keep original verdict colors: same_edge=dim, geo_steering=ok
-    # Reasons shown in dim (like HTTP Target Comparison)
-    local _verdict_text _cc_list _reasons_text=""
-    _cc_list=$(printf '%s' "$_all_cc" | tr ' ' ',')
-    if [ -n "$_error_reasons" ] && [ -n "$_warn_reasons" ]; then
-      _reasons_text="${_error_reasons}, ${_warn_reasons}"
-    elif [ -n "$_error_reasons" ]; then
-      _reasons_text="$_error_reasons"
-    elif [ -n "$_warn_reasons" ]; then
-      _reasons_text="$_warn_reasons"
-    fi
-    if [ -n "$_reasons_text" ]; then
-      # Prefix active route's failure reason with grey ► in display
-      local _display_reasons="$_reasons_text"
-      if [ -n "$_active_reason" ]; then
-        local _before="${_display_reasons%%"$_active_reason"*}"
-        local _after="${_display_reasons#*"$_active_reason"}"
-        _display_reasons="${_before}► ${_active_reason}${_after}"
-      fi
-      _verdict_text=$(printf '%s %s %s(%s)%s' "$(color_status "$_vst" "$_verdict")" "$_cc_list" "$C_DIM" "$_display_reasons" "$C_RST")
-    else
-      _verdict_text=$(printf '%s %s' "$(color_status "$_vst" "$_verdict")" "$_cc_list")
-    fi
-    [ "$_any_cached" = 1 ] && _verdict_text="${_verdict_text} $(cache_mark)"
-    cmp_row_end "$_verdict_text"
-
-    local _dom_ok=0
-    [ "$_has_error" = 0 ] && _dom_ok=0 || _dom_ok=1
-    local _dj _dom_ok_jv="false"
-    [ "$_dom_ok" = 0 ] && _dom_ok_jv="true"
-    _dj=$(printf '{"ok":%s,"domain":"%s","verdict":"%s","paths":[%s]}' \
-      "$_dom_ok_jv" "$domain" "$_verdict" "$json_paths")
-    json_arr_add json_results "$_dj"
   done
+}
 
+# Pre-scan parallel results for a domain: determine active route and recommended dev.
+# Args: $1 - domain
+# Uses: ifaces (from caller scope)
+# Sets: _ca_active_route_dev, _ca_recommended_dev
+_cdn_all_prescan_host() {
+  local domain="$1"
+
+  # Determine active route device
+  local _resolved_ip=""
+  _resolved_ip=$(_resolve_a_cached "$domain" 2>/dev/null) || _resolved_ip=""
+  _ca_active_route_dev=$(active_dev_for_target "$_resolved_ip" "")
+
+  # Pre-scan: pick recommended iface (best OK path by RTT)
+  _ca_recommended_dev=""
+  local _rec_best_rtt=999999 _ri
+  for _ri in $ifaces; do
+    local _rpf="${_RUN_DIR}/cdnall-${domain}-${_ri}"
+    [ -f "$_rpf" ] || continue
+    local _r_ip _r_http _r_rtt_raw _r_rtt_ms
+    _r_ip=$(cut -f1 "$_rpf")
+    [ "$_r_ip" = "-" ] && continue
+    _r_http=$(cut -f5 "$_rpf")
+    # Accept any numeric HTTP code or REDIR (server responded)
+    case "$_r_http" in [1-9][0-9][0-9]|REDIR) ;; *) continue ;; esac
+    _r_rtt_raw=$(cut -f3 "$_rpf")
+    _r_rtt_ms=$(printf '%s' "$_r_rtt_raw" | sed 's/ms$//')
+    case "$_r_rtt_ms" in ''|'-') continue ;; esac
+    if [ "$_r_rtt_ms" -lt "$_rec_best_rtt" ] 2>/dev/null; then
+      _rec_best_rtt="$_r_rtt_ms"
+      _ca_recommended_dev="$_ri"
+    fi
+  done
+  # No ★ when single iface
+  local _n_ifc
+  _n_ifc=$(printf '%s' "$ifaces" | wc -w | tr -d ' ')
+  [ "$_n_ifc" -le 1 ] && _ca_recommended_dev=""
+}
+
+# Process one domain/iface: read par-file, geolocate, classify, render cell, collect JSON.
+# Args: $1 - domain, $2 - iface
+# Uses: _ca_active_route_dev, _ca_recommended_dev
+# Updates: _ca_all_cc, _ca_has_error, _ca_has_warn, _ca_error_reasons,
+#          _ca_warn_reasons, _ca_active_reason, _ca_any_cached, _ca_json_paths
+_cdn_all_process_path() {
+  local domain="$1" iface="$2"
+
+  local _pf="${_RUN_DIR}/cdnall-${domain}-${iface}"
+  local cdn_ip="-" cdn_cc="??" rtt="-" ext_ip="-"
+  local http_code="-" http_size="-" cc_cached="0"
+  if [ -f "$_pf" ]; then
+    cdn_ip=$(cut -f1 "$_pf")
+    rtt=$(cut -f3 "$_pf"); ext_ip=$(cut -f4 "$_pf")
+    http_code=$(cut -f5 "$_pf"); http_size=$(cut -f6 "$_pf")
+    rm -f "$_pf"
+  fi
+  # Sequential geolocate
+  if [ "$cdn_ip" != "-" ]; then
+    if is_cache_fresh "$(ipgeo_cache_file "$cdn_ip")" "${IPGEO_CACHE_TTL:-86400}"; then
+      cc_cached=1
+      _ca_any_cached=1
+    fi
+    cdn_cc=$(geolocate_ip "$cdn_ip")
+  fi
+
+  case " $_ca_all_cc " in
+    *" $cdn_cc "*) ;;
+    *) _ca_all_cc="${_ca_all_cc:+${_ca_all_cc} }${cdn_cc}" ;;
+  esac
+
+  # Track DNS resolution failures
+  if [ "$cdn_ip" = "-" ]; then
+    _ca_has_error=1
+    case "$_ca_error_reasons" in
+      *"no_resolve"*) ;;
+      "") _ca_error_reasons="no_resolve" ;;
+      *) _ca_error_reasons="${_ca_error_reasons}, no_resolve" ;;
+    esac
+    [ "$iface" = "$_ca_active_route_dev" ] && _ca_active_reason="no_resolve"
+  fi
+
+  # Classify HTTP status
+  case "$http_code" in
+    2[0-9][0-9]|-) ;;  # ok or no data - skip
+    [0-9][0-9][0-9]|REDIR)
+      _ca_has_warn=1
+      local _long_w
+      _long_w=$(long_reason "$http_code")
+      case "$_ca_warn_reasons" in
+        *"$_long_w"*) ;;
+        "") _ca_warn_reasons="$_long_w" ;;
+        *) _ca_warn_reasons="${_ca_warn_reasons}, ${_long_w}" ;;
+      esac
+      [ "$iface" = "$_ca_active_route_dev" ] && _ca_active_reason="$_long_w"
+      ;;
+    *)
+      _ca_has_error=1
+      local _long_e
+      _long_e=$(long_reason "$http_code")
+      case "$_ca_error_reasons" in
+        *"$_long_e"*) ;;
+        "") _ca_error_reasons="$_long_e" ;;
+        *) _ca_error_reasons="${_ca_error_reasons}, ${_long_e}" ;;
+      esac
+      [ "$iface" = "$_ca_active_route_dev" ] && _ca_active_reason="$_long_e"
+      ;;
+  esac
+
+  # Render cell
+  local _is_active=0 _is_recommended=0
+  [ "$iface" = "$_ca_active_route_dev" ] && _is_active=1
+  [ "$iface" = "$_ca_recommended_dev" ] && _is_recommended=1
+  _cdn_format_cell_v "$cdn_cc" "$http_code" "$rtt" "$cdn_ip"
+  cmp_cell "$_CDN_CELL" "$_is_active" "$_is_recommended"
+
+  # JSON path entry
+  local _itype
+  _itype=$(iface_type "$iface")
+  local _pj
+  _pj=$(printf '{"dev":"%s","type":"%s","cdn_ip":"%s","edge_cc":"%s","rtt":"%s","ext_ip":"%s","http_code":"%s","http_size":"%s"}' \
+    "$iface" "$_itype" "$cdn_ip" "$cdn_cc" "$rtt" "$ext_ip" "$http_code" "$http_size")
+  json_arr_add _ca_json_paths "$_pj"
+}
+
+# Compute per-domain verdict, build JSON, render row end.
+# Args: $1 - domain
+# Uses: _ca_all_cc, _ca_has_error, _ca_has_warn, _ca_error_reasons,
+#       _ca_warn_reasons, _ca_active_reason, _ca_any_cached, _ca_json_paths
+# Updates: _cdn_total, _cdn_geo_steer, _cdn_same, _cdn_error, _cdn_json_results
+_cdn_all_host_verdict() {
+  local domain="$1"
+
+  local _cc_count _verdict="same_edge" _vst="dim"
+  _cc_count=$(printf '%s' "$_ca_all_cc" | wc -w | tr -d ' ')
+  _cdn_total=$((_cdn_total + 1))
+  if [ "$_ca_has_error" = 1 ] && [ "$_cc_count" -le 1 ] && [ "$_cc_count" -eq 0 ] 2>/dev/null; then
+    _cdn_error=$((_cdn_error + 1))
+  elif [ "$_cc_count" -gt 1 ]; then
+    _verdict="geo_steering"; _vst="ok"
+    _cdn_geo_steer=$((_cdn_geo_steer + 1))
+  elif [ "$_ca_has_error" = 1 ]; then
+    _cdn_error=$((_cdn_error + 1))
+  else
+    _cdn_same=$((_cdn_same + 1))
+  fi
+
+  # Build verdict text with reasons
+  local _verdict_text _cc_list _reasons_text=""
+  _cc_list=$(printf '%s' "$_ca_all_cc" | tr ' ' ',')
+  if [ -n "$_ca_error_reasons" ] && [ -n "$_ca_warn_reasons" ]; then
+    _reasons_text="${_ca_error_reasons}, ${_ca_warn_reasons}"
+  elif [ -n "$_ca_error_reasons" ]; then
+    _reasons_text="$_ca_error_reasons"
+  elif [ -n "$_ca_warn_reasons" ]; then
+    _reasons_text="$_ca_warn_reasons"
+  fi
+  if [ -n "$_reasons_text" ]; then
+    # Prefix active route's failure reason with grey ►
+    local _display_reasons="$_reasons_text"
+    if [ -n "$_ca_active_reason" ]; then
+      local _before="${_display_reasons%%"$_ca_active_reason"*}"
+      local _after="${_display_reasons#*"$_ca_active_reason"}"
+      _display_reasons="${_before}► ${_ca_active_reason}${_after}"
+    fi
+    _verdict_text=$(printf '%s %s %s(%s)%s' "$(color_status "$_vst" "$_verdict")" "$_cc_list" "$C_DIM" "$_display_reasons" "$C_RST")
+  else
+    _verdict_text=$(printf '%s %s' "$(color_status "$_vst" "$_verdict")" "$_cc_list")
+  fi
+  [ "$_ca_any_cached" = 1 ] && _verdict_text="${_verdict_text} $(cache_mark)"
+  cmp_row_end "$_verdict_text"
+
+  # JSON
+  local _dom_ok=0
+  [ "$_ca_has_error" = 0 ] && _dom_ok=0 || _dom_ok=1
+  local _dj _dom_ok_jv="false"
+  [ "$_dom_ok" = 0 ] && _dom_ok_jv="true"
+  _dj=$(printf '{"ok":%s,"domain":"%s","verdict":"%s","paths":[%s]}' \
+    "$_dom_ok_jv" "$domain" "$_verdict" "$_ca_json_paths")
+  json_arr_add _cdn_json_results "$_dj"
+}
+
+# Render final summary for cmd_cdn_all.
+# Uses: _cdn_total, _cdn_geo_steer, _cdn_same, _cdn_error, _cdn_json_results
+_cdn_all_render_summary() {
   if [ "$OUTPUT_JSON" = 1 ]; then
-    printf '[%s]\n' "$json_results"
+    printf '[%s]\n' "$_cdn_json_results"
   else
     if is_quiet; then
       if [ "$_cdn_error" -gt 0 ]; then
@@ -612,5 +612,95 @@ EOF
   if [ "$_cdn_error" -gt 0 ]; then
     update_exit_code "$((_cdn_total - _cdn_error))" "$_cdn_total"
   fi
+}
+
+# ─── Command: cdn-all (CDN analysis for all configured domains) ──────────────
+
+cmd_cdn_all() {
+  if [ $# -eq 0 ] && [ ! -f "$_CONFIG_DIR/cdn-domains.conf" ]; then
+    emit_error "CDN domains file not found: cdn-domains.conf"
+    return 1
+  fi
+
+  require_cmd dig
+
+  local ifaces
+  ifaces=$(require_wan_ifaces) || return 1
+
+  # Load geo-zone context for zone header
+  load_zone_context
+
+  # Warm geo cache for accurate CC in comparison table headers
+  ensure_geo_cache
+  precache_geo_cc
+
+  section_title "$_TITLE_CDN"
+  if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
+    printf 'Per-interface CDN edge country via EDNS Client Subnet.\n\n'
+  fi
+
+  _cdn_json_results=""
+  local _cdn_total=0 _cdn_geo_steer=0 _cdn_same=0 _cdn_error=0
+
+  # ── Phase 1: Read all domains + build extra curl flags ──
+  _cdn_all_load_domains "$@"
+
+  # Auto-width first column
+  local _label_w
+  _label_w=$(auto_label_width "$_ca_domains")
+  cmp_header "Domain" "$ifaces" "" "$_label_w"
+  tbl_group_reset
+
+  # ── Phase 2: Batched parallel probes ──
+  batch_run_parallel "CDN" "$CDN_BATCH_SIZE" "$_ca_domains" _cdn_all_run_batch
+
+  # ── Phase 2.5: Pre-warm GeoIP cache for all CDN edge IPs ──
+  local _cdn_ips="" _pw_domain _pw_iface _pw_pf _pw_ip
+  for _pw_domain in $_ca_domains; do
+    for _pw_iface in $ifaces; do
+      _pw_pf="${_RUN_DIR}/cdnall-${_pw_domain}-${_pw_iface}"
+      [ -f "$_pw_pf" ] || continue
+      _pw_ip=$(cut -f1 "$_pw_pf")
+      [ -n "$_pw_ip" ] && [ "$_pw_ip" != "-" ] && _cdn_ips="${_cdn_ips} ${_pw_ip}"
+    done
+  done
+  geoip_batch_prewarm "$_cdn_ips"
+
+  # ── Phase 3: Collect results and render table (in original domain order) ──
+  local domain
+  for domain in $_ca_domains; do
+    # Category group separator
+    local _cdn_cat="global"
+    if [ -f "${_RUN_DIR}/cdn-cat-${domain}" ]; then
+      _cdn_cat=$(cat "${_RUN_DIR}/cdn-cat-${domain}")
+      rm -f "${_RUN_DIR}/cdn-cat-${domain}"
+    fi
+    tbl_group_sep "$_cdn_cat"
+    rm -f "${_RUN_DIR}/cdncurl-${domain}" 2>/dev/null
+
+    _cdn_all_prescan_host "$domain"
+
+    # Reset per-domain accumulators
+    _ca_all_cc=""
+    _ca_has_error=0
+    _ca_has_warn=0
+    _ca_error_reasons=""
+    _ca_warn_reasons=""
+    _ca_active_reason=""
+    _ca_any_cached=0
+    _ca_json_paths=""
+
+    cmp_row_start "$domain"
+
+    local iface
+    for iface in $ifaces; do
+      _cdn_all_process_path "$domain" "$iface"
+    done
+
+    _cdn_all_host_verdict "$domain"
+  done
+
+  # ── Summary ──
+  _cdn_all_render_summary
   return 0
 }

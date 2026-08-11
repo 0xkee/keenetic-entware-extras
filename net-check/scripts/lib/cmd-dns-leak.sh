@@ -284,17 +284,16 @@ _dns_leak_whoami() {
 
 # ─── Command: dns-leak ────────────────────────────────────────────────────────
 
-# DNS leak test: discover which recursive DNS resolvers handle queries.
-# Uses 3-level fallback: dnscheck.tools API → bash.ws API → whoami dig queries.
-# Detects leak when ISP DNS resolvers appear while SmartDNS/DoH is active.
-cmd_dns_leak() {
-  require_cmd dig
-
+# Detect SmartDNS, set up dig routing, build tunnel/ISP CC sets.
+# Sets: _has_smartdns, _smartdns_port, _dns_leak_dig_extra, _tunnel_ccs, _isp_ccs
+_dns_leak_setup_context() {
   # Detect SmartDNS before probes — determines both dig routing and leak logic.
   # On the router, port 53 = ndnproxy; iptables DNAT only intercepts LAN (br0)
   # traffic, not local processes. Without explicit port, dig hits ndnproxy and
   # tests the wrong resolver chain.
-  local _dns_info _has_smartdns=0 _smartdns_port=""
+  _has_smartdns=0
+  _smartdns_port=""
+  local _dns_info
   _dns_info=$(detect_dns_port 2>/dev/null) || _dns_info=""
   case "$_dns_info" in
     6053*|6153*)
@@ -305,25 +304,17 @@ cmd_dns_leak() {
 
   # When SmartDNS is active, route dig probes through it.
   # Variable is read by _dns_leak_dnscheck/_bashws/_whoami via dynamic scoping.
-  local _dns_leak_dig_extra=""
+  _dns_leak_dig_extra=""
   if [ "$_has_smartdns" = 1 ] && [ -n "$_smartdns_port" ]; then
     _dns_leak_dig_extra="@127.0.0.1 -p ${_smartdns_port}"
   fi
 
-  # Shared state set by _dns_leak_* functions
-  local _leak_source="" _leak_resolvers=""
-
-  # Run test with fallback chain
-  _dns_leak_dnscheck || _dns_leak_bashws || _dns_leak_whoami || {
-    emit_error "All DNS leak test services unreachable"
-    return 1
-  }
-
-  # ── Tunnel exit CC set + ISP CC: for tunnel-aware leak classification ──
+  # Tunnel exit CC set + ISP CC: for tunnel-aware leak classification.
   # When SmartDNS routes DoH through VPN tunnels, resolvers at tunnel exits
   # (or nearby anycast backends) are expected — not leaks.
   # Real leak = ISP DNS resolver appearing (CC matches ISP country).
-  local _tunnel_ccs="" _isp_ccs=""
+  _tunnel_ccs=""
+  _isp_ccs=""
   if [ "$_has_smartdns" = 1 ]; then
     load_zone_context
     ensure_geo_cache
@@ -340,20 +331,26 @@ cmd_dns_leak() {
       fi
     done
   fi
+}
 
-  # ── Leak detection: check if non-provider DNS leaks through SmartDNS/DoH ──
+# Classify each resolver as expected/tunnel/leak; build display and JSON data.
+# Reads: _leak_resolvers, _has_smartdns, _tunnel_ccs, _isp_ccs
+# Sets: _resolver_count, _leak_count, _tunnel_count, _leak_ips,
+#       _display_lines, _json_resolvers
+_dns_leak_classify_resolvers() {
   local _isp_dns=""
   _isp_dns=$(_get_isp_dns)
 
-  # Count resolvers and detect leaks
   # _is_expected: 1=known provider, 2=tunnel exit resolver, 0=leak
-  local _resolver_count=0 _leak_count=0 _tunnel_count=0
-  local _leak_ips="" _all_expected=1
-  local _rline _rip _rprov _rcc _rasn _rcc_cached _is_expected
-  local _json_resolvers=""
+  _resolver_count=0
+  _leak_count=0
+  _tunnel_count=0
+  _leak_ips=""
+  _display_lines=""
+  _json_resolvers=""
+  local _all_expected=1
+  local _rip _rprov _rcc _rasn _rcc_cached _is_expected
 
-  # Collect results for display
-  local _display_lines=""
   while IFS='|' read -r _rip _rprov _rcc _rasn _rcc_cached; do
     [ -z "$_rip" ] && continue
     _resolver_count=$((_resolver_count + 1))
@@ -441,17 +438,16 @@ $(printf '%s' "$_leak_resolvers")
 EOF
 
   _leak_ips=$(printf '%s' "$_leak_ips" | sed 's/^ //')
+}
 
-  # Determine verdict
-  local _verdict="no_leak"
-  if [ "$_leak_count" -gt 0 ]; then
-    _verdict="leak"
-    [ "$_EXIT_CODE" -lt 1 ] && _EXIT_CODE=1
-  fi
-
-  # ── Text output ──
+# Render DNS leak results as text table + verdict.
+# Reads: _leak_source, _has_smartdns, _smartdns_port, _tunnel_ccs,
+#         _display_lines, _resolver_count, _leak_count, _tunnel_count,
+#         _leak_ips, _verdict
+_dns_leak_render_text() {
   section_title "$_TITLE_DNS_LEAK"
-  if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
+
+  if ! is_quiet; then
     printf 'Discovers which recursive DNS resolvers handle your queries.\n'
     printf 'Source: %s%s%s' "$C_BOLD" "$_leak_source" "$C_RST"
     if [ "$_has_smartdns" = 1 ]; then
@@ -473,10 +469,8 @@ EOF
         _st="fail"
         _status_cell="LEAK $(status_mark fail)"
       elif [ "$_is_expected" = 2 ]; then
-        # Tunnel infrastructure (unknown resolver at non-ISP CC)
         _status_cell="tunnel $(status_mark ok)"
       else
-        # Known provider — check if CC matches a tunnel exit for label
         local _dcc=""
         [ -n "$_rcc" ] && [ "$_rcc" != "??" ] && \
           _dcc=$(printf '%s' "$_rcc" | tr '[:upper:]' '[:lower:]')
@@ -500,30 +494,69 @@ EOF
       printf '→ %sNo DNS leak%s %s (%s resolver(s), all expected%s)\n' \
         "$C_GREEN" "$C_RST" "$(status_mark ok)" "$_resolver_count" "$_extra"
     fi
-  fi
-
-  if [ "$OUTPUT_JSON" = 0 ] && is_quiet; then
+  else
+    # Quiet mode: single-line summary
     if [ "$_verdict" = "leak" ]; then
       printf 'dns-leak: %s leak (%s resolver(s))\n' "$(status_mark fail)" "$_leak_count"
     else
       printf 'dns-leak: no leak %s\n' "$(status_mark ok)"
     fi
   fi
+}
 
-  # ── JSON output ──
+# Render DNS leak results as JSON.
+# Reads: _leak_source, _has_smartdns, _smartdns_port, _resolver_count,
+#         _tunnel_count, _json_resolvers, _verdict, _leak_ips
+_dns_leak_render_json() {
+  local _ok_val=0
+  [ "$_verdict" = "leak" ] && _ok_val=1
+  local _j_resolver="system:53"
+  [ "$_has_smartdns" = 1 ] && _j_resolver="smartdns:${_smartdns_port}"
+  printf '{%s,%s,%s,%s,%s,"resolvers":[%s],%s,%s}\n' \
+    "$(json_kv_bool "ok" "$_ok_val")" \
+    "$(json_kv "source" "$_leak_source")" \
+    "$(json_kv "probe_resolver" "$_j_resolver")" \
+    "$(json_kv_num "resolver_count" "$_resolver_count")" \
+    "$(json_kv_num "tunnel_resolver_count" "$_tunnel_count")" \
+    "$_json_resolvers" \
+    "$(json_kv "verdict" "$_verdict")" \
+    "$(json_kv "leak_ips" "$_leak_ips")"
+}
+
+# DNS leak test: discover which recursive DNS resolvers handle queries.
+# Uses 3-level fallback: dnscheck.tools API → bash.ws API → whoami dig queries.
+# Detects leak when ISP DNS resolvers appear while SmartDNS/DoH is active.
+cmd_dns_leak() {
+  require_cmd dig
+
+  # Phase 1: Detect SmartDNS, build tunnel/ISP CC sets
+  local _has_smartdns _smartdns_port _dns_leak_dig_extra
+  local _tunnel_ccs _isp_ccs
+  _dns_leak_setup_context
+
+  # Phase 2: Run probe with 3-level fallback
+  local _leak_source="" _leak_resolvers=""
+  _dns_leak_dnscheck || _dns_leak_bashws || _dns_leak_whoami || {
+    emit_error "All DNS leak test services unreachable"
+    return 1
+  }
+
+  # Phase 3: Classify each resolver as expected/tunnel/leak
+  local _resolver_count _leak_count _tunnel_count _leak_ips
+  local _display_lines _json_resolvers
+  _dns_leak_classify_resolvers
+
+  # Phase 4: Determine verdict
+  local _verdict="no_leak"
+  if [ "$_leak_count" -gt 0 ]; then
+    _verdict="leak"
+    [ "$_EXIT_CODE" -lt 1 ] && _EXIT_CODE=1
+  fi
+
+  # Phase 5: Render output
   if [ "$OUTPUT_JSON" = 1 ]; then
-    local _ok_val=0
-    [ "$_verdict" = "leak" ] && _ok_val=1
-    local _j_resolver="system:53"
-    [ "$_has_smartdns" = 1 ] && _j_resolver="smartdns:${_smartdns_port}"
-    printf '{%s,%s,%s,%s,%s,"resolvers":[%s],%s,%s}\n' \
-      "$(json_kv_bool "ok" "$_ok_val")" \
-      "$(json_kv "source" "$_leak_source")" \
-      "$(json_kv "probe_resolver" "$_j_resolver")" \
-      "$(json_kv_num "resolver_count" "$_resolver_count")" \
-      "$(json_kv_num "tunnel_resolver_count" "$_tunnel_count")" \
-      "$_json_resolvers" \
-      "$(json_kv "verdict" "$_verdict")" \
-      "$(json_kv "leak_ips" "$_leak_ips")"
+    _dns_leak_render_json
+  else
+    _dns_leak_render_text
   fi
 }

@@ -7,6 +7,15 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.8] - 2026-08-11
+
+### Changed
+- **Refactor: decompose `cmd_dns_leak()` (239→33 lines)** — split monolithic
+  function into 5-phase pipeline: `_dns_leak_setup_context` (SmartDNS detect +
+  tunnel CC sets), `_dns_leak_classify_resolvers` (resolver classification loop),
+  `_dns_leak_render_text` (table + verdict), `_dns_leak_render_json` (JSON output),
+  `cmd_dns_leak` (orchestrator). No behavior changes.
+
 ### Fixed
 - **`all` mode: empty comp/cdn/tls sections** — `set -e` was active in pipe
   subshells (`{ cmd; echo $? > file; } | _out_section`), causing early subshell

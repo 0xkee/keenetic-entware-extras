@@ -8,45 +8,15 @@
 #   C_GREEN, C_RED, C_YELLOW, C_DIM, C_RST, C_BOLD, C_CYAN
 # shellcheck disable=SC3043
 
-# ─── Command: connectivity (Level A — TCP connect, TLS, latency, loss, MTU) ──
+# ─── Connectivity Helpers ─────────────────────────────────────────────────────
 
-cmd_connectivity() {
-  local ifaces
-  ifaces=$(require_wan_ifaces) || return 1
-
-  # Load geo-zone context for zone header
-  load_zone_context
-
-  # Ensure geo cache is populated for CC column
-  ensure_geo_cache
-
-  local json_results=""
-  local has_traceroute=0 has_ping=0
-  local _ok_count=0 _total_count=0
-  command -v traceroute >/dev/null 2>&1 && has_traceroute=1
-  command -v ping >/dev/null 2>&1 && has_ping=1
-
-  section_title "$_TITLE_CONN"
-  if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
-    printf 'TCP connect + TLS handshake timing per WAN path. Detects unreachable paths.\n'
-    printf 'Target: %s%s%s\n\n' "$C_DIM" "$CONNECTIVITY_URL" "$C_RST"
-  fi
-  if [ "$has_traceroute" = 1 ]; then
-    tbl_header "Path:14" "CC:4" "Hops:5" "MTU (OH, Enc):19" "DNS ms:9" "TCP ms:9" "TLS ms:9" "Total ms:9" "Loss:8" "Jit ms:7" "Status"
-  else
-    tbl_header "Path:14" "CC:4" "MTU (OH, Enc):19" "DNS ms:9" "TCP ms:9" "TLS ms:9" "Total ms:9" "Loss:8" "Jit ms:7" "Status"
-  fi
-
-  # Pre-warm SmartDNS cache: resolve connectivity host once before parallel curls.
-  # This ensures all 5 parallel curls hit warm DNS cache (1-2ms) instead of queuing.
-  local _conn_url="$CONNECTIVITY_URL"
-  local _conn_host
-  _conn_host=$(url_to_host "$_conn_url")
-  dig +short "$_conn_host" A +time=2 +tries=1 >/dev/null 2>&1 || true
-
-  # ── Phase 1: Parallel curl per interface (DNS hits warm cache) ──
+# Phase 1: Parallel curl per interface — TCP connect, TLS, latency timing.
+# Uses: ifaces, CONNECTIVITY_URL, CONNECT_TIMEOUT, HTTP_TIMEOUT, CURL_UA (from caller scope)
+# Creates: _RUN_DIR/conn-curl-* files
+_conn_phase1_curl() {
   (
   trap 'kill 0 2>/dev/null; exit 130' INT TERM
+  local _conn_url="$CONNECTIVITY_URL"
   for iface in $ifaces; do
     (
       _reach="fail"; _tcp_ms="—"; _tls_ms="—"; _total_ms="—"
@@ -73,8 +43,14 @@ cmd_connectivity() {
   done
   wait
   )
+}
 
-  # ── Phase 2: All probes in parallel (traceroute + ping-loss + MTU × all reachable ifaces) ──
+# Phase 2: Parallel probes — traceroute, ping loss/jitter, MTU discovery.
+# Only probes reachable interfaces (from Phase 1 results).
+# Uses: ifaces, has_traceroute, has_ping, TRACEROUTE_MAX_HOPS, PROBE_TIMEOUT,
+#       PING_COUNT, CONNECTIVITY_TARGET (from caller scope)
+# Creates: _RUN_DIR/conn-tr-*, conn-pl-*, conn-mt-* files
+_conn_phase2_probes() {
   (
   trap 'kill 0 2>/dev/null; exit 130' INT TERM
   for iface in $ifaces; do
@@ -92,7 +68,7 @@ cmd_connectivity() {
       ) &
     fi
 
-    # Packet loss / jitter (ping -c 5)
+    # Packet loss / jitter (ping -c N)
     if [ "$has_ping" = 1 ]; then
       ( _po=$(ping -c "$PING_COUNT" -W "$PROBE_TIMEOUT" -I "$iface" "$CONNECTIVITY_TARGET" 2>/dev/null) || _po=""
         _pl="—"; _pj="—"
@@ -133,8 +109,13 @@ cmd_connectivity() {
   done
   wait
   )
+}
 
-  # ── Merge curl timing + probe results into final result files ──
+# Merge curl timing + probe results into final result files.
+# Uses: ifaces (from caller scope)
+# Creates: _RUN_DIR/conn-* files (merged)
+_conn_merge_results() {
+  local iface
   for iface in $ifaces; do
     local _cf="${_RUN_DIR}/conn-curl-${iface}"
     [ -f "$_cf" ] || continue
@@ -152,119 +133,187 @@ cmd_connectivity() {
       "$_reach" "$_tcp_ms" "$_tls_ms" "$_total_ms" "$_hops" "$_loss" "$_jitter" "$_mtu" "$_itype" "$_dns_t" \
       > "${_RUN_DIR}/conn-${iface}"
   done
+}
 
-  # Collect parallel results (in iface order for stable output)
-  for iface in $ifaces; do
-    local _par_f="${_RUN_DIR}/conn-${iface}"
-    local reach="fail" tcp_ms="—" tls_ms="—" total_ms="—" hops="—"
-    local loss="—" jitter="—" mtu="—" itype="" dns_t="0"
-    local cc=""
-    cc=$(geo_cached_cc "$iface")
-    [ -z "$cc" ] && cc="—"
-    _total_count=$((_total_count + 1))
+# Read merged result file for one interface + compute MTU hint.
+# Args: $1 - iface
+# Sets: _ci_reach, _ci_tcp_ms, _ci_tls_ms, _ci_total_ms, _ci_hops,
+#       _ci_loss, _ci_jitter, _ci_mtu, _ci_itype, _ci_dns_t, _ci_cc,
+#       _ci_mtu_hint
+_conn_classify_iface() {
+  local iface="$1"
+  local _par_f="${_RUN_DIR}/conn-${iface}"
 
-    if [ -f "$_par_f" ]; then
-      reach=$(cut -f1 "$_par_f")
-      tcp_ms=$(cut -f2 "$_par_f")
-      tls_ms=$(cut -f3 "$_par_f")
-      total_ms=$(cut -f4 "$_par_f")
-      hops=$(cut -f5 "$_par_f")
-      loss=$(cut -f6 "$_par_f")
-      jitter=$(cut -f7 "$_par_f")
-      mtu=$(cut -f8 "$_par_f")
-      itype=$(cut -f9 "$_par_f")
-      dns_t=$(cut -f10 "$_par_f")
-      rm -f "$_par_f"
+  _ci_reach="fail"; _ci_tcp_ms="—"; _ci_tls_ms="—"; _ci_total_ms="—"
+  _ci_hops="—"; _ci_loss="—"; _ci_jitter="—"; _ci_mtu="—"
+  _ci_itype=""; _ci_dns_t="0"; _ci_mtu_hint=""
+
+  _ci_cc=$(geo_cached_cc "$iface")
+  [ -z "$_ci_cc" ] && _ci_cc="—"
+
+  if [ -f "$_par_f" ]; then
+    _ci_reach=$(cut -f1 "$_par_f")
+    _ci_tcp_ms=$(cut -f2 "$_par_f")
+    _ci_tls_ms=$(cut -f3 "$_par_f")
+    _ci_total_ms=$(cut -f4 "$_par_f")
+    _ci_hops=$(cut -f5 "$_par_f")
+    _ci_loss=$(cut -f6 "$_par_f")
+    _ci_jitter=$(cut -f7 "$_par_f")
+    _ci_mtu=$(cut -f8 "$_par_f")
+    _ci_itype=$(cut -f9 "$_par_f")
+    _ci_dns_t=$(cut -f10 "$_par_f")
+    rm -f "$_par_f"
+  fi
+
+  # Compute MTU overhead and estimated encapsulation layers
+  _ci_mtu_hint=""
+  if [ "$_ci_mtu" != "—" ] && [ "$_ci_mtu" != "1500" ]; then
+    local mtu_overhead encap_layers
+    mtu_overhead=$((1500 - _ci_mtu))
+    encap_layers=$((mtu_overhead / 60))
+    if [ "$_ci_itype" = "tunnel" ]; then
+      _ci_mtu_hint=" (+${mtu_overhead}b, ~${encap_layers})"
     fi
+  fi
+}
 
-    [ "$reach" = "ok" ] && _ok_count=$((_ok_count + 1))
+# Render one interface result (JSON, quiet, or text table row).
+# Args: $1 - iface
+# Uses: _ci_*, has_traceroute, _conn_json_results
+_conn_render_iface() {
+  local iface="$1"
 
-    # Compute MTU overhead and estimated encapsulation layers.
-    # Overhead = 1500 - measured_mtu (bytes consumed by encapsulation headers).
-    # ~Encap = floor(overhead / 60): rough estimate based on avg tunnel overhead.
-    # Only meaningful for tunnel interfaces; ISP MTU < 1500 is usually PPPoE/CGNAT.
-    local mtu_overhead="—" encap_layers="—" mtu_hint=""
-    if [ "$mtu" != "—" ] && [ "$mtu" != "1500" ]; then
-      mtu_overhead=$((1500 - mtu))
+  if [ "$OUTPUT_JSON" = 1 ]; then
+    local mtu_overhead="—" encap_layers="—"
+    if [ "$_ci_mtu" != "—" ] && [ "$_ci_mtu" != "1500" ]; then
+      mtu_overhead=$((1500 - _ci_mtu))
       encap_layers=$((mtu_overhead / 60))
-      if [ "$itype" = "tunnel" ]; then
-        mtu_hint=" (+${mtu_overhead}b, ~${encap_layers})"
-      fi
     fi
+    local entry_json
+    entry_json=$(printf '{%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s}' \
+      "$(json_kv "dev" "$iface")" \
+      "$(json_kv "type" "$_ci_itype")" \
+      "$(json_kv "cc" "$_ci_cc")" \
+      "$(json_kv "reach" "$_ci_reach")" \
+      "$(json_kv "tcp_ms" "$_ci_tcp_ms")" \
+      "$(json_kv "tls_ms" "$_ci_tls_ms")" \
+      "$(json_kv "total_ms" "$_ci_total_ms")" \
+      "$(json_kv "hops" "$_ci_hops")" \
+      "$(json_kv "loss" "$_ci_loss")" \
+      "$(json_kv "jitter" "$_ci_jitter")" \
+      "$(json_kv "mtu" "$_ci_mtu")" \
+      "$(json_kv "mtu_overhead" "$mtu_overhead")" \
+      "$(json_kv "encap_layers" "$encap_layers")")
+    json_arr_add _conn_json_results "$entry_json"
+    return 0
+  fi
 
-    if [ "$OUTPUT_JSON" = 1 ]; then
-      local entry_json
-      entry_json=$(printf '{%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s}' \
-        "$(json_kv "dev" "$iface")" \
-        "$(json_kv "type" "$itype")" \
-        "$(json_kv "cc" "$cc")" \
-        "$(json_kv "reach" "$reach")" \
-        "$(json_kv "tcp_ms" "$tcp_ms")" \
-        "$(json_kv "tls_ms" "$tls_ms")" \
-        "$(json_kv "total_ms" "$total_ms")" \
-        "$(json_kv "hops" "$hops")" \
-        "$(json_kv "loss" "$loss")" \
-        "$(json_kv "jitter" "$jitter")" \
-        "$(json_kv "mtu" "$mtu")" \
-        "$(json_kv "mtu_overhead" "$mtu_overhead")" \
-        "$(json_kv "encap_layers" "$encap_layers")")
-      json_arr_add json_results "$entry_json"
-    elif is_quiet; then
-      : # skip rows
-    else
-      local _st="fail" dns_ms="—"
-      [ "$reach" = "ok" ] && _st="ok"
-      [ "$reach" = "ok" ] && dns_ms=$(to_ms "$dns_t")
-      # Determine loss/MTU color status
-      local _loss_st="" _mtu_st=""
-      case "$loss" in
-        0%|—) _loss_st="ok" ;;
-        [1-9]%|1[0-9]%|20%) _loss_st="warn" ;;
-        *) _loss_st="fail" ;;
-      esac
-      case "$mtu" in
-        1500) _mtu_st="ok" ;;
-        —)    _mtu_st="" ;;
-        *)    _mtu_st="warn" ;;
-      esac
-      # Jitter color status
-      local _jit_st=""
-      case "$jitter" in
-        —)                              _jit_st="" ;;
-        [0-9]|[0-9].[0-9]*)            _jit_st="ok" ;;
-        [1-9][0-9]|[1-9][0-9].[0-9]*)  _jit_st="warn" ;;
-        *)                              _jit_st="warn" ;;
-      esac
+  is_quiet && return 0
 
-      local _mtu_display="${mtu}${mtu_hint}"
-      if [ "$has_traceroute" = 1 ]; then
-        tbl_row "$iface" "$cc" \
-          "$hops" "$(tbl_cell 19 "$_mtu_display" "$_mtu_st")" \
-          "$(tbl_cell 9 "$dns_ms" "$_st")" \
-          "$(tbl_cell 9 "$tcp_ms" "$_st")" \
-          "$(tbl_cell 9 "$tls_ms" "$_st")" \
-          "$(tbl_cell 9 "$total_ms" "$_st")" \
-          "$(tbl_cell 8 "$loss" "$_loss_st")" \
-          "$(tbl_cell 7 "$jitter" "$_jit_st")" \
-          "$(status_mark "$_st")"
-      else
-        tbl_row "$iface" "$cc" \
-          "$(tbl_cell 19 "$_mtu_display" "$_mtu_st")" \
-          "$(tbl_cell 9 "$dns_ms" "$_st")" \
-          "$(tbl_cell 9 "$tcp_ms" "$_st")" \
-          "$(tbl_cell 9 "$tls_ms" "$_st")" \
-          "$(tbl_cell 9 "$total_ms" "$_st")" \
-          "$(tbl_cell 8 "$loss" "$_loss_st")" \
-          "$(tbl_cell 7 "$jitter" "$_jit_st")" \
-          "$(status_mark "$_st")"
-      fi
-    fi
+  local _st="fail" dns_ms="—"
+  [ "$_ci_reach" = "ok" ] && _st="ok"
+  [ "$_ci_reach" = "ok" ] && dns_ms=$(to_ms "$_ci_dns_t")
+
+  # Determine loss/MTU/jitter color status
+  local _loss_st="" _mtu_st="" _jit_st=""
+  case "$_ci_loss" in
+    0%|—) _loss_st="ok" ;;
+    [1-9]%|1[0-9]%|20%) _loss_st="warn" ;;
+    *) _loss_st="fail" ;;
+  esac
+  case "$_ci_mtu" in
+    1500) _mtu_st="ok" ;;
+    —)    _mtu_st="" ;;
+    *)    _mtu_st="warn" ;;
+  esac
+  case "$_ci_jitter" in
+    —)                              _jit_st="" ;;
+    [0-9]|[0-9].[0-9]*)            _jit_st="ok" ;;
+    [1-9][0-9]|[1-9][0-9].[0-9]*)  _jit_st="warn" ;;
+    *)                              _jit_st="warn" ;;
+  esac
+
+  local _mtu_display="${_ci_mtu}${_ci_mtu_hint}"
+  if [ "$has_traceroute" = 1 ]; then
+    tbl_row "$iface" "$_ci_cc" \
+      "$_ci_hops" "$(tbl_cell 19 "$_mtu_display" "$_mtu_st")" \
+      "$(tbl_cell 9 "$dns_ms" "$_st")" \
+      "$(tbl_cell 9 "$_ci_tcp_ms" "$_st")" \
+      "$(tbl_cell 9 "$_ci_tls_ms" "$_st")" \
+      "$(tbl_cell 9 "$_ci_total_ms" "$_st")" \
+      "$(tbl_cell 8 "$_ci_loss" "$_loss_st")" \
+      "$(tbl_cell 7 "$_ci_jitter" "$_jit_st")" \
+      "$(status_mark "$_st")"
+  else
+    tbl_row "$iface" "$_ci_cc" \
+      "$(tbl_cell 19 "$_mtu_display" "$_mtu_st")" \
+      "$(tbl_cell 9 "$dns_ms" "$_st")" \
+      "$(tbl_cell 9 "$_ci_tcp_ms" "$_st")" \
+      "$(tbl_cell 9 "$_ci_tls_ms" "$_st")" \
+      "$(tbl_cell 9 "$_ci_total_ms" "$_st")" \
+      "$(tbl_cell 8 "$_ci_loss" "$_loss_st")" \
+      "$(tbl_cell 7 "$_ci_jitter" "$_jit_st")" \
+      "$(status_mark "$_st")"
+  fi
+}
+
+# ─── Command: connectivity (Level A — TCP connect, TLS, latency, loss, MTU) ──
+
+cmd_connectivity() {
+  local ifaces
+  ifaces=$(require_wan_ifaces) || return 1
+
+  # Load geo-zone context for zone header
+  load_zone_context
+
+  # Ensure geo cache is populated for CC column
+  ensure_geo_cache
+
+  local _conn_json_results=""
+  local has_traceroute=0 has_ping=0
+  local _ok_count=0 _total_count=0
+  command -v traceroute >/dev/null 2>&1 && has_traceroute=1
+  command -v ping >/dev/null 2>&1 && has_ping=1
+
+  section_title "$_TITLE_CONN"
+  if [ "$OUTPUT_JSON" = 0 ] && ! is_quiet; then
+    printf 'TCP connect + TLS handshake timing per WAN path. Detects unreachable paths.\n'
+    printf 'Target: %s%s%s\n\n' "$C_DIM" "$CONNECTIVITY_URL" "$C_RST"
+  fi
+  if [ "$has_traceroute" = 1 ]; then
+    tbl_header "Path:14" "CC:4" "Hops:5" "MTU (OH, Enc):19" "DNS ms:9" "TCP ms:9" "TLS ms:9" "Total ms:9" "Loss:8" "Jit ms:7" "Status"
+  else
+    tbl_header "Path:14" "CC:4" "MTU (OH, Enc):19" "DNS ms:9" "TCP ms:9" "TLS ms:9" "Total ms:9" "Loss:8" "Jit ms:7" "Status"
+  fi
+
+  # Pre-warm SmartDNS cache: resolve connectivity host once before parallel curls
+  local _conn_host
+  _conn_host=$(url_to_host "$CONNECTIVITY_URL")
+  dig +short "$_conn_host" A +time=2 +tries=1 >/dev/null 2>&1 || true
+
+  # ── Phase 1: Parallel curl per interface ──
+  _conn_phase1_curl
+
+  # ── Phase 2: Parallel probes (traceroute + ping-loss + MTU) ──
+  _conn_phase2_probes
+
+  # ── Merge results ──
+  _conn_merge_results
+
+  # ── Collect and render ──
+  local iface
+  for iface in $ifaces; do
+    _conn_classify_iface "$iface"
+    _total_count=$((_total_count + 1))
+    [ "$_ci_reach" = "ok" ] && _ok_count=$((_ok_count + 1))
+    _conn_render_iface "$iface"
   done
 
+  # ── Summary ──
   if [ "$OUTPUT_JSON" = 1 ]; then
     printf '{%s,"results":[%s]}\n' \
       "$(json_kv_bool "ok" 0)" \
-      "$json_results"
+      "$_conn_json_results"
   else
     if is_quiet; then
       printf 'connectivity: %s/%s paths reachable\n' "$_ok_count" "$_total_count"

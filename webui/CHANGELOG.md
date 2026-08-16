@@ -5,6 +5,38 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [Unreleased]
+
+## [0.37.3] - 2026-08-11
+
+### Changed
+- **Ship pre-compressed `.gz` static files in `.ipk` package** — build-time `gzip -9`
+  for all JS/CSS/HTML in `webui/static/`. Eliminates runtime compression on MIPS router
+  at every nginx start. `patch-stock-ui.sh` skips custom static files that already have
+  `.gz` companions (shipped by package), logs count of shipped vs runtime-compressed.
+
+## [0.37.2] - 2026-08-11
+
+### Changed
+- **Rename JS modules for clarity** — `app-details.js` → `detail-render.js` (shared, not app-specific),
+  `rc-render.js` → `diag-render.js`, `rc-batch.js` → `diag-batch.js` ("rc" was cryptic),
+  `route-check.js` → `diagnostics.js` (contains both Route Check and DNS Check).
+  All references updated in `index.html`, `patch-stock-ui.sh`, and cross-file comments.
+- **Extract `config-form.js`** — moved `renderDropdown()` and `renderModalForm()` (~345 lines)
+  from `config-editor.js` into dedicated `config-form.js`. `config-editor.js` reduced from 925
+  to 582 lines. No UI/API changes.
+- **Lua API modularization** — split `api-router.lua` (1242 ln, 11 concerns) into 4 focused modules:
+  `api-utils.lua` (shared utilities/cache), `api-system.lua` (system info/interfaces/clients),
+  `api-config.lua` (config registry/CRUD), `api-data.lua` (zones/dns-providers).
+  Router reduced to 284 lines (dispatch + validation only). All modules loaded via `require()`,
+  cached per-worker by LuaJIT. No API changes — all endpoints identical.
+- **Extract `inject-dashboard.js`** — split dashboard card rendering (9 functions, ~350 lines)
+  from `inject.js` into dedicated `inject-dashboard.js` module (`EW._dash` namespace).
+  Extracted: `buildServiceRow`, `buildEntwareDashboardContent`, `renderDetailsGrid`,
+  `parseServiceStatus`, `applyServiceData`, `fetchSingleServiceStatus`,
+  `fetchDashboardStatuses`, `startTogglePoller`, `ewStopDashboardPolling`.
+  `inject.js` reduced from 1049 to 684 lines. No UI/API changes.
+
 ## [0.37.1] - 2026-08-10
 
 ### Fixed

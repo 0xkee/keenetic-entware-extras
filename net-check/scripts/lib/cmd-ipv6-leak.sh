@@ -1,4 +1,4 @@
-# net-check: IPv6 leak test — detect IPv6 traffic bypassing VPN tunnel.
+# net-check: IPv6 leak test — detect IPv6 traffic bypassing tunnel.
 # Queries IPv6-only endpoint per WAN interface.
 # If ISP interface responds with IPv6 while tunnel is active → leak.
 # If no interface has IPv6 → reports "IPv6 disabled" without table.

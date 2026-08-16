@@ -175,8 +175,8 @@ fi
 
 # --- Resolve --from MAC → fwmark + client name ---
 # Looks up the client's fwmark from iptables mangle HOTSPOT chain.
-# If client has VPN policy: fwmark is set (0xffff...).
-# If client has no VPN policy (default/conform): FWMARK stays empty → no fwmark used.
+# If client has tunnel policy: fwmark is set (0xffff...).
+# If client has no tunnel policy (default/conform): FWMARK stays empty → no fwmark used.
 FROM_NAME=""
 if [ -n "$FROM_MAC" ]; then
   # Default iif to br0 for LAN clients (can be overridden by explicit iif arg)
@@ -205,7 +205,7 @@ if [ -n "$FROM_MAC" ]; then
     | grep 'MARK --set-xmark 0xffff' \
     | sed -n 's/.*--set-xmark \(0x[0-9a-f]*\).*/\1/p' \
     | head -1)
-  # FWMARK may be empty if client has no VPN mark — that's correct (default policy)
+  # FWMARK may be empty if client has no tunnel mark — that's correct (default policy)
 else
   # No --from: use default iif from config
   if [ "$IIF" = "local" ]; then
@@ -215,8 +215,8 @@ else
     IIF="${ROUTE_IN%% *}"
   fi
 
-  # Legacy auto-detect fwmark (CLI without --from): find first VPN tunnel fwmark.
-  # This shows the real routing path for VPN-policy clients. Geo-split rules (prio 50-51)
+  # Legacy auto-detect fwmark (CLI without --from): find first tunnel fwmark.
+  # This shows the real routing path for tunnel-policy clients. Geo-split rules (prio 50-51)
   # are checked BEFORE fwmark rules (prio 100+), so geo-split IPs still show geo-split verdict.
   if [ -n "$IIF" ]; then
     FWMARK=$(ip rule show 2>/dev/null | sed -n 's/.*fwmark \(0x[0-9a-f]*\) lookup \([0-9]*\).*/\1 \2/p' | while read -r m t; do
@@ -446,7 +446,7 @@ while [ $# -gt 1 ]; do
   shift
 done
 
-# --- Tunnel route (client's VPN policy path, even when geo-split wins) ---
+# --- Tunnel route (client's tunnel policy path, even when geo-split wins) ---
 TUNNEL_ROUTE_DEV=""
 if [ -n "$FWMARK" ]; then
   # Resolve fwmark → table → default route dev

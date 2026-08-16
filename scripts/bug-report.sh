@@ -612,7 +612,7 @@ if command -v ip >/dev/null 2>&1 && [ -n "$_GEO_IP" ]; then
         # Reachability checks — run both ICMP (ping) and HTTP (curl) probes.
         # Use source IP for ping -I to leverage Keenetic policy routing rules.
         # ping -I <dev> uses SO_BINDTODEVICE which fails when the default route
-        # points to a different interface (e.g. VPN-as-default + ISP for geo).
+        # points to a different interface (e.g. tunnel-as-default + ISP for geo).
         # ping -I <src_ip> triggers "from <ip> lookup <table>" rules correctly.
         printf "\n  Reachability:\n"
 
@@ -757,7 +757,7 @@ if command -v ip >/dev/null 2>&1; then
         | awk '{printf "  %-16s", $1; for(i=3;i<=NF;i++){if($i~/^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|127\.|fe80:|fd)/)printf " %s",$i}; printf "\n"}' \
         | head -10
 
-    # VPN/tunnel interfaces (critical for geo-split routing)
+    # Tunnel interfaces (critical for geo-split routing)
     printf "\nTunnel interfaces:\n"
     _vpn_ifaces=$(ip -brief link show 2>/dev/null \
         | grep -E "^(nwg|awg|ovpn|l2tp|pptp|tun|tap|wg)" \

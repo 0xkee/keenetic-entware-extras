@@ -1,7 +1,7 @@
 # net-check: DNS leak test — discover which recursive DNS resolvers handle queries.
 # 3-level service fallback: dnscheck.tools → bash.ws → whoami queries.
 # Detects leaks when ISP DNS appears in resolver chain while SmartDNS/DoH is configured.
-# Tunnel-aware: resolvers at known VPN tunnel exit countries are expected, not leaks.
+# Tunnel-aware: resolvers at known tunnel exit countries are expected, not leaks.
 #
 # Dependencies: lib/output.sh (emit_error, section_title, tbl_header, tbl_row, tbl_cell,
 #     status_mark, color_status, summary_line, is_quiet),
@@ -310,7 +310,7 @@ _dns_leak_setup_context() {
   fi
 
   # Tunnel exit CC set + ISP CC: for tunnel-aware leak classification.
-  # When SmartDNS routes DoH through VPN tunnels, resolvers at tunnel exits
+  # When SmartDNS routes DoH through tunnels, resolvers at tunnel exits
   # (or nearby anycast backends) are expected — not leaks.
   # Real leak = ISP DNS resolver appearing (CC matches ISP country).
   _tunnel_ccs=""
@@ -359,7 +359,7 @@ _dns_leak_classify_resolvers() {
     # Classification (SmartDNS active):
     #   1. Known DNS provider (IP glob / ASN match)           → expected (1)
     #   2. Tunnel-related resolver:                            → expected (2)
-    #      a) CC matches a VPN tunnel exit country
+    #      a) CC matches a tunnel exit country
     #      b) Tunnels exist AND CC ≠ ISP country (anycast backend near tunnel)
     #   3. CC matches ISP country (or no tunnels configured)   → leak    (0)
     # Without SmartDNS: ISP DNS is the expected resolver.

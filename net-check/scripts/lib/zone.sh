@@ -28,8 +28,8 @@ _NON_GEO_SEGMENTS=""
 _NON_GEO_SINGLE=""
 _NON_GEO_COUNT=0
 
-# Per-run cache for auto-detected VPN fwmark.
-# "" = unchecked, "none" = no VPN fwmark found, "0xNN..." = fwmark value.
+# Per-run cache for auto-detected tunnel fwmark.
+# "" = unchecked, "none" = no tunnel fwmark found, "0xNN..." = fwmark value.
 _AUTO_FWMARK=""
 
 # ─── Geo-Zone Context ─────────────────────────────────────────────────────────
@@ -206,7 +206,7 @@ expected_route_type() {
 
 # ─── Routing / FIB Lookup ─────────────────────────────────────────────────────
 
-# Auto-detect first VPN tunnel fwmark from ip rules.
+# Auto-detect first tunnel fwmark from ip rules.
 # Scans fwmark-based policy rules, finds the first whose routing table
 # has a default route through a tunnel device.
 # Same logic as route-check.sh legacy auto-detect.
@@ -236,8 +236,8 @@ _detect_auto_fwmark() {
   fi
 }
 
-# Determine active route device via kernel FIB with auto-detected VPN fwmark.
-# Simulates a VPN-policy LAN client: ip route get with fwmark + iif br0.
+# Determine active route device via kernel FIB with auto-detected tunnel fwmark.
+# Simulates a tunnel-policy LAN client: ip route get with fwmark + iif br0.
 # Correctly returns:
 #   - geo-split dev for zone IPs (prio 50/51 checked before fwmark rules)
 #   - tunnel dev for intl IPs (fwmark rule at prio 100+ after geo-split miss)
@@ -254,7 +254,7 @@ fib_active_dev() {
     awk '/inet /{split($2,a,"/"); split(a[1],b,"."); printf "%s.%s.%s.%d", b[1],b[2],b[3],(b[4]%254)+1; exit}')
   [ -z "$_fake_src" ] && return 0
 
-  # Try with auto-detected VPN fwmark first (simulates VPN-policy client)
+  # Try with auto-detected tunnel fwmark first (simulates tunnel-policy client)
   local _fwmark
   _fwmark=$(_detect_auto_fwmark)
   if [ -n "$_fwmark" ]; then
@@ -270,7 +270,7 @@ fib_active_dev() {
 
 # Determine active route device for a target.
 # Category-aware fast path: uses geo-split config for zone resources.
-# FIB fallback with auto-fwmark: simulates VPN-policy LAN client routing
+# FIB fallback with auto-fwmark: simulates tunnel-policy LAN client routing
 # (geo-split tables checked at prio 50/51, fwmark at prio 100+).
 # Args: $1 - resolved IP (for FIB lookup)
 #        $2 - category from check-targets.conf (optional)

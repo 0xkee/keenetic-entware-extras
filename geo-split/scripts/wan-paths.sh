@@ -1,5 +1,5 @@
 #!/opt/bin/sh
-# List all WAN egress paths (ISP + VPN tunnels) as JSON array.
+# List all WAN egress paths (ISP + tunnels) as JSON array.
 # Used by WebUI diagram to show all available routes.
 # Usage: wan-paths.sh [--json]
 # Output: JSON array of {dev, via, type} objects.
@@ -62,7 +62,7 @@ if [ -n "$_geo_out_dev" ]; then
   fi
 fi
 
-# 2) VPN tunnel interfaces from fwmark policy tables (deduplicated, 1 fork per table)
+# 2) Tunnel interfaces from fwmark policy tables (deduplicated, 1 fork per table)
 _vpn_tables=$(ip rule show 2>/dev/null | sed -n 's/.*fwmark \(0x[0-9a-f]*\) lookup \([0-9]*\).*/\2/p' | sort -u)
 for _t in $_vpn_tables; do
   _route_info=$(ip route show table "$_t" 2>/dev/null | awk '/^default/{for(i=1;i<=NF;i++){if($i=="dev")d=$(i+1);if($i=="via")v=$(i+1)};print d" "v;exit}')

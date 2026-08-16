@@ -43,6 +43,7 @@
 - [x] **packaging/webui/ создан** — `control` (Depends: keenetic-entware-extras, nginx, nginx-mod-lua, logrotate), `conffiles`, `postinst`, `prerm`, `postrm`
 - [x] **nginx: proxy_intercept_errors для 502** — `error_page 502 503 504 /custom/502.html`, stock-styled страница с auto-refresh 5с
 - [x] **inject.js: DRY рефакторинг** — вынесена `applyServiceData()`, устранено дублирование (1410 → 1385 строк)
+- [x] **Модульная декомпозиция** — 5 god-модулей разбиты на 13 новых файлов. api-router.lua 1242→284 (−77%), app.js 1112→709, inject.js→684+inject-dashboard.js 449, config-editor.js→582+config-form.js 348. Переименованы: app-details→detail-render, rc-*→diag-*, route-check→diagnostics. Scattered concerns (rules_detail, dns_tests) → shared helpers. Assessment: docs/modular-assessment.md
 - [x] **status.sh: logrotate в статусе** — проверка binary/config/cron, поле `"logrotate": true/false` в JSON
 
 ## 🔴 Критичные (drag duplication) — ✅ ВЫПОЛНЕНО (v0.2.1)

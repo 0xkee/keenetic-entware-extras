@@ -86,9 +86,9 @@ function _ifaceLabel(dev) {
 
 | Место | Файл | Строка | Формат |
 |-------|------|--------|--------|
-| Route Check dropdown (source iface) | `route-check.js` | :819 | `ifcLabel + ' (' + ifcId + ')'` |
-| Route Check details — Default Route | `route-check.js` | :347 | `_ifaceLabel(dev) + ' (' + dev + ')'` |
-| DNS Check details — Interface | `route-check.js` | :393 | `label + ' (' + iif + ')'` (когда отличается) |
+| Route Check dropdown (source iface) | `diagnostics.js` | :819 | `ifcLabel + ' (' + ifcId + ')'` |
+| Route Check details — Default Route | `diagnostics.js` | :347 | `_ifaceLabel(dev) + ' (' + dev + ')'` |
+| DNS Check details — Interface | `diagnostics.js` | :393 | `label + ' (' + iif + ')'` (когда отличается) |
 
 ### ❌ Только human label (нет dev в скобках)
 
@@ -96,8 +96,8 @@ function _ifaceLabel(dev) {
 |-------|------|--------|---------------|
 | Route diagram — WAN path sublabel | `route-diagram.js` | :498 | `_ifaceLabel(p.dev)` |
 | Route diagram — source sublabel | `route-diagram.js` | :455 | `_ifaceLabel(data.source_iface)` |
-| Route Check summary line | `route-check.js` | :257 | `_ifaceLabel(route.dev)` |
-| Route Check batch table — iface col | `route-check.js` | :580,589,595,601 | `_ifaceLabel(rt.dev)` |
+| Route Check summary line | `diagnostics.js` | :257 | `_ifaceLabel(route.dev)` |
+| Route Check batch table — iface col | `diagnostics.js` | :580,589,595,601 | `_ifaceLabel(rt.dev)` |
 
 ### ❌ Ещё не humanized
 
@@ -110,7 +110,7 @@ function _ifaceLabel(dev) {
 
 | Место | Файл | Строка | Проблема |
 |-------|------|--------|----------|
-| Route Check — default dropdown | `route-check.js` | :801 | `'Home network (br0)'` — hardcoded |
+| Route Check — default dropdown | `diagnostics.js` | :801 | `'Home network (br0)'` — hardcoded |
 
 ---
 
@@ -139,9 +139,9 @@ function _ifaceLabel(dev) {
 |------|--------|--------|--------|
 | `route-diagram.js` | :498 | `_ifaceLabel(p.dev)` | `EW.ifaceLabelFull(p.dev)` |
 | `route-diagram.js` | :455 | `_ifaceLabel(data.source_iface)` | `EW.ifaceLabelFull(data.source_iface)` |
-| `route-check.js` | :257 | `_ifaceLabel(route.dev)` | `EW.ifaceLabelFull(route.dev)` |
-| `route-check.js` | :580,589,595,601 | `_ifaceLabel(rt.dev)` | `EW.ifaceLabelFull(rt.dev)` |
-| `route-check.js` | :801 | hardcoded `'Home network (br0)'` | строить из `_ensureIfaceMap` |
+| `diagnostics.js` | :257 | `_ifaceLabel(route.dev)` | `EW.ifaceLabelFull(route.dev)` |
+| `diagnostics.js` | :580,589,595,601 | `_ifaceLabel(rt.dev)` | `EW.ifaceLabelFull(rt.dev)` |
+| `diagnostics.js` | :801 | hardcoded `'Home network (br0)'` | строить из `_ensureIfaceMap` |
 
 Helper [`EW.ifaceLabelFull(dev)`](../static/shared.js:448) уже реализован в `shared.js`.
 

@@ -1,92 +1,12 @@
 // config-editor.js — Config Editor modal dialog for Entware Extras WebUI.
 // Extracted from app.js for maintainability.
-// Depends on: shared.js (EW namespace), app.js (refreshAll).
+// Depends on: shared.js (EW namespace), config-schemas.js (CONFIG_SCHEMAS, CONFIG_LABELS),
+//   config-form.js (renderDropdown, renderModalForm), app.js (refreshAll).
 "use strict";
 
+// Config schemas → moved to config-schemas.js (CONFIG_SCHEMAS, CONFIG_LABELS)
+
 // ── Config Editor (Modal Dialog) ─────────────────────────────────────────────
-
-/** Config field definitions per service (schema for form rendering). */
-var CONFIG_SCHEMAS = {
-    'geo-split': [
-        { key: 'GEO_ZONE', label: 'GeoIP Zone', type: 'zone_selector',
-          desc: 'GeoIP zone for subnet routing: select countries or a geopolitical union (expands to multiple countries). All 240 country zones pre-packaged.' },
-        { key: 'ROUTE_IN', label: 'Source Interfaces', type: 'iface_select', hint: 'LAN/tunnel interfaces for policy rules',
-          desc: 'Source LAN/tunnel interfaces for ip rule iif (space-separated). Each interface gets its own ip rule \u2192 custom route table.' },
-        { key: 'ROUTE_OUT', label: 'Outgoing Interface', type: 'iface_select', multi: false, hint: 'Target outgoing interface for matched GEO traffic',
-          preItems: [{ value: 'auto', label: 'Auto (ISP detect)' }],
-          desc: '"auto" or empty = detect ISP automatically from default route. Explicit: "lte_br1" (ISP), "nwg0" (tunnel), "ppp0", etc.' },
-        { key: 'ROUTE_GW', label: 'Gateway', type: 'radio_text', hint: 'Gateway (nexthop) for routes in geo-split tables',
-          presets: [{ value: 'auto', label: 'Auto (from route)' }, { value: 'none', label: 'None (dev-only)' }],
-          desc: '"auto" = detect from default route of ROUTE_OUT interface. On point-to-point interfaces (LTE/PPP) auto returns empty \u2192 routes without gateway (correct for those types).' },
-        { key: 'SUBNET_LOADER', label: 'Subnet Loader', type: 'select',
-          options: [{ value: 'cidr-plain', label: 'CIDR Plain' }, { value: 'ripe-json', label: 'RIPE JSON (requires jq)' }],
-          hint: 'Format parser for downloaded list',
-          desc: 'Available loaders: cidr-plain (default, one CIDR per line), ripe-json (RIPE stat JSON, requires jq).' },
-        { key: 'SUBNET_URL', label: 'Subnet URL Override', type: 'text', hint: 'Empty = use GEO_ZONE (recommended)',
-          desc: 'Override URL: if set, ignores GEO_ZONE and downloads this single URL directly. Leave empty to use GEO_ZONE (recommended).' },
-        { key: 'SUBNET_AGGREGATE', label: 'Aggregate CIDRs', type: 'toggle', on: '1', off: '0', hint: 'Merge adjacent subnets \u2192 fewer routes',
-          desc: 'Aggregate (merge) adjacent/overlapping CIDR subnets after download. Reduces route entries count.' },
-        { key: 'DOWNLOAD_INTERFACES', label: 'Download Interfaces', type: 'iface_select', hint: 'Interfaces for subnet/zone downloads',
-          preItems: [{ value: 'default', label: 'Default route' }, { value: '*', label: 'All Tunnels (*)' }],
-          desc: 'Outgoing interfaces to try for downloads (in order). "default" = system default route. "*" = auto-detect all active tunnel interfaces.' },
-        { key: 'DOMAINS_UPDATE_INTERVAL', label: 'Domain Update Interval', type: 'number', min: 0, hint: 'Seconds (0 = disable)',
-          desc: 'Controls how often geo-split re-resolves domains and updates routes. Lower = faster reaction to CDN IP changes; higher = fewer DNS queries.' },
-        { key: 'DNS_FULL_RESOLVER_PORT', label: 'DNS Resolver Port', type: 'text', hint: 'Empty = auto-detect',
-          desc: 'DNS resolver port for full A-record resolution (all IPs, no speed-check). Empty = auto-detect (probe localhost:6153, then :6053, then system resolver).' },
-        { key: 'MAX_CACHE_AGE', label: 'Subnet Cache TTL', type: 'number', min: 0, hint: 'Seconds (default 604800 = 7 days)',
-          desc: 'Max age of cached subnet list in seconds. After expiry, subnets are re-downloaded on next start/update.' }
-    ],
-    'smartdns': [
-        { key: 'DNS_ZONE', label: 'DNS Zone', type: 'zone_selector',
-          desc: 'DNS zone preset: select countries or a geopolitical union (expands to multiple countries).' },
-        { key: 'ZONE_DNS_PROVIDER', label: 'Zone DNS Provider', type: 'multi_select',
-          dynamicOptions: 'zone',
-          hint: 'Upstream DNS for zone group',
-          desc: 'DNS provider(s) for zone/regional group. Select one or more. Resolves zone domains (ccTLDs + CDN-optimized services).' },
-        { key: 'ZONE_DNS_INTERFACE', label: 'Zone Tunnel Interface', type: 'iface_select', multi: false, hint: 'Default = ISP direct',
-          desc: 'Outgoing interface for zone DNS (Yandex/AdGuard). Default = ISP direct. Usually unchanged — MITM does not affect.' },
-        { key: 'OTHER_DNS_PROVIDER', label: 'Other DNS Provider', type: 'multi_select',
-          dynamicOptions: 'other',
-          hint: 'Upstream DNS for default group',
-          desc: 'DNS provider(s) for international/default group. Select one or more. Resolves all non-zone domains.' },
-        { key: 'OTHER_DNS_INTERFACES', label: 'International Tunnel Interfaces', type: 'iface_select', hint: 'Default = ISP direct',
-          desc: 'Outgoing interfaces for international DNS. When set, all DNS goes through tunnel only — no direct fallback (privacy by design).' },
-        { key: 'DNS_TRANSPORT', label: 'DNS Transport', type: 'select',
-          options: [{ value: 'auto', label: 'Auto (DoT/DoH + UDP fallback)' }, { value: 'strict', label: 'Strict (DoT/DoH only, no UDP)' }],
-          hint: 'Upstream DNS encryption policy',
-          desc: 'Auto: DoT/DoH preferred with UDP fallback for zone providers (Yandex, AliDNS). Strict: DoT/DoH only — all DNS queries encrypted, no plain UDP. Use Strict when DNS privacy matters (e.g., abroad with non-local ISP).' }
-    ],
-    'smartdns-redirect': [
-        { key: 'UPSTREAM_PORT', label: 'Upstream Port', type: 'number', min: 1, max: 65535, hint: 'SmartDNS=6053, AGH=5353, Unbound=5335',
-          desc: 'Port to redirect DNS traffic to (local DNS on router).' },
-        { key: 'INTERFACES', label: 'Interfaces', type: 'iface_select', hint: 'LAN interfaces to intercept DNS on',
-          desc: 'Interfaces to intercept (space-separated). Typical: "br0" for LAN. Add "br1" for Guest VLAN.' },
-        { key: 'REDIRECT_MODE', label: 'Redirect Mode', type: 'select',
-          options: [{ value: 'force', label: 'Force (intercept all DNS + block DoT)' }, { value: 'local', label: 'Local (only router-targeted DNS)' }],
-          hint: 'Force = full interception | Local = permissive',
-          desc: 'Force: intercepts ALL :53 DNS + blocks DoT :853. Clients cannot bypass SmartDNS. Local: intercepts only DNS to router IP. External DNS (8.8.8.8:53) and DoT (:853) pass through. For IoT devices or corporate laptops with hardcoded DNS.' },
-        { key: 'WATCHDOG_SERVICE', label: 'Watchdog Service', type: 'text', hint: 'e.g. S38smartdns',
-          desc: 'Restart upstream DNS service if unresponsive. Set to service name (e.g., "S38smartdns") or leave empty to disable.' },
-        { key: 'PRESERVE_FILTER_PROFILES', label: 'Preserve Filter Profiles', type: 'toggle', hint: 'Not yet implemented',
-          desc: 'When enabled: MACs bound via Keenetic parental-control filters are excluded from DNAT.' }
-    ],
-    'webui': [
-        { key: 'LISTEN_PORT', label: 'Listen Port', type: 'number', min: 1, max: 65535, hint: 'Page reloads after save!',
-          desc: 'Listen port for nginx-webui. Changing this will make the page reload on the new port.' },
-        { key: 'INJECT_SIDEBAR', label: 'Inject Sidebar', type: 'toggle', on: '1', off: '0', hint: 'Stock Keenetic menu patch',
-          desc: 'When 1: adds "Entware Extras" group with pages into the stock Keenetic sidebar. When 0: stock sidebar untouched.' },
-        { key: 'DASH_POLL_INTERVAL', label: 'Poll Interval', type: 'number', min: 1000, hint: 'Milliseconds',
-          desc: 'Dashboard auto-refresh polling interval in milliseconds. Lower = more responsive but more traffic.' }
-    ]
-};
-
-/** Labels for modal title per service. */
-var CONFIG_LABELS = {
-    'geo-split': 'Geo-Split',
-    'smartdns': 'SmartDNS Geo-Config',
-    'smartdns-redirect': 'DNS Redirect',
-    'webui': 'WebUI'
-};
 
 /** Cached defaults for comparison (populated on first load). */
 var configDefaults = {};
@@ -211,349 +131,6 @@ function loadConfigModal(svcId) {
         .catch(function(err) {
             body.innerHTML = '<div class="ew-editor-msg ew-editor-msg--error">Error: ' + EW.escapeHtml(err.message) + '</div>';
         });
-}
-
-/**
- * Render a unified dropdown component (single-select or multi-select).
- * Handles search bar, grouped options, pre-items with dot indicators.
- * @param {Object} opts
- * @param {string} opts.mode - 'single' (radio) or 'multi' (checkbox)
- * @param {string} opts.configKey - data-config-key attribute value
- * @param {string} opts.displayText - text shown in the trigger button
- * @param {Array} opts.options - [{value, label, desc?}] flat options
- * @param {Array} [opts.groups] - [{group, items:[{value, label, desc?}]}] grouped options (overrides opts.options)
- * @param {Array} [opts.preItems] - [{value, label}] special items before main list (with dot indicator)
- * @param {string} [opts.radioName] - name attribute for radio inputs (required for single mode)
- * @param {string|Array} [opts.selected] - current value(s): string for single, array for multi
- * @param {boolean} [opts.dots] - show up/down dot indicators on options
- * @param {Array} [opts.ifaces] - [{name, label?, up}] interface data (when dots=true)
- * @returns {string} HTML string
- */
-function renderDropdown(opts) {
-    var mode = opts.mode || 'single';
-    var isMulti = (mode === 'multi');
-    var selected = opts.selected || (isMulti ? [] : '');
-    var selArray = isMulti ? (Array.isArray(selected) ? selected : String(selected).split(/\s+/).filter(Boolean)) : [];
-    var selVal = isMulti ? '' : String(selected);
-    var displayText = opts.displayText || (isMulti ? (selArray.length ? selArray.join(', ') : 'None') : selVal);
-
-    var html = '';
-    // Container
-    var keyAttr = opts.configKey ? ' data-config-key="' + EW.escapeHtml(opts.configKey) + '"' : '';
-    if (isMulti) {
-        html += '<div class="ew-modal__iface-select"' + keyAttr + ' data-selection-order="' + EW.escapeHtml(selArray.join(' ')) + '">';
-    } else {
-        html += '<div class="ew-modal__iface-select"' + keyAttr + '>';
-    }
-    // Trigger button
-    html += '<button type="button" class="ew-modal__iface-select-trigger">' +
-        '<span class="ew-modal__iface-select-text">' + EW.escapeHtml(displayText) + '</span>' +
-        '<svg class="ew-modal__select-arrow" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></button>';
-    // Panel
-    html += '<div class="ew-modal__iface-select-panel ew-hidden">';
-    // Search bar (always present)
-    html += '<div class="ew-modal__iface-filter-wrap"><input type="text" class="ew-modal__iface-filter" placeholder="Search..." autocomplete="off"><span class="ew-modal__iface-filter-count"></span></div>';
-
-    // Pre-items (special options with dot indicators, e.g. "Default route", "All VPNs")
-    if (opts.preItems) {
-        for (var pi = 0; pi < opts.preItems.length; pi++) {
-            var pre = opts.preItems[pi];
-            if (isMulti) {
-                var preChk = selArray.indexOf(pre.value) !== -1;
-                html += '<label class="ew-modal__iface-select-option">' +
-                    '<input type="checkbox" value="' + EW.escapeHtml(pre.value) + '"' + (preChk ? ' checked' : '') + '>' +
-                    '<span class="ew-modal__iface-dot ew-modal__iface-dot--up"></span>' +
-                    '<span>' + EW.escapeHtml(pre.label) + '</span></label>';
-            } else {
-                var preRChk = (pre.value === selVal);
-                html += '<label class="ew-modal__iface-select-option">' +
-                    '<input type="radio" name="' + EW.escapeHtml(opts.radioName || '') + '" value="' + EW.escapeHtml(pre.value) + '"' + (preRChk ? ' checked' : '') + '>' +
-                    '<span class="ew-modal__iface-dot ew-modal__iface-dot--up"></span>' +
-                    '<span>' + EW.escapeHtml(pre.label) + '</span></label>';
-            }
-        }
-    }
-
-    // Grouped options (for unions)
-    if (opts.groups) {
-        for (var gi = 0; gi < opts.groups.length; gi++) {
-            var grp = opts.groups[gi];
-            html += '<div class="ew-modal__iface-select-group">' + EW.escapeHtml(grp.group) + '</div>';
-            var items = grp.items || [];
-            for (var ui = 0; ui < items.length; ui++) {
-                var u = items[ui];
-                var uChk = (u.value === selVal);
-                html += '<label class="ew-modal__iface-select-option">' +
-                    '<input type="radio" name="' + EW.escapeHtml(opts.radioName || '') + '" value="' + EW.escapeHtml(u.value) + '"' + (uChk ? ' checked' : '') + '>' +
-                    '<span>' + EW.escapeHtml(u.label) + (u.desc ? ' (' + EW.escapeHtml(u.desc) + ')' : '') + '</span></label>';
-            }
-        }
-    } else {
-        // Flat options
-        var optionsList = opts.options || [];
-        for (var oi = 0; oi < optionsList.length; oi++) {
-            var opt = optionsList[oi];
-            if (isMulti) {
-                var mChk = selArray.indexOf(opt.value) !== -1;
-                html += '<label class="ew-modal__iface-select-option">';
-                html += '<input type="checkbox" value="' + EW.escapeHtml(opt.value) + '"' + (mChk ? ' checked' : '') + '>';
-                if (opts.dots && opts.ifaces) {
-                    var ifc = null;
-                    for (var ii = 0; ii < opts.ifaces.length; ii++) {
-                        if (opts.ifaces[ii].name === opt.value) { ifc = opts.ifaces[ii]; break; }
-                    }
-                    var dotState = (ifc && ifc.up) ? 'up' : 'down';
-                    html += '<span class="ew-modal__iface-dot ew-modal__iface-dot--' + dotState + '"></span>';
-                }
-                html += '<span>' + EW.escapeHtml(opt.label) + (opt.desc ? ' \u2014 ' + EW.escapeHtml(opt.desc) : '') + '</span></label>';
-            } else {
-                var sChk = (opt.value === selVal);
-                html += '<label class="ew-modal__iface-select-option">' +
-                    '<input type="radio" name="' + EW.escapeHtml(opts.radioName || '') + '" value="' + EW.escapeHtml(opt.value) + '"' + (sChk ? ' checked' : '') + '>';
-                if (opts.dots && opts.ifaces) {
-                    var sIfc = null;
-                    for (var si2 = 0; si2 < opts.ifaces.length; si2++) {
-                        if (opts.ifaces[si2].name === opt.value) { sIfc = opts.ifaces[si2]; break; }
-                    }
-                    var sDotState = (sIfc && sIfc.up) ? 'up' : 'down';
-                    html += '<span class="ew-modal__iface-dot ew-modal__iface-dot--' + sDotState + '"></span>';
-                }
-                html += '<span>' + EW.escapeHtml(opt.label) + (opt.desc ? ' \u2014 ' + EW.escapeHtml(opt.desc) : '') + '</span></label>';
-            }
-        }
-    }
-
-    html += '</div></div>';
-    return html;
-}
-
-/**
- * Render form fields inside modal body.
- * @param {HTMLElement} body
- * @param {string} svcId
- * @param {Array} schema
- * @param {Object} config - current merged values
- * @param {Object} defaults - default values
- * @param {Array} interfaces
- * @param {Object|null} zonesData - zone selector data (for smartdns)
- * @param {Object|null} providersData - DNS providers from /api/system/dns-providers
- */
-function renderModalForm(body, svcId, schema, config, defaults, interfaces, zonesData, providersData) {
-    var html = '';
-
-    for (var i = 0; i < schema.length; i++) {
-        var field = schema[i];
-        var val = config[field.key] !== undefined ? config[field.key] : '';
-        var defVal = defaults[field.key] !== undefined ? defaults[field.key] : '';
-        var isDefault = (String(val) === String(defVal));
-
-        var fieldClass = field.type === 'toggle' ? 'ew-modal__field ew-modal__field--toggle' : 'ew-modal__field';
-        html += '<div class="' + fieldClass + '">';
-
-        // Help icon (?) with CSS tooltip — rendered inline right after label
-        var helpHtml = '';
-        if (field.desc) {
-            helpHtml = '<span class="ew-modal__help" data-tooltip="' + EW.escapeHtml(field.desc) + '">?</span>';
-        }
-
-        if (field.type === 'toggle') {
-            // Toggle: row=[switch, label, help, reset], hint below
-            var onVal = field.on || 'yes';
-            var checked = (val === onVal || val === true) ? ' checked' : '';
-            var toggleId = 'cfg-' + field.key;
-            html += '<div class="ew-modal__toggle-row">';
-            html += '<label class="ew-toggle ew-modal__toggle">' +
-                '<input type="checkbox" id="' + toggleId + '" data-config-key="' + field.key + '" data-on-val="' + EW.escapeHtml(field.on || 'yes') + '"' + checked + '>' +
-                '<span class="ew-toggle__bar"></span></label>';
-            html += '<label class="ew-modal__label ew-modal__label--clickable" for="' + toggleId + '">' + EW.escapeHtml(field.label) + '</label>';
-            html += helpHtml;
-            html += '<button class="ew-modal__reset' + (isDefault ? ' ew-modal__reset--default' : '') + '" data-reset-key="' + field.key + '" data-reset-val="' + EW.escapeHtml(String(defVal)) + '" data-tooltip="Reset to default:\n' + EW.escapeHtml(String(defVal)) + '">' +
-                '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5 8c-2.65 0-5.05 1.04-6.83 2.73L3 8v8h8l-2.81-2.81C9.59 11.82 10.96 11 12.5 11c2.76 0 5.07 1.75 5.94 4.2l2.37-.78C19.63 10.96 16.35 8 12.5 8z"/></svg>' +
-                '</button>';
-            html += '</div>';
-        } else {
-            // Other fields: [header with label + help + reset] then input below
-            html += '<div class="ew-modal__field-header">';
-            html += '<label class="ew-modal__label">' + EW.escapeHtml(field.label) + '</label>';
-            html += helpHtml;
-            html += '<button class="ew-modal__reset' + (isDefault ? ' ew-modal__reset--default' : '') + '" data-reset-key="' + field.key + '" data-reset-val="' + EW.escapeHtml(String(defVal)) + '" data-tooltip="Reset to default:\n' + EW.escapeHtml(String(defVal)) + '">' +
-                '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5 8c-2.65 0-5.05 1.04-6.83 2.73L3 8v8h8l-2.81-2.81C9.59 11.82 10.96 11 12.5 11c2.76 0 5.07 1.75 5.94 4.2l2.37-.78C19.63 10.96 16.35 8 12.5 8z"/></svg>' +
-                '</button>';
-            html += '</div>';
-        }
-
-        if (field.type === 'number') {
-            html += '<input type="number" class="ew-modal__input" ' +
-                'data-config-key="' + field.key + '" ' +
-                'value="' + EW.escapeHtml(String(val)) + '" ' +
-                (field.min !== undefined ? 'min="' + field.min + '" ' : '') +
-                (field.max !== undefined ? 'max="' + field.max + '" ' : '') + '>';
-        } else if (field.type === 'text') {
-            html += '<input type="text" class="ew-modal__input" ' +
-                'data-config-key="' + field.key + '" ' +
-                'value="' + EW.escapeHtml(String(val)) + '">';
-        } else if (field.type === 'radio_text') {
-            // Radio presets + custom text input
-            var presets = field.presets || [];
-            var isPreset = false;
-            html += '<div class="ew-modal__radio-text" data-config-key="' + field.key + '">';
-            for (var p = 0; p < presets.length; p++) {
-                var pr = presets[p];
-                var prChecked = (val === pr.value) ? ' checked' : '';
-                if (val === pr.value) isPreset = true;
-                html += '<label class="ew-modal__radio-item">' +
-                    '<input type="radio" name="rt-' + field.key + '" value="' + EW.escapeHtml(pr.value) + '"' + prChecked + '>' +
-                    '<span class="ew-modal__radio-label">' + EW.escapeHtml(pr.label) + '</span>' +
-                    '</label>';
-            }
-            var customChecked = !isPreset ? ' checked' : '';
-            var customVal = !isPreset ? EW.escapeHtml(String(val)) : '';
-            html += '<label class="ew-modal__radio-item ew-modal__radio-item--custom">' +
-                '<input type="radio" name="rt-' + field.key + '" value="__custom__"' + customChecked + '>' +
-                '<span class="ew-modal__radio-label">IP:</span>' +
-                '<input type="text" class="ew-modal__radio-input" placeholder="e.g. 176.65.44.1" value="' + customVal + '"' + (isPreset ? ' disabled' : '') + '>' +
-                '</label>';
-            html += '</div>';
-        } else if (field.type === 'select') {
-            // Single-select dropdown (radio buttons)
-            var selDisplayText = String(val);
-            for (var sd = 0; sd < field.options.length; sd++) {
-                if (field.options[sd].value === String(val)) { selDisplayText = field.options[sd].label; break; }
-            }
-            html += renderDropdown({
-                mode: 'single',
-                configKey: field.key,
-                displayText: selDisplayText,
-                radioName: 'sel-' + field.key,
-                selected: String(val),
-                options: field.options
-            });
-        } else if (field.type === 'multi_select') {
-            // Multi-select dropdown (checkboxes) with dynamic options from API
-            var msOptions = field.options || [];
-            if (field.dynamicOptions && providersData && providersData[field.dynamicOptions]) {
-                msOptions = providersData[field.dynamicOptions];
-            }
-            html += renderDropdown({
-                mode: 'multi',
-                configKey: field.key,
-                selected: val,
-                options: msOptions
-            });
-        } else if (field.type === 'zone_selector' && zonesData) {
-            // Zone selector: wrapper with radio pills + two dropdown panels
-            var zones = zonesData.zones || [];
-            var unions = zonesData.unions || [];
-            var valParts = String(val).split(/\s+/).filter(function(s) { return s; });
-            var zoneValues = {};
-            for (var zi = 0; zi < zones.length; zi++) { zoneValues[zones[zi].value] = true; }
-            var isZone = valParts.length > 0 && valParts.every(function(v) { return zoneValues[v]; });
-            var isUnion = !isZone;
-            var zsRadioName = 'zs-mode-' + field.key;
-
-            html += '<div class="ew-modal__zone-selector" data-config-key="' + field.key + '">';
-            // Radio pills: Zone / Union
-            html += '<div class="ew-modal__zone-radio">';
-            html += '<label class="ew-modal__radio-item' + (isZone ? ' ew-modal__radio-item--active' : '') + '">' +
-                '<input type="radio" name="' + zsRadioName + '" value="zone"' + (isZone ? ' checked' : '') + '>' +
-                '<span class="ew-modal__radio-label">Zone</span></label>';
-            html += '<label class="ew-modal__radio-item' + (isUnion ? ' ew-modal__radio-item--active' : '') + '">' +
-                '<input type="radio" name="' + zsRadioName + '" value="union"' + (isUnion ? ' checked' : '') + '>' +
-                '<span class="ew-modal__radio-label">Union</span></label>';
-            html += '</div>';
-
-            // Zone panel: multi-select countries
-            var selectedZones = isZone ? valParts : [];
-            html += '<div class="ew-modal__zone-panel' + (isZone ? '' : ' ew-hidden') + '" data-zone-panel="zone">';
-            html += renderDropdown({
-                mode: 'multi',
-                configKey: '',
-                selected: selectedZones,
-                options: zones
-            });
-            html += '</div>';
-
-            // Union panel: single-select grouped unions
-            // Pre-compute display text for union
-            var unionDisplayText = 'None';
-            for (var ugi = 0; ugi < unions.length; ugi++) {
-                var uitems = unions[ugi].items || [];
-                for (var uii = 0; uii < uitems.length; uii++) {
-                    if (uitems[uii].value === val) {
-                        unionDisplayText = uitems[uii].label + ' (' + uitems[uii].desc + ')';
-                    }
-                }
-            }
-            html += '<div class="ew-modal__zone-panel' + (isUnion ? '' : ' ew-hidden') + '" data-zone-panel="union">';
-            html += renderDropdown({
-                mode: 'single',
-                configKey: '',
-                displayText: unionDisplayText,
-                radioName: 'zs-union-' + field.key,
-                selected: String(val),
-                groups: unions
-            });
-            html += '</div>';
-            html += '</div>';
-        } else if (field.type === 'iface_select') {
-            // Interface selector (sorted: up first, then down, alphabetically)
-            var isIfaceMulti = field.multi !== false;
-            var sortedIfaces = interfaces.slice().sort(function(a, b) {
-                if (a.up !== b.up) return a.up ? -1 : 1;
-                return (a.name || '').localeCompare(b.name || '');
-            });
-            var ifaceOpts = [];
-            for (var si = 0; si < sortedIfaces.length; si++) {
-                ifaceOpts.push({ value: sortedIfaces[si].name, label: sortedIfaces[si].label || sortedIfaces[si].name });
-            }
-            if (isIfaceMulti) {
-                // Multi-select (checkboxes, space-separated values)
-                var selectedIfs = String(val).split(/\s+/).filter(function(s) { return s; });
-                var _preMap = {};
-                if (field.preItems) { for (var pi = 0; pi < field.preItems.length; pi++) _preMap[field.preItems[pi].value] = field.preItems[pi].label; }
-                var ifDisplayText = selectedIfs.length ? selectedIfs.map(function(n) { return _preMap[n] || EW.ifaceLabelFull(n); }).join(', ') : (field.preItems ? field.preItems[0].label : 'Default route');
-                html += renderDropdown({
-                    mode: 'multi',
-                    configKey: field.key,
-                    displayText: ifDisplayText,
-                    selected: selectedIfs,
-                    preItems: field.preItems || [{ value: 'default', label: 'Default route' }],
-                    options: ifaceOpts,
-                    dots: true,
-                    ifaces: sortedIfaces
-                });
-            } else {
-                // Single-select (radio buttons, one value)
-                var selIfVal = String(val);
-                var singlePreItems = field.preItems || [{ value: '', label: 'Default route' }];
-                var ifSingleDisplay = '';
-                for (var spi = 0; spi < singlePreItems.length; spi++) {
-                    if (singlePreItems[spi].value === selIfVal) { ifSingleDisplay = singlePreItems[spi].label; break; }
-                }
-                if (!ifSingleDisplay) {
-                    ifSingleDisplay = selIfVal ? EW.ifaceLabelFull(selIfVal) : singlePreItems[0].label;
-                }
-                html += renderDropdown({
-                    mode: 'single',
-                    configKey: field.key,
-                    displayText: ifSingleDisplay,
-                    radioName: 'iface-' + field.key,
-                    selected: selIfVal,
-                    preItems: singlePreItems,
-                    options: ifaceOpts,
-                    dots: true,
-                    ifaces: sortedIfaces
-                });
-            }
-        }
-
-        if (field.hint) {
-            html += '<span class="ew-modal__hint">' + EW.escapeHtml(field.hint) + '</span>';
-        }
-        html += '</div>';
-    }
-
-    body.innerHTML = html;
 }
 
 /**
@@ -846,4 +423,160 @@ function handleResetAll(svcId) {
     for (var i = 0; i < resetBtns.length; i++) {
         handleResetField(resetBtns[i]);
     }
+}
+
+// ── Config Editor Event Delegation ───────────────────────────────────────────
+
+/**
+ * Register all config-editor-related event handlers via document-level delegation.
+ * Called once from app.js DOMContentLoaded.
+ */
+function initConfigEditorEvents() {
+    // radio_text: enable/disable custom input on radio change
+    document.addEventListener('change', function(e) {
+        var radio = e.target;
+        if (radio.type !== 'radio') return;
+        var rtWrap = radio.closest('.ew-modal__radio-text');
+        if (!rtWrap) return;
+        var txtInput = rtWrap.querySelector('.ew-modal__radio-input');
+        if (txtInput) {
+            txtInput.disabled = (radio.value !== '__custom__');
+            if (radio.value === '__custom__') txtInput.focus();
+        }
+    });
+
+    // zone_selector: toggle panels on radio change
+    document.addEventListener('change', function(e) {
+        var radio = e.target;
+        if (radio.type !== 'radio' || !radio.name || !radio.name.match(/^zs-mode-/)) return;
+        var zsWrap = radio.closest('.ew-modal__zone-selector');
+        if (!zsWrap) return;
+        var panels = zsWrap.querySelectorAll('[data-zone-panel]');
+        for (var i = 0; i < panels.length; i++) {
+            panels[i].classList.toggle('ew-hidden', panels[i].getAttribute('data-zone-panel') !== radio.value);
+        }
+    });
+
+    // iface_select: toggle dropdown panel on trigger click
+    document.addEventListener('click', function(e) {
+        var trigger = e.target.closest('.ew-modal__iface-select-trigger');
+        if (trigger) {
+            var wrap = trigger.closest('.ew-modal__iface-select');
+            var panel = wrap && wrap.querySelector('.ew-modal__iface-select-panel');
+            if (panel) {
+                var isOpening = panel.classList.contains('ew-hidden');
+                // Close all other open panels first
+                var allOpen = document.querySelectorAll('.ew-modal__iface-select-panel:not(.ew-hidden)');
+                for (var ap = 0; ap < allOpen.length; ap++) {
+                    if (allOpen[ap] !== panel) allOpen[ap].classList.add('ew-hidden');
+                }
+                panel.classList.toggle('ew-hidden');
+                // Position panel fixed to overlay modal
+                if (isOpening) {
+                    var rect = trigger.getBoundingClientRect();
+                    var availHeight = window.innerHeight - rect.bottom - 12;
+                    panel.style.position = 'fixed';
+                    panel.style.top = rect.bottom + 4 + 'px';
+                    panel.style.left = rect.left + 'px';
+                    panel.style.right = 'auto';
+                    panel.style.width = rect.width + 'px';
+                    panel.style.maxHeight = Math.min(availHeight, window.innerHeight * 0.6) + 'px';
+                    // Auto-focus filter input and reset filter
+                    var filterInput = panel.querySelector('.ew-modal__iface-filter');
+                    if (filterInput) {
+                        filterInput.value = '';
+                        var opts = panel.querySelectorAll('.ew-modal__iface-select-option');
+                        for (var fi = 0; fi < opts.length; fi++) opts[fi].style.display = '';
+                        var grps = panel.querySelectorAll('.ew-modal__iface-select-group');
+                        for (var gi = 0; gi < grps.length; gi++) grps[gi].style.display = '';
+                        var countEl = panel.querySelector('.ew-modal__iface-filter-count');
+                        if (countEl) countEl.textContent = '';
+                        setTimeout(function() { filterInput.focus(); }, 0);
+                    }
+                }
+            }
+            e.stopPropagation();
+            return;
+        }
+        // Close all open iface_select panels on outside click
+        if (!e.target.closest('.ew-modal__iface-select')) {
+            var openPanels = document.querySelectorAll('.ew-modal__iface-select-panel:not(.ew-hidden)');
+            for (var i = 0; i < openPanels.length; i++) openPanels[i].classList.add('ew-hidden');
+        }
+    });
+
+    // iface_select: update display text on checkbox/radio change
+    document.addEventListener('change', function(e) {
+        var wrap = e.target.closest('.ew-modal__iface-select');
+        if (!wrap) return;
+        if (e.target.type === 'radio') {
+            // Union single-select: update text and close panel
+            var label = e.target.closest('.ew-modal__iface-select-option');
+            var textEl = wrap.querySelector('.ew-modal__iface-select-text');
+            if (textEl && label) {
+                var spans = label.querySelectorAll('span');
+                var spanText = spans.length > 0 ? spans[spans.length - 1] : null;
+                textEl.textContent = spanText ? spanText.textContent : e.target.value;
+            }
+            var panel = wrap.querySelector('.ew-modal__iface-select-panel');
+            if (panel) setTimeout(function() { panel.classList.add('ew-hidden'); }, 150);
+        } else if (e.target.type === 'checkbox') {
+            // Multi-select: preserve selection order (add to end / remove in place)
+            var currentOrder = (wrap.dataset.selectionOrder || '').split(' ').filter(Boolean);
+            var changedVal = e.target.value;
+            if (e.target.checked) {
+                if (currentOrder.indexOf(changedVal) === -1) currentOrder.push(changedVal);
+            } else {
+                var idx = currentOrder.indexOf(changedVal);
+                if (idx !== -1) currentOrder.splice(idx, 1);
+            }
+            wrap.dataset.selectionOrder = currentOrder.join(' ');
+            var textEl2 = wrap.querySelector('.ew-modal__iface-select-text');
+            if (textEl2) textEl2.textContent = currentOrder.length ? currentOrder.map(function(n) { return EW.ifaceLabelFull(n); }).join(', ') : 'Default route';
+        }
+    });
+
+    // iface_select/zone_selector: filter options by typing in search input
+    document.addEventListener('input', function(e) {
+        if (!e.target.classList.contains('ew-modal__iface-filter')) return;
+        var query = e.target.value.toLowerCase();
+        var panel = e.target.closest('.ew-modal__iface-select-panel');
+        if (!panel) return;
+        var options = panel.querySelectorAll('.ew-modal__iface-select-option');
+        for (var i = 0; i < options.length; i++) {
+            var text = options[i].textContent.toLowerCase();
+            options[i].style.display = (!query || text.indexOf(query) !== -1) ? '' : 'none';
+        }
+        // Hide group headers that have no visible items below them
+        var groups = panel.querySelectorAll('.ew-modal__iface-select-group');
+        for (var g = 0; g < groups.length; g++) {
+            var hasVisible = false;
+            var next = groups[g].nextElementSibling;
+            while (next && !next.classList.contains('ew-modal__iface-select-group')) {
+                if (next.style.display !== 'none' && next.classList.contains('ew-modal__iface-select-option')) {
+                    hasVisible = true;
+                    break;
+                }
+                next = next.nextElementSibling;
+            }
+            groups[g].style.display = (!query || hasVisible) ? '' : 'none';
+        }
+        // Update count badge
+        var countSpan = panel.querySelector('.ew-modal__iface-filter-count');
+        if (countSpan) {
+            if (query) {
+                var visibleCount = 0;
+                for (var vc = 0; vc < options.length; vc++) {
+                    if (options[vc].style.display !== 'none') visibleCount++;
+                }
+                countSpan.textContent = visibleCount + '/' + options.length;
+            } else {
+                countSpan.textContent = options.length > 8 ? options.length : '';
+            }
+        }
+    });
+
+    // radio_text: clicking on disabled IP input passes through (CSS pointer-events:none)
+    // to the <label>, which natively checks the __custom__ radio.
+    // The 'change' handler above then enables + focuses the text input.
 }

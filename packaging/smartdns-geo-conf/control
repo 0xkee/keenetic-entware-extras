@@ -1,5 +1,5 @@
 Package: smartdns-geo-conf
-Version: 0.14.1
+Version: 0.14.2
 Architecture: all
 Maintainer: 0xkee
 Depends: keenetic-entware-extras, smartdns, ca-certificates

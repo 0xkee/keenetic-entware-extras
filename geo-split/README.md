@@ -5,8 +5,8 @@
 Split routing for Keenetic/Entware — route traffic by GeoIP subnets and domain lists through different network interfaces.
 
 Typical use cases:
-- 🇷🇺 **EAEU → ISP:** EAEU subnets (RU+BY+KZ+AM+KG) go through ISP, everything else — through VPN
-- 🔒 **Selected → VPN:** specific subnets/domains routed into a VPN tunnel
+- 🇷🇺 **EAEU → ISP:** EAEU subnets (RU+BY+KZ+AM+KG) go through ISP, everything else — through tunnel
+- 🔒 **Selected → tunnel:** specific subnets/domains routed into a tunnel
 - 🌍 **Multi-zone:** any combination of countries or alliances (CIS, BRICS, EU, etc.) — 232 zones, 40+ unions
 
 ## Installation
@@ -186,7 +186,7 @@ ROUTE_OUT="auto"
 GEO_ZONE="ru"
 ```
 
-**CIS via VPN (access to RU services from abroad):**
+**CIS via tunnel (access to RU services from abroad):**
 ```sh
 GEO_ZONE="cis"
 ROUTE_OUT="nwg0"
@@ -217,7 +217,7 @@ DOMAINS_UPDATE_INTERVAL=0
 | `scripts/update-domains.sh` | DNS resolution of domains (dig → /32 host routes in domain table) |
 | `scripts/ndm-hook.sh` | NDM hook: reconcile routing tables on interface state changes |
 | `scripts/route-check.sh` | Route diagnostics: determine where traffic to a host/IP/CIDR routes |
-| `scripts/wan-paths.sh` | List all WAN egress paths (ISP + VPN tunnels) as JSON via NDM API |
+| `scripts/wan-paths.sh` | List all WAN egress paths (ISP + tunnel interfaces) as JSON via NDM API |
 | `scripts/status.sh` | Diagnostics: mode, rules, tables, caches |
 | `loaders/cidr-plain.sh` | Loader: plain CIDR (default) |
 | `loaders/ripe-json.sh` | Loader: RIPE JSON API (requires `jq`) |
@@ -331,6 +331,7 @@ After that, connect a USB drive with Ext4 and install Entware following the [off
 | `curl` | Depends | Subnet download |
 | `bind-dig` | Depends | DNS resolution of domains |
 | `aggregate` | Depends | CIDR subnet aggregation |
+| `coreutils-touch` | Depends | Cache file timestamp management |
 | `jq` | Recommends | For `ripe-json` loader |
 
 ## For developers

@@ -9,7 +9,7 @@ GeoIP subnet data and domain lists for [geo-split](../geo-split/).
 | Path | Description |
 |------|-------------|
 | `lists/domains.txt` | Curated domain list (conffile — opkg won't overwrite) |
-| `lists/ru-whitelist.txt` | RU whitelist: 100+ domains (government services, banks, streaming, etc.) |
+| `lists/ru-whitelist.txt` | RU allowlist: 100+ domains (government services, banks, streaming, etc.) |
 | `lists/geoip/*.zone.gz` | Pre-built gzip-compressed country IP subnets (232 zones from [ipdeny.com](https://www.ipdeny.com)) |
 | `scripts/fetch-zones.sh` | Download & aggregate zone files (build-time script) |
 

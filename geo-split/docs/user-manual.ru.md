@@ -8,8 +8,8 @@
 
 | Сценарий | Описание |
 |----------|----------|
-| 🇷🇺 ЕАЭС → ISP | Подсети ЕАЭС (RU+BY+KZ+AM+KG) идут через провайдера, остальное — через VPN |
-| 🔒 Selected → VPN | Определённые подсети/домены отправляются в VPN-туннель |
+| 🇷🇺 ЕАЭС → ISP | Подсети ЕАЭС (RU+BY+KZ+AM+KG) идут через провайдера, остальное — через туннель |
+| 🔒 Selected → tunnel | Определённые подсети/домены отправляются в туннель |
 | 🌍 Multi-zone | Любая комбинация стран или союзов (СНГ, BRICS, EU, 232 зоны, 40+ объединений) |
 
 ---
@@ -119,7 +119,7 @@ vi /opt/keenetic-entware-extras/geo-split/config/config.conf
 |----------|-----------|
 | `"auto"` (по умолч.) | Автоопределение ISP-интерфейса из `ip route show default` |
 | `"lte_br0"` | Через LTE-модем |
-| `"nwg0"` | Через WireGuard/AmneziaWG VPN |
+| `"nwg0"` | Через WireGuard/AmneziaWG |
 | `"ppp0"` | Через PPP-соединение |
 
 > 💡 `"auto"` — рекомендация для типичного сценария «RU → ISP».
@@ -218,7 +218,7 @@ vi /opt/keenetic-entware-extras/geo-split/config/config.conf
 
 **Сценарий 1: ЕАЭС → ISP (по умолчанию, конфиг не нужен)**
 
-Подсети стран ЕАЭС (RU+BY+KZ+AM+KG) идут через ISP, остальной — через VPN:
+Подсети стран ЕАЭС (RU+BY+KZ+AM+KG) идут через ISP, остальной — через туннель:
 ```sh
 # config.conf — пустой или:
 GEO_ZONE="eas"
@@ -232,9 +232,9 @@ ROUTE_OUT="auto"
 GEO_ZONE="ru"
 ```
 
-**Сценарий 3: СНГ-зона через VPN-туннель**
+**Сценарий 3: СНГ-зона через шифрованный канал**
 
-Направить подсети СНГ через VPN (доступ к RU-сервисам из-за рубежа):
+Направить подсети СНГ через шифрованный канал (доступ к RU-сервисам из-за рубежа):
 ```sh
 GEO_ZONE="cis"
 ROUTE_OUT="nwg0"
@@ -351,7 +351,7 @@ route-check.sh --json ozon.ru
 | Символ | Значение |
 |--------|----------|
 | `⇒` (geo-split) | Трафик идёт через geo-split (domain table или subnet table) |
-| `⊙` (tunnel) | Трафик идёт через VPN-туннель (политика клиента) |
+| `⊙` (tunnel) | Трафик идёт через туннель (политика клиента) |
 | `⚠` (mixed) | CDN — разные IP идут разными путями |
 | `→` (default) | Трафик идёт по маршруту по умолчанию |
 
@@ -378,7 +378,7 @@ echo "example.com" >> /opt/keenetic-entware-extras/geo-split-data/lists/domains.
 
 Пример:
 ```
-# Подключить белый список российских сервисов
+# Подключить приоритетный список российских сервисов
 @ru-whitelist.txt
 
 # Мои домены
@@ -485,7 +485,7 @@ geo-split status: ✗ Fail
 | Симптом | Причина | Решение |
 |---------|---------|---------|
 | Status: `✗ Fail`, 0 routes | Не скачались подсети / нет интернета | `S99geo-split update` |
-| `Active out: — detached` | VPN не поднят или rules не подключены | Поднять VPN; geo-split подхватит через NDM hook |
+| `Active out: — detached` | Туннель не поднят или rules не подключены | Поднять туннель; geo-split подхватит через NDM hook |
 | Домены не резолвятся | Нет DNS-резолвера | Установить `smartdns-geo-conf` или указать `DNS_FULL_RESOLVER_PORT` |
 | Status: ✗ для Cron | Нет cron-задачи | `S99geo-split restart` |
 | `ip: command not found` | Нет ip-full | `opkg install ip-full` |

@@ -157,14 +157,22 @@ for f in "$CACHE"/main-*.js "$CACHE"/polyfills-*.js "$CACHE"/styles-*.css; do
     GZ_COUNT=$((GZ_COUNT + 1))
 done
 
-# Custom dashboard: all JS/CSS in webui/static/
+# Custom dashboard: JS/CSS/HTML in webui/static/.
+# .gz companions may already be shipped in the .ipk package (build-time
+# compression at -9). Skip files that already have a .gz companion —
+# avoids redundant gzip on slow MIPS and preserves build-time -9 quality.
 STATIC_DIR="$PROJECT_DIR/webui/static"
-for f in "$STATIC_DIR"/*.js "$STATIC_DIR"/*.css; do
+GZ_SHIPPED=0
+for f in "$STATIC_DIR"/*.js "$STATIC_DIR"/*.css "$STATIC_DIR"/*.html; do
     [ -f "$f" ] || continue
-    gzip -6 -k -f "$f"
+    if [ -f "$f.gz" ]; then
+        GZ_SHIPPED=$((GZ_SHIPPED + 1))
+        continue
+    fi
+    gzip -6 -k "$f"
     GZ_COUNT=$((GZ_COUNT + 1))
 done
-log "gzip_static: pre-compressed $GZ_COUNT files"
+log "gzip_static: compressed $GZ_COUNT files, $GZ_SHIPPED already shipped"
 
 # Success: disable cleanup trap (keep cache)
 trap - EXIT

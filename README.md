@@ -62,7 +62,7 @@ Multi-zone split DNS: route domain queries by configurable GeoIP zones (RU, EAEU
 
 ### [smartdns-redirect](smartdns-redirect/README.md)
 
-Universal DNS DNAT: `iptables PREROUTING REDIRECT` for LAN clients (`br0`) — redirects past Keenetic ndnproxy, direct resolution through local DNS (SmartDNS/AdGuard Home/Unbound/dnsmasq). Persistence via NDM `netfilter.d` hook, watchdog via cron. Measured latency improvement: `~130ms → <80ms`.
+Universal DNS DNAT: `iptables PREROUTING DNAT` for LAN clients (`br0`) — redirects past Keenetic ndnproxy, direct resolution through local DNS (SmartDNS/AdGuard Home/Unbound/dnsmasq). Persistence via NDM `netfilter.d` hook, watchdog via cron. Measured latency improvement: `~130ms → <80ms`.
 
 ### [net-check](net-check/README.md)
 
@@ -109,7 +109,7 @@ keenetic-entware-extras/
 ├── webui/                # custom dashboard (nginx + lua)
 │   ├── config/           # nginx.conf, logrotate.conf
 │   ├── scripts/          # status.sh, patch-stock-ui.sh
-│   ├── lua/              # api-router, serve-index
+│   ├── lua/              # api-router (+ api-config, api-data, api-system, api-utils), serve-index, stock-css-init
 │   └── init.d/           # S80nginx-webui
 ├── packaging/            # .ipk metadata
 │   ├── keenetic-entware-extras/

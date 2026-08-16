@@ -73,6 +73,7 @@ On `start` or `reload`, script `patch-stock-ui.sh`:
 | `v2` | `Vo` | KeeneticOS 5.1 pre-release |
 | `v3` | `Mo` | KeeneticOS 5.1.0+ |
 | `v4` | `Oo` | KeeneticOS 5.1.1+ |
+| `v5` | `Lo` | KeeneticOS 5.2.x |
 
 **Adding a new firmware:** if enum changed, create `vN.sh` with new `PATCH_ENUM` and updated sed patterns. See [patches/README.md](patches/README.md).
 
@@ -107,7 +108,7 @@ Config file: `config/config.conf`
 | `LISTEN_PORT` | `8080` | nginx-webui port |
 | `INJECT_SIDEBAR` | `0` | Sidebar menu injection into stock UI (0/1) |
 | `DASH_POLL_INTERVAL` | `30000` | Dashboard API polling interval (ms) |
-| `PIDFILE` | `/tmp/nginx-webui.pid` | PID file (tmpfs — reset on reboot) |
+| `PIDFILE` | `/opt/tmp/nginx-webui.pid` | PID file (tmpfs — reset on reboot) |
 | `LOG_TAG` | `"kee-webui"` | Tag for logger |
 
 > **Listen address:** generated in `config/listen.conf` during `postinst` (via `detect_router_ip`) + `listen 127.0.0.1:8080`. No hardcoded IP.
@@ -230,16 +231,24 @@ nginx-webui status:
 | `lua/api-router.lua` | Lua router: /api/* → shell commands → JSON |
 | `lua/serve-index.lua` | (not used in current architecture) |
 | `lua/stock-css-init.lua` | Lua: stock CSS scanning on nginx start |
+| `lua/api-config.lua` | Lua: config read/save for services |
+| `lua/api-data.lua` | Lua: zone/provider data endpoints |
+| `lua/api-system.lua` | Lua: system info, clients, interfaces |
+| `lua/api-utils.lua` | Lua: shared utilities (exec, JSON, caching) |
 | `patches/v1.sh` | Patch set v1: Po enum (KeeneticOS 5.0.x) |
 | `patches/v2.sh` | Patch set v2: Vo enum (KeeneticOS 5.1 pre-release) |
 | `patches/v3.sh` | Patch set v3: Mo enum (KeeneticOS 5.1.0+) |
 | `patches/v4.sh` | Patch set v4: Oo enum (KeeneticOS 5.1.1+) |
+| `patches/v5.sh` | Patch set v5: Lo enum (KeeneticOS 5.2.x) |
 | `patches/families/setter.sh` | Shared patch logic for setter-based Angular (v1, v2) |
-| `patches/families/signal.sh` | Shared patch logic for signal-based Angular (v3, v4) |
+| `patches/families/signal.sh` | Shared patch logic for signal-based Angular (v3, v4, v5) |
 | `scripts/patch-stock-ui.sh` | Copies stock UI to tmpfs and applies patches |
 | `scripts/status.sh` | Diagnostics: process, port, config, HTTP, logrotate |
 | `static/index.html` | Custom dashboard — HTML |
 | `static/app.js` | Custom dashboard — JS (status cards, tabs, API) |
+| `static/app-sysinfo.js` | System info dashboard section |
+| `static/config-schemas.js` | Config Editor field schemas per service |
+| `static/inject-dashboard.js` | Stock dashboard card rendering |
 | `static/shared.js` | Shared utilities EW.* (SERVICE_APIS, formatters, ticker, poller) |
 | `static/inject.js` | Stock UI injection (sidebar, dashboard card, toggle, expand) |
 | `static/inject.css` | Styles for inject.js components |

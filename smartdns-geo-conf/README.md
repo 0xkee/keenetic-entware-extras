@@ -95,6 +95,9 @@ OTHER_DNS_INTERFACES=""
 
 # Tunnel interface for zone DNS (usually not needed)
 ZONE_DNS_INTERFACE=""
+
+# DNS encryption policy (auto = DoT/DoH + UDP fallback; strict = encrypted only)
+DNS_TRANSPORT="auto"
 ```
 
 ### Available zones

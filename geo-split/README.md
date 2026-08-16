@@ -171,6 +171,7 @@ Config file: `config/config.conf`
 | `DNS_FULL_RESOLVER_PORT` | `""` | DNS resolver port (empty = auto-detect: SmartDNS 6153 → 6053 → system) |
 | `DOMAINS_LIST_FILE` | `geo-split-data/lists/domains.txt` | Domain list file (`@include` supported) |
 | `DOMAINS_UPDATE_INTERVAL` | `3600` | Domain update interval, seconds (1 hour; `0` = disable) |
+| `REFRESH_NICE_ADJUST` | `10` | CPU-priority adjustment for refresh cron jobs (0=disabled, 1-19=lower priority) |
 
 ### Configuration examples
 

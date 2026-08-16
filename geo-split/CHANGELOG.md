@@ -61,7 +61,7 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 - `wan-paths.sh`: geo-split ROUTE_OUT tunnel detection — reports `type: "tunnel"`
-  instead of `"isp"` when ROUTE_OUT points to a VPN/tunnel interface
+  instead of `"isp"` when ROUTE_OUT points to a tunnel interface
 
 ## [0.17.0] - 2026-07-07
 
@@ -84,13 +84,13 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 - `route-check.sh --from <MAC>`: check route as specific client. Resolves MAC → fwmark
-  via iptables mangle HOTSPOT chain internally. Non-VPN clients correctly show default
-  route (no longer auto-detect stray VPN fwmark). Resolves client name via ndmc hotspot.
+  via iptables mangle HOTSPOT chain internally. Non-tunnel clients correctly show default
+  route (no longer auto-detect stray tunnel fwmark). Resolves client name via ndmc hotspot.
 - JSON output: `from_mac`, `from_name` fields when `--from` is used
 
 ### Fixed
-- **Client selection bug**: non-VPN clients no longer inherit first VPN tunnel fwmark
-  from auto-detect. When `--from` specifies a client without VPN policy, FWMARK stays
+- **Client selection bug**: non-tunnel clients no longer inherit first tunnel fwmark
+  from auto-detect. When `--from` specifies a client without tunnel policy, FWMARK stays
   empty → route lookup uses main table (correct behavior)
 
 ### Changed
@@ -231,7 +231,7 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 ## [0.10.8] - 2026-05-30
 
 ### Changed
-- `DOWNLOAD_INTERFACES` default: `"default *"` — auto-detect all active VPN interfaces (awg-manager, OpenConnect, Tailscale, etc.) instead of manually listing glob patterns
+- `DOWNLOAD_INTERFACES` default: `"default *"` — auto-detect all active tunnel interfaces (awg-manager, OpenConnect, Tailscale, etc.) instead of manually listing glob patterns
 - Glob expansion in `resolve_download_interfaces()` now skips infrastructure interfaces (`lo`, `br*`, `ifb*`)
 
 ## [0.10.7] - 2026-05-25

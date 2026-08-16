@@ -250,7 +250,7 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 ### Fixed
 - Dashboard card header "ENTWARE EXTRAS" is now a clickable link to Summary page
   with pointer cursor (hand icon) on hover
-- Interface blacklist: added `rai` (5 GHz), `rax` (6 GHz), `xfrm`/`xfrms` (IPsec)
+- Interface exclusion list: added `rai` (5 GHz), `rax` (6 GHz), `xfrm`/`xfrms` (IPsec)
   exclusions in `api-router.lua` → `system_interfaces()`
 
 ## [0.32.2] — 2026-07-07
@@ -282,7 +282,7 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 ## [0.31.2] — 2026-07-05
 
 ### Fixed
-- Config modal: `ROUTE_OUT` (Outgoing Interface) and `ZONE_DNS_INTERFACE` (Zone VPN Interface) now render as single-select (radio) instead of multi-select (checkbox) — `multi: false` in schema
+- Config modal: `ROUTE_OUT` (Outgoing Interface) and `ZONE_DNS_INTERFACE` (Zone tunnel Interface) now render as single-select (radio) instead of multi-select (checkbox) — `multi: false` in schema
 - Unified display text "Default" → "Default route" across all iface_select triggers (initial render, reset, checkbox change handler)
 - Radio change handler: use last `<span>` for trigger text (dot indicator spans no longer cause `[object Object]`)
 - `loadIfaceMap()`: fixed fallback chain producing `[object Object]` for interfaces without label
@@ -454,8 +454,8 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 ### Fixed
 - **Interface labels: ppp0/eth0 now resolve to human names** — Expanded
   `NDM_TYPE_TO_PREFIX` with PPPoE, PPTP, L2TP, AmneziaWG types for deterministic
-  id→prefix mapping. Replaced whitelist filter in `system_interfaces()` with
-  blacklist (excludes only infra: lo, tunnels, radios, VLANs). `eth*` ports
+  id→prefix mapping. Replaced allowlist filter in `system_interfaces()` with
+  exclusion list (excludes only infra: lo, tunnels, radios, VLANs). `eth*` ports
   included only when NDM resolves a label (IPoE WAN with IP). Fixes: ppp0
   showing as raw "ppp0" instead of ISP name.
 
@@ -466,7 +466,7 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
   Active when verdict=default+fwmark, inactive otherwise. Blue path animation
   (same as tunnel).
 - **Verdict display: "⊙ policy"** — when verdict is "default" but client has an
-  fwmark (VPN policy), legend and batch table show "policy" instead of "default"
+  fwmark (tunnel policy), legend and batch table show "policy" instead of "default"
   to clarify that NDM policy routing determined the path.
 
 ## [0.27.3] — 2026-06-30
@@ -487,7 +487,7 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 - **Route check: client selection works** — API passes `--from <MAC>` to route-check.sh
-  (MAC→fwmark resolved inside script). Non-VPN clients no longer show tunnel verdict.
+  (MAC→fwmark resolved inside script). Non-tunnel clients no longer show tunnel verdict.
 - **Route diagram: source label** — shows client name (from backend `from_name` field)
   instead of always "Home network". Shows "Router" when `from=local`.
 - **Long client names** — truncated to 18 chars with ellipsis in SVG diagram
@@ -530,7 +530,7 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 - CDN mixed verdict: orange badge, all paths highlighted, per-IP routes table
 - All DNS IPs shown on diagram (up to 3 + "+N more")
 - **Batch mode**: Check All history items with sequential requests
-- Client/interface selector with VPN policy detection (MAC → fwmark)
+- Client/interface selector with tunnel policy detection (MAC → fwmark)
 - Rate-limited diagnostic API endpoints in `api-router.lua`
 - History pills with delete, localStorage persistence
 
@@ -672,8 +672,8 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 - SmartDNS summary: shows `zone_dns_provider` and `other_dns_provider` fields
 
 ### Changed
-- SmartDNS config: interface labels renamed — "Zone VPN Interface", "International VPN Interfaces"
-- `api-router.lua`: smartdns keys whitelist updated with new provider config keys
+- SmartDNS config: interface labels renamed — "Zone tunnel Interface", "International tunnel Interfaces"
+- `api-router.lua`: smartdns keys allowlist updated with new provider config keys
 
 ## [0.21.3] - 2026-06-08
 
@@ -921,7 +921,7 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 ## [0.14.1] - 2026-06-03
 
 ### Fixed
-- Interface labels now work for DOWN interfaces (VPN/WireGuard/OpenVPN that are
+- Interface labels now work for DOWN interfaces (tunnel/WireGuard/OpenVPN that are
   not connected). Replaced IP-address matching with deterministic NDM `id`-based
   mapping (`Bridge<N>`→`br<N>`, `Wireguard<N>`→`nwg<N>`, `UsbLte<N>`→`lte_br<N>`,
   `OpenVPN<N>`→`ovpn_br<N>`). IP-matching kept as fallback for 3rd-party types.
@@ -946,7 +946,7 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 - API: `POST /api/smartdns-redirect/config` — saves only non-default values
   to config.conf (empty payload → removes config.conf). Auth-guarded, validates port.
 - API: `GET /api/system/interfaces` — lists interfaces with IFF_UP flag state
-  (accurate for VPN/WireGuard) and ndmc human labels.
+  (accurate for tunnel/WireGuard) and ndmc human labels.
 - Edit button (pencil icon, square 32×32) on cards with config schema support.
   Hidden in Summary mode via CSS class.
 

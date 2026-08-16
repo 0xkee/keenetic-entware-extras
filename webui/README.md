@@ -245,8 +245,12 @@ nginx-webui status:
 | `static/inject.css` | Styles for inject.js components |
 | `static/common.css` | Shared styles (update buttons, tooltips) |
 | `static/layout.css` | Custom dashboard layout styles |
-| `static/config-editor.js` | Config Editor (~790 lines, extracted from app.js) |
-| `static/route-check.js` | Route Check UI |
+| `static/config-form.js` | Config form rendering (renderDropdown, renderModalForm) |
+| `static/config-editor.js` | Config Editor modal lifecycle, save, reset, events |
+| `static/detail-render.js` | Detail rendering helpers (shared by app.js + inject-dashboard.js) |
+| `static/diagnostics.js` | Route Check & DNS Check modal UI |
+| `static/diag-render.js` | Diagnostic result rendering (route + DNS) |
+| `static/diag-batch.js` | Diagnostic batch table + sequential runner |
 | `static/route-diagram.js` | SVG route diagram |
 | `static/route-diagram.css` | SVG diagram styles |
 | `static/502.html` | Error page when stock httpd is unavailable |

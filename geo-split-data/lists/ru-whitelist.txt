@@ -1,5 +1,5 @@
-# ru-whitelist.txt — Russian services known for geo-blocking
-# Curated whitelist of popular Russian domains that restrict access
+# ru-whitelist.txt — Russian services known for geo-restriction
+# Curated allowlist of popular Russian domains that restrict access
 # from non-Russian IPs. Strongly recommended for reliable geo-split.
 #
 # Source: manually curated + community data from

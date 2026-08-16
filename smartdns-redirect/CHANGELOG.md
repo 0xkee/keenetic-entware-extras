@@ -5,6 +5,12 @@ All notable changes to `smartdns-redirect` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.6.3] - 2026-08-16
+
+### Changed
+- README: document `REDIRECT_MODE` parameter in config section
+- User manual (RU): add `REDIRECT_MODE` to parameter table
+
 ## [0.6.2] - 2026-07-31
 
 ### Fixed

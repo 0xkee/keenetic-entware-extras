@@ -5,6 +5,17 @@ All notable changes to `geo-split` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.18.5] - 2026-08-16
+
+### Changed
+- Legal terminology compliance: tunnel naming in README, user manual, config comments, script comments (18 files)
+- User manual: updated naming — «приоритетный список», «туннель» / «шифрованный канал»
+
+## [0.18.4] - 2026-08-16
+
+### Changed
+- README: add `REFRESH_NICE_ADJUST` to parameter table, add `coreutils-touch` to dependencies
+
 ## [0.18.3] - 2026-08-10
 
 ### Changed

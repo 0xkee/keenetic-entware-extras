@@ -5,7 +5,17 @@ All notable changes to `net-check` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
-## [Unreleased]
+## [0.2.11] - 2026-08-16
+
+### Changed
+- Legal terminology compliance: tunnel → tunnel in user manual, config comments, script comments (zone.sh, cmd-dns-leak.sh, cmd-ipv6-leak.sh, defaults.conf, cdn-domains.conf, privacy-providers.conf)
+- User manual: «Обнаружение блокировок» → «Обнаружение сетевых аномалий», «мимо tunnel» → «мимо шифрованного канала»
+
+## [0.2.10] - 2026-08-16
+
+### Added
+- `docs/user-manual.ru.md` — full Russian user manual (usage, all commands, flags, configuration, config files, troubleshooting)
+- README: user manual link, `iputils-ping` in dependencies, file structure tree, `domain-check.sh` section
 
 ## [0.2.9] - 2026-08-11
 

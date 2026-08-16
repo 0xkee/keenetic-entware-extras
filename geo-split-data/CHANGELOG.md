@@ -5,6 +5,12 @@ All notable changes to `geo-split-data` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.6.1] - 2026-08-16
+
+### Changed
+- Legal terminology compliance: updated naming — allowlist, гео-ограничение — in README, user manual, domains.txt, ru-whitelist.txt comments
+- Removed regulator reference from domains.txt
+
 ## [0.6.0] - 2026-07-06
 
 ### Changed

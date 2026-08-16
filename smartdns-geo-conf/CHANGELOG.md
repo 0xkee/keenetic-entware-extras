@@ -5,6 +5,12 @@ All notable changes to `smartdns-geo-conf` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.14.2] - 2026-08-16
+
+### Changed
+- README: document `DNS_TRANSPORT` parameter in Zone configuration section
+- User manual (RU): add `DNS_TRANSPORT` section with `auto`/`strict` mode descriptions
+
 ## [0.14.1] - 2026-07-30
 
 ### Changed

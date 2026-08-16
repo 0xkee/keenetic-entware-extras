@@ -5,7 +5,16 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
-## [Unreleased]
+## [0.37.5] - 2026-08-16
+
+### Changed
+- README: add v5 patch set to table, fix PIDFILE path (`/tmp/` → `/opt/tmp/`), add new Lua modules and static files to Files table
+
+## [0.37.4] - 2026-08-16
+
+### Added
+- **KeeneticOS 5.2.5 Alpha support** — new patch set v5 for `Lo` enum
+  (main-2CA2915.js, KN-3811 mipsel, signal-family, same architecture as v3/v4)
 
 ## [0.37.3] - 2026-08-11
 

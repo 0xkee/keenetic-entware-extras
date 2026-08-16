@@ -102,6 +102,7 @@ opkg install smartdns-redirect_<версия>_all.ipk
 | `UPSTREAM_PORT` | `6053` | Порт локального DNS (SmartDNS=6053, AGH=5353, Unbound=5335) |
 | `INTERFACES` | `"br0"` | LAN-интерфейсы для перехвата (через пробел). DoT (:853) блокируется автоматически |
 | `WATCHDOG_SERVICE` | `"S38smartdns"` | Init-скрипт для рестарта при падении upstream |
+| `REDIRECT_MODE` | `"force"` | Режим перехвата: `"force"` = все DNS + блок DoT; `"local"` = только DNS на IP роутера |
 
 ### Примеры конфигурации
 

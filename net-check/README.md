@@ -6,6 +6,8 @@ End-to-end reachability verification across WAN interfaces,
 MITM/DPI anomaly detection, CDN geo-steering analysis,
 DNS leak testing, path quality comparison.
 
+> 📖 **[User Manual (RU)](docs/user-manual.ru.md)**
+
 ## Usage
 
 ```sh
@@ -64,10 +66,68 @@ All config files are protected from overwrite on package upgrade.
 - `1` — degraded (some checks failed)
 - `2` — critical failure
 
+## File structure
+
+```
+net-check/
+├── config/
+│   ├── defaults.conf           # Default settings (do not edit)
+│   ├── config.conf             # User overrides (create if needed)
+│   ├── check-targets.conf      # HTTP/DNS/TLS target list
+│   ├── check-targets-custom.conf # User custom targets (not overwritten)
+│   ├── cdn-domains.conf        # CDN domains for steering analysis
+│   ├── cdn-domains-custom.conf # User custom CDN domains (not overwritten)
+│   ├── dns-providers.conf      # DNS provider identification
+│   ├── anomaly-markers.conf    # ISP block page detection patterns
+│   ├── mitm-issuers.conf       # Known MITM proxy CA patterns
+│   ├── known-cas.conf          # Known national/regional CAs (allowlist)
+│   ├── privacy-providers.conf  # Privacy provider patterns for anonymization
+│   └── wellknown-ips.conf      # Well-known public DNS resolver IPs
+├── scripts/
+│   ├── net-check.sh            # Main entry point
+│   ├── domain-check.sh         # Shortcut: deep single-resource check
+│   ├── status.sh               # Diagnostics for init.d status
+│   └── lib/                    # Command modules and shared libraries
+│       ├── cmd-all.sh          # "all" command orchestration
+│       ├── cmd-geo.sh          # Egress point verification (GeoIP)
+│       ├── cmd-connectivity.sh # TCP/TLS timing, traceroute, loss, MTU
+│       ├── cmd-ipv6-leak.sh    # IPv6 leak detection
+│       ├── cmd-dns.sh          # DNS resolution & ISP filtering
+│       ├── cmd-dns-leak.sh     # DNS leak test (resolver chain)
+│       ├── cmd-compare.sh      # HTTP reachability comparison table
+│       ├── cmd-cdn.sh          # CDN geo-steering analysis
+│       ├── cmd-tls.sh          # TLS certificate MITM check
+│       ├── cmd-speed.sh        # Download/upload throughput
+│       ├── cmd-check.sh        # Deep single-resource check
+│       ├── batch.sh            # Adaptive batch sizing, parallel runner
+│       ├── wan.sh              # WAN discovery, iface_type
+│       ├── geoip.sh            # IP geolocation API
+│       ├── geo-cache.sh        # Geo cache operations + lookups
+│       ├── zone.sh             # Geo-zone context, routing
+│       ├── http-core.sh        # curl, content check, metrics
+│       ├── verdict.sh          # Failure classification, reason labels
+│       ├── privacy.sh          # Privacy filter (IP/ASN anonymization)
+│       ├── output.sh           # Errors, usage, config reader
+│       ├── sections.sh         # Spinner, banners, verbosity
+│       ├── table.sh            # Table framework
+│       └── colors.sh           # Colors, marks, emoji
+└── docs/
+    └── user-manual.ru.md       # User manual (Russian)
+```
+
+### domain-check.sh
+
+Shortcut for deep single-resource check. Equivalent to `net-check.sh check <domain>`:
+
+```sh
+domain-check.sh youtube.com
+```
+
 ## Dependencies
 
 - `curl` — HTTP checks, GeoIP services, dns-leak test APIs
 - `bind-dig` — DNS/CDN checks, EDNS Client Subnet, dns-leak probing
+- `iputils-ping` — ICMP connectivity, loss/jitter measurement
 - `netcat` (recommended) — TCP connect checks
 - `openssl-util` (recommended) — TLS certificate inspection
 - `traceroute` (optional) — path tracing

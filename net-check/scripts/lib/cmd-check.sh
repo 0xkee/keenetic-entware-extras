@@ -1,6 +1,6 @@
 # net-check: Deep single-resource check — HTTP + DNS + TLS + CDN for one domain.
 # Multi-domain mode delegates to bulk functions (cmd_compare, cmd_dns, etc.).
-# Dependencies: lib/cmd-targets.sh (cmd_check_target, cmd_compare),
+# Dependencies: lib/cmd-compare.sh (cmd_check_target, cmd_compare),
 #   lib/cmd-dns.sh (_dns_check_single, cmd_dns),
 #   lib/cmd-tls.sh (cmd_tls_check, cmd_tls_check_targets),
 #   lib/cmd-cdn.sh (cmd_cdn, cmd_cdn_all),

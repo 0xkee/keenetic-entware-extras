@@ -2,7 +2,7 @@
 # Dependencies: lib/output.sh (emit_error, section_banner, start_spinner, stop_spinner, is_quiet),
 #   lib/wan.sh (get_wan_interfaces), lib/cmd-geo.sh (cmd_geo), lib/cmd-connectivity.sh (cmd_connectivity),
 #   lib/cmd-dns.sh (cmd_dns), lib/cmd-dns-leak.sh (cmd_dns_leak), lib/cmd-ipv6-leak.sh (cmd_ipv6_leak),
-#   lib/cmd-targets.sh (cmd_compare),
+#   lib/cmd-compare.sh (cmd_compare),
 #   lib/cmd-cdn.sh (cmd_cdn_all), lib/cmd-tls.sh (cmd_tls_check_targets),
 #   lib/cmd-speed.sh (cmd_speed), lib/common.sh (json_kv_bool, json_kv_num)
 # Globals used: OUTPUT_JSON, VERBOSITY, _EXIT_CODE, CHECK_INTERFACES, _GEO_EXT_IPS,

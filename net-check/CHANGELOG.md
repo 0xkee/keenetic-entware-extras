@@ -7,6 +7,12 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.9] - 2026-08-11
+
+### Changed
+- Rename `cmd-targets.sh` → `cmd-compare.sh` — align with `cmd-{command}.sh`
+  naming convention (`comp` command dispatches to `cmd_compare()`).
+
 ## [0.2.8] - 2026-08-11
 
 ### Changed

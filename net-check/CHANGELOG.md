@@ -245,7 +245,7 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ### Removed
 - `check-targets.conf`: 21vek.by (zone-by), kaspi.kz (zone-kz) — server-side
-  geo-blocks for non-local IPs, always fail from abroad
+  geo-restrictions for non-local IPs, always fail from abroad
 - `cdn-domains.conf`: cdn.ozon.ru — HTTP/2 PROTOCOL_ERROR on root URL probe
 
 ### Changed
@@ -255,10 +255,10 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 ## [0.0.4] - 2026-08-01
 
 ### Changed
-- `wan.sh`: ► active route detection now uses kernel FIB with auto-detected VPN
-  fwmark (`--as auto` mode). New `_detect_auto_fwmark()` finds the first VPN
+- `wan.sh`: ► active route detection now uses kernel FIB with auto-detected tunnel
+  fwmark (`--as auto` mode). New `_detect_auto_fwmark()` finds the first tunnel
   tunnel fwmark from ip rules, `fib_active_dev()` queries `ip route get` with
-  fwmark + iif br0 — correctly simulates VPN-policy LAN client. Zone IPs hit
+  fwmark + iif br0 — correctly simulates tunnel-policy LAN client. Zone IPs hit
   geo-split tables (prio 50/51), intl IPs hit fwmark rule (prio 100+) → tunnel.
   Replaces old `route_dev_for_ip()` which queried without fwmark (always returned
   default route for intl targets). Removed `intl-*` category heuristic fallback.
@@ -274,7 +274,7 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 
-- **dns-leak: false LEAK on multi-tunnel setups** — resolvers at VPN tunnel
+- **dns-leak: false LEAK on multi-tunnel setups** — resolvers at tunnel tunnel
   exit countries (NL, LV, SE, NO etc.) were incorrectly flagged as leaks.
   New 3-level classification: known provider → tunnel exit → real leak.
   Only ISP-country resolvers are flagged as leaks when tunnels are configured.
@@ -287,7 +287,7 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 ### Changed
 
 - **dns-leak: tunnel/direct status labels** — resolvers now show `tunnel ✅`
-  (at VPN exit) or `direct ✅` (via ISP) instead of plain `✅`.
+  (at tunnel exit) or `direct ✅` (via ISP) instead of plain `✅`.
 - **dns-leak: wider table columns** — Resolver IP 18→24 (IPv6 fit),
   Provider 40→50 (long names fit).
 - **DNS_LEAK_WAIT** increased from 3s to 7s — multi-tunnel setups need more

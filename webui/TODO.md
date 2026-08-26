@@ -2,6 +2,10 @@
 
 > Обновлено 2026-04-29. v0.3.0: Angular-native card — пустой CDK row (sub_filter #9 ngTemplateOutlet=null), inject.js создаёт card DOM с нуля. Удалены хаки: CSS stub hiding, header patch, dialog toggle/header patches. Target: `.project/target-arch.md`.
 
+## 🔍 Интеграция со стоковым вебом при обновлении прошивки
+
+- [ ] **Исследовать: попап обновления и сохранение конфигов** — при обновлении прошивки через стоковый веб не появляется попап прогресса и не срабатывает сохранение конфигурации. Нужно изучить причину (возможно, nginx-proxy перехватывает/блокирует WebSocket или POST-запросы к `/rci/`). (source: stock-webui-check 2026-08-26)
+
 ## 🎯 Спайки — свой template для Angular
 
 - [x] **Spike A: Проверить нативность dialog** ✅ — удалены header/toggle патчи из `injectIntoCardsDialog()` и `_repatchDialogEntwareRow()`. **Результат: Angular рендерит ENTWARE_EXTRAS нативно** — header "ENTWARE EXTRAS" (из dXe), aria-label "ENTWARE_EXTRAS" (из Po), toggle state (FormControl). inject.js change handler оставлен только для dashboard sync. Скриншот: `docs/screenshots/spike-a-dialog-native.png`

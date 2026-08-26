@@ -119,6 +119,7 @@ ssh root@router /opt/etc/init.d/S80nginx-webui restart
 | `8787931` | `8787931` | KeeneticOS 5.1.0+ | mipsel | v3 | Mo |
 | `553997B` | `553997B` | KeeneticOS 5.1.1 | mipsel | v4 | Oo |
 | `9D06AA2` | `9D06AA2` | KeeneticOS 5.1.2 | mipsel | v3 | Mo |
+| `AA018C6` | `AA018C6` | KeeneticOS 5.1.4 | aarch64 | v4 | Oo |
 | `2CA2915` | `2CA2915` | KeeneticOS 5.2.5 Alpha | mipsel | v5 | Lo |
 
 ## Patch set contract

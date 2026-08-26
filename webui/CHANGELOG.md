@@ -5,6 +5,11 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.37.6] - 2026-08-26
+
+### Changed
+- Add KeeneticOS 5.1.4 aarch64 (NC-4110) bundle hash `AA018C6` to compatibility tables (v4 patch, `Oo` enum)
+
 ## [0.37.5] - 2026-08-16
 
 ### Changed

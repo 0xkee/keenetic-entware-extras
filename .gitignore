@@ -24,6 +24,7 @@ geo-split-data/lists/geoip/*.zone.gz
 AGENTS.md
 awg-manager
 .project
+**/.project/
 .roo
 .clinerules
 .playwright-mcp

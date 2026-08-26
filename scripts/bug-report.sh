@@ -1,12 +1,29 @@
 #!/opt/bin/sh
-# bug-report.sh — collect diagnostics for forum bug reports
+# bug-report.sh — collect diagnostics for forum bug reports.
 # Output is safe to post publicly (no passwords, keys, or WAN IPs).
+# Public IPs, ASN, and IPv6 addresses are masked by default.
+# Use --no-privacy to show raw addresses (for trusted sharing).
 set -eu
 
 BASE="/opt/keenetic-entware-extras"
 # shellcheck disable=SC1091
 . "$BASE/lib/ip.sh"
+# shellcheck disable=SC1091
+. "$BASE/lib/privacy.sh"
 SEP="──────────────────────────────────────────────"
+
+# ─── Parse arguments ──────────────────────────────────────────────────────────
+_PRIVACY=1
+for _arg in "$@"; do
+    case "$_arg" in --no-privacy) _PRIVACY=0 ;; esac
+done
+
+# Privacy: re-exec self with --no-privacy, pipe through filter (streaming).
+# _PRIV_WRAPPED env tells the child that output IS being filtered.
+if [ "$_PRIVACY" = 1 ]; then
+    _PRIV_WRAPPED=1 "$0" --no-privacy "$@" | priv_basic_filter
+    exit $?
+fi
 
 section() {
     printf "\n%s\n  %s\n%s\n" "$SEP" "$1" "$SEP"
@@ -289,15 +306,8 @@ fi
 
 printf "\nndnproxy config (ISP DNS):\n"
 if [ -f /tmp/ndnproxymain.conf ]; then
-    # Show dns_server lines; mask public IPs for privacy (private ranges shown as-is)
-    grep '^dns_server' /tmp/ndnproxymain.conf | while IFS= read -r _line; do
-        _masked="$(echo "$_line" | sed -E \
-            -e 's/= (10\.[0-9]+\.[0-9]+\.[0-9]+)/= \1/g' \
-            -e 's/= (172\.(1[6-9]|2[0-9]|3[01])\.[0-9]+\.[0-9]+)/= \1/g' \
-            -e 's/= (192\.168\.[0-9]+\.[0-9]+)/= \1/g' \
-            -e 's/= ([0-9]+\.[0-9]+\.[0-9]+)\.[0-9]+/= \1.xxx/g')"
-        printf "  %s\n" "$_masked"
-    done
+    # Public IPs masked by global privacy filter (--no-privacy to show raw)
+    grep '^dns_server' /tmp/ndnproxymain.conf | sed 's/^/  /'
 else
     echo "  (not found)"
 fi
@@ -898,6 +908,12 @@ fi
 
 printf "\n%s\n" "$SEP"
 echo "Bug report collected. Copy everything above and paste into the forum topic."
-echo "No passwords, WAN IPs, or private keys are included in this output."
-echo "If you see any info you consider private, replace it with *** before posting."
+if [ "${_PRIV_WRAPPED:-}" = 1 ]; then
+    echo "Public IPs, ASN, and IPv6 addresses are masked (#.#.#.#, AS****, #::#)."
+    echo "Use --no-privacy to show raw addresses (for trusted sharing)."
+else
+    echo "⚠ Privacy filter disabled (--no-privacy). WAN IPs are visible!"
+    echo "Check for any private info before posting publicly."
+fi
+echo "No passwords or private keys are included in this output."
 printf "%s\n" "$SEP"

@@ -1,8 +1,13 @@
 # net-check: Privacy filter — post-processing anonymization of sensitive data.
 # Replaces external IPs, ASN, country, city, org with fake values.
-# Dependencies: lib/common.sh (is_cache_fresh), lib/output.sh (emit_warn)
-# Globals used: PRIVACY_MODE, DATA_DIR, _CONFIG_DIR, WELLKNOWN_IPS_FILE
+# Dependencies: lib/privacy.sh (priv_mask_ip_asn, priv_mask_ipv6),
+#   lib/common.sh (is_cache_fresh), lib/output.sh (emit_warn)
+# Globals used: PRIVACY_MODE, DATA_DIR, _CONFIG_DIR, WELLKNOWN_IPS_FILE, SCRIPT_DIR
 # shellcheck disable=SC3043
+
+# Source shared privacy library (basic IP/ASN/IPv6 masking).
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/../../lib/privacy.sh"
 
 # ─── Privacy Data ─────────────────────────────────────────────────────────────
 
@@ -106,9 +111,9 @@ _priv_cc_rules() {
   printf 's/"edge_cc":"%s"/"edge_cc":"%s"/g\n' "$_gcc" "$_fake_cc"
   # Table cell: " CC " (space-bounded, CC:4 columns in tbl_row)
   printf 's/ %s / %s /g\n' "$_gcc" "$_fake_cc"
-  # ANSI-colored CC in tbl_cell: \033[32mCC\033[0m → match mCC\033
-  # The CC is between ANSI color-start (ending "m") and ANSI reset (starting ESC).
-  printf 's/m%s%s/m%s%s/g\n' "$_gcc" "$_esc" "$_fake_cc" "$_esc"
+  # ANSI-colored CC in tbl_cell: \033[32mCC  \033[0m → match mCC(spaces)\033
+  # CC is between ANSI color-start ("m") and reset (ESC). Padding spaces preserved.
+  printf 's/m%s\\( *\\)%s/m%s\\1%s/g\n' "$_gcc" "$_esc" "$_fake_cc" "$_esc"
   # --no-color mode: ★CC or *CC (star directly before CC in comparison cells)
   printf 's/★%s /★%s /g\n' "$_gcc" "$_fake_cc"
   printf 's/\\*%s /\\*%s /g\n' "$_gcc" "$_fake_cc"
@@ -124,78 +129,19 @@ _priv_cc_rules() {
   printf 's/ %s$/ %s/g\n' "$_gcc" "$_fake_cc"
 }
 
-# ─── Pattern Masking (awk-based) ──────────────────────────────────────────────
-
-# Replace public IPv4 addresses with #.#.#.# and ASN with AS*****.
-# Pads replacements to match original width (preserves table alignment).
-# Preserves well-known DNS IPs and RFC 1918 / loopback ranges.
-# Reads from stdin, writes to stdout.
-_priv_mask_patterns() {
-  awk -v wellknown="$_PRIV_WELLKNOWN_IPS" '
-  BEGIN {
-    n = split(wellknown, arr, " ")
-    for (i = 1; i <= n; i++) wk[arr[i]] = 1
-  }
-  # Helper: pad string s to width w with spaces
-  function pad(s, w) { while (length(s) < w) s = s " "; return s }
-  {
-    # Pass 1: Mask IPv4 addresses
-    line = $0; result = ""
-    while (match(line, /[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/)) {
-      prefix = substr(line, 1, RSTART - 1)
-      ip = substr(line, RSTART, RLENGTH)
-      rest = substr(line, RSTART + RLENGTH)
-      result = result prefix
-      if (ip in wk) {
-        result = result ip
-      } else {
-        split(ip, o, ".")
-        if (o[1]+0 == 10 || o[1]+0 == 127 || \
-            (o[1]+0 == 172 && o[2]+0 >= 16 && o[2]+0 <= 31) || \
-            (o[1]+0 == 192 && o[2]+0 == 168)) {
-          result = result ip
-        } else {
-          result = result pad("#.#.#.#", RLENGTH)
-        }
-      }
-      line = rest
-    }
-    result = result line
-
-    # Pass 2: Mask ASN (AS12345 → AS**** padded to same width)
-    line = result; result = ""
-    while (match(line, /AS[0-9][0-9]*/)) {
-      prefix = substr(line, 1, RSTART - 1)
-      rest = substr(line, RSTART + RLENGTH)
-      result = result prefix
-      result = result pad("AS****", RLENGTH)
-      line = rest
-    }
-    result = result line
-
-    print result
-  }'
-}
-
 # ─── Main Filter ──────────────────────────────────────────────────────────────
 
-# Post-processing privacy filter.
-# Reads full command output from stdin, applies anonymization, writes to stdout.
-# Steps:
-#   1. Read geo cache files → build targeted sed replacements for city/org/country
-#   2. Mask all public non-wellknown IPv4 with #.#.#.#
-#   3. Mask IPv6 addresses
-#   4. Mask ASN patterns (AS12345 → AS*****)
-#   5. Apply targeted city/org/country replacements
-privacy_filter() {
-  local _sed_script="${_RUN_DIR}/priv-sed.tmp"
+# Build targeted sed script for City/Org/CC replacements from geo cache.
+# Must be called AFTER stdin is fully consumed (geo cache ready).
+# Args: $1 - sed script output path
+_priv_build_sed_script() {
+  local _sed_script="$1"
   : > "$_sed_script"
 
-  # --- Step 1a: Targeted replacements from per-interface geo cache ---
   local _n=0
-  # Track already-replaced CC codes to avoid duplicate sed rules
   local _replaced_ccs=""
 
+  # Per-interface geo cache (geo-eth3.json, geo-nwg0.json, ...)
   for _gf in "${DATA_DIR}"/geo-*.json; do
     [ -f "$_gf" ] || continue
     _n=$((_n + 1))
@@ -205,12 +151,12 @@ privacy_filter() {
     _gorg=$(sed 's/\\"/§/g' < "$_gf" | sed -n 's/.*"org"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | sed 's/§/"/g')
     _gcc=$(sed -n 's/.*"country"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_gf")
 
-    # City → planet name (width-preserving: consumes/adds trailing spaces)
+    # City → planet name (width-preserving)
     if [ -n "$_gcity" ] && [ "$_gcity" != "—" ] && [ "$_gcity" != "-" ]; then
       _priv_sed_eq "$_gcity" "$(_priv_planet "$_n")" >> "$_sed_script"
     fi
 
-    # Org → provider name (width-preserving: consumes/adds trailing spaces)
+    # Org → provider name (width-preserving)
     if [ -n "$_gorg" ] && [ "$_gorg" != "—" ] && [ "$_gorg" != "-" ]; then
       _priv_sed_eq "$_gorg" "$(_priv_provider "$_n")" >> "$_sed_script"
     fi
@@ -224,29 +170,62 @@ privacy_filter() {
     fi
   done
 
-  # --- Step 1b: CC from unified per-IP geo cache (DNS/CDN resolved IPs) ---
-  # geolocate_ip() caches full data to ipgeo-<ip>.json — these CC codes
-  # appear in DNS and CDN tables but are NOT in per-interface geo-*.json files.
+  # Per-IP geo cache (ipgeo-1.2.3.4.json) — CC/Org/City from DNS/CDN resolved IPs.
+  # Track already-replaced Org names to avoid duplicate sed rules.
+  local _replaced_orgs=""
   for _cf in "${DATA_DIR}"/ipgeo-*.json; do
     [ -f "$_cf" ] || continue
+    _n=$((_n + 1))
+
+    # CC replacement (skip if already covered by step 1a)
     local _gip_cc
     _gip_cc=$(sed -n 's/.*"cc":"\([^"]*\)".*/\1/p' "$_cf" 2>/dev/null) || _gip_cc=""
-    case "$_gip_cc" in [A-Z][A-Z]) ;; *) continue ;; esac
-    # Skip if already replaced from geo cache
-    case "$_replaced_ccs" in *" $_gip_cc"*) continue ;; esac
-    _n=$((_n + 1))
-    local _fake_cc
-    _fake_cc=$(_priv_country "$_n")
-    _priv_cc_rules "$_gip_cc" "$_fake_cc" >> "$_sed_script"
-    _replaced_ccs="${_replaced_ccs} ${_gip_cc}"
+    if [ -n "$_gip_cc" ] && [ ${#_gip_cc} -eq 2 ]; then
+      case "$_replaced_ccs" in *" $_gip_cc"*) ;; *)
+        local _fake_cc
+        _fake_cc=$(_priv_country "$_n")
+        _priv_cc_rules "$_gip_cc" "$_fake_cc" >> "$_sed_script"
+        _replaced_ccs="${_replaced_ccs} ${_gip_cc}"
+      ;; esac
+    fi
+
+    # Org replacement (width-preserving, skip duplicates)
+    local _gip_org
+    _gip_org=$(sed 's/\\"/§/g' < "$_cf" | sed -n 's/.*"org"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | sed 's/§/"/g') || _gip_org=""
+    if [ -n "$_gip_org" ] && [ "$_gip_org" != "—" ] && [ "$_gip_org" != "-" ]; then
+      case "$_replaced_orgs" in *"|$_gip_org|"*) ;; *)
+        _priv_sed_eq "$_gip_org" "$(_priv_provider "$_n")" >> "$_sed_script"
+        _replaced_orgs="${_replaced_orgs}|${_gip_org}|"
+      ;; esac
+    fi
+
+    # City replacement (width-preserving, skip duplicates — reuse _replaced_orgs trick)
+    local _gip_city
+    _gip_city=$(sed -n 's/.*"city"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_cf" 2>/dev/null) || _gip_city=""
+    if [ -n "$_gip_city" ] && [ "$_gip_city" != "—" ] && [ "$_gip_city" != "-" ]; then
+      case "$_replaced_orgs" in *"|$_gip_city|"*) ;; *)
+        _priv_sed_eq "$_gip_city" "$(_priv_planet "$_n")" >> "$_sed_script"
+        _replaced_orgs="${_replaced_orgs}|${_gip_city}|"
+      ;; esac
+    fi
   done
+}
 
-  # --- Step 2-5: Pipeline ---
-  # IPv4 + ASN masking (awk, width-preserving) → IPv6 + targeted sed replacements
-  # IPv6 regex: require ≥3 colon-separated hex groups to avoid false positives
-  _priv_mask_patterns | sed \
-    -e 's/[0-9a-fA-F][0-9a-fA-F]*:[0-9a-fA-F][0-9a-fA-F]*:[0-9a-fA-F][0-9a-fA-F]*:[0-9a-fA-F:]*/#::#/g' \
-    -f "$_sed_script"
+# Post-processing privacy filter.
+# Reads full command output from stdin, applies anonymization, writes to stdout.
+# Buffers stdin first so the producing command (e.g. cmd_geo) finishes and
+# writes geo cache before we read it for City/Org/CC targeted replacements.
+privacy_filter() {
+  # Buffer stdin — ensures producing command finishes (geo cache ready).
+  local _buf="${_RUN_DIR}/priv-buf.tmp"
+  cat > "$_buf"
 
-  rm -f "$_sed_script" 2>/dev/null
+  # Build targeted sed script from geo cache (now guaranteed to exist).
+  local _sed_script="${_RUN_DIR}/priv-sed.tmp"
+  _priv_build_sed_script "$_sed_script"
+
+  # Pipeline: IPv4+ASN masking (padded) → IPv6 masking (padded) → targeted sed
+  priv_mask_ip_asn "$_PRIV_WELLKNOWN_IPS" "pad" < "$_buf" | priv_mask_ipv6 "pad" | sed -f "$_sed_script"
+
+  rm -f "$_buf" "$_sed_script" 2>/dev/null
 }

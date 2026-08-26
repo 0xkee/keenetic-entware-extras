@@ -1,6 +1,6 @@
 # lib — TODO
 
-**Updated:** 2026-08-08
+**Updated:** 2026-08-22
 
 ---
 
@@ -14,6 +14,12 @@
       - `get_zone_dns_provider()` — ZONE_DNS_PROVIDER из smartdns-geo-conf
       Заменит дублирование grep-парсинга в 3+ пакетах.
 - [ ] зачем нам 2 buiuld-ipk и make? можем мигрировать на make?
+- [x] `lib/privacy.sh` — shared IP/ASN/IPv6 masking filter.
+      Extracted from `net-check/scripts/lib/privacy.sh` (53-line `_priv_mask_patterns()`
+      inlined awk + IPv6 sed). Provides: `priv_mask_ip_asn()`, `priv_mask_ipv6()`,
+      `priv_basic_filter()`. Used by `bug-report.sh` (default on) and net-check
+      (`--privacy` flag delegates to shared lib). Well-known IPs preserved (DNS resolvers,
+      RFC 1918, loopback).
 - [x] format_age и поискать во всех проектах и вынести общее сюда, в либу
       → вынесено в `lib/common.sh`. Попутно:
       - `installed_pkg_version <pkg>` вынесено туда же (3 дубля `show_version`)

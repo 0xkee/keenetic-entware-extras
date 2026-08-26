@@ -2,7 +2,6 @@
 .github/
 boot-diag/
 dist/
-tests/
 Makefile
 scripts/build-ipk.sh
 scripts/release.sh

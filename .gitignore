@@ -1,3 +1,17 @@
+# === Dev infrastructure (local only, not on public GitHub) ===
+.github/
+boot-diag/
+dist/
+tests/
+Makefile
+scripts/build-ipk.sh
+scripts/release.sh
+scripts/deploy.sh
+scripts/check-privacy.sh
+scripts/stock-webui-check.sh
+scripts/test-geo-zones.sh
+scripts/compat-check.sh
+
 # === Standard ignores ===
 *.bak
 *~

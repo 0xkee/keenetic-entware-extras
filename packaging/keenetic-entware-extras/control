@@ -1,5 +1,5 @@
 Package: keenetic-entware-extras
-Version: 0.16.16
+Version: 0.16.17
 Architecture: all
 Maintainer: 0xkee
 Depends: cron
@@ -7,6 +7,7 @@ Description: Shared shell libraries and CLI tools for keenetic-entware-extras.
  Provides common.sh (logging, validation, router IP detection), lists.sh
  (list processing with @include support, deduplication), ip.sh (CIDR
  aggregation, ISP interface detection, DNS resolver auto-detection),
+ privacy.sh (IP/ASN/IPv6 masking for public-facing output),
  and status.sh (shared check/show functions for service diagnostics).
  Installs the `kee-status` command (/opt/bin/kee-status) — an aggregated
  diagnostic that runs every sub-package status.sh and reports Alive/FAIL

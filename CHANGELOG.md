@@ -5,6 +5,13 @@ All notable changes to `keenetic-entware-extras` (base package) are documented h
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.16.17] - 2026-08-22
+
+### Added
+- `lib/privacy.sh` — shared privacy filter: `priv_mask_ip_asn()` (IPv4 + ASN width-preserving masking), `priv_mask_ipv6()`, `priv_basic_filter()` pipeline. Preserves RFC 1918, loopback, and well-known DNS IPs. Used by `bug-report.sh` and `net-check --privacy`
+- `scripts/bug-report.sh`: privacy filter enabled by default — public IPs (#.#.#.#), ASN (AS****), IPv6 (#::#) are masked. Use `--no-privacy` for raw output. Removed old inline sed masking for ndnproxymain.conf
+- `scripts/build-ipk.sh`: `lib/privacy.sh` added to BASE_DATA
+
 ## [0.16.16] - 2026-08-16
 
 ### Changed

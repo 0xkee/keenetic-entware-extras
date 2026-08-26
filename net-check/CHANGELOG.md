@@ -5,6 +5,11 @@ All notable changes to `net-check` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.2.12] - 2026-08-22
+
+### Changed
+- `lib/privacy.sh`: refactored to use shared `lib/privacy.sh` — `_priv_mask_patterns()` (53 lines) removed, replaced by `priv_mask_ip_asn()` + `priv_mask_ipv6()` from shared library. Net-check-specific City/Org/CC replacements remain local
+
 ## [0.2.11] - 2026-08-16
 
 ### Changed

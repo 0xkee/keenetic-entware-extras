@@ -46,6 +46,22 @@ plans
 backups
 private
 keenetic-entware-extras.code-workspace
+# Dev docs & TODO (migrated 2026-08-27)
+**/TODO.md
+**/docs/archive
+webui/docs/screenshots
+webui/docs/webui_image_*.png
+geo-split/docs/alternatives-research.md
+geo-split/docs/linux-cidr-routing-tools.md
+geo-split/docs/route-check-accuracy.md
+geo-split/docs/zone-sizes-research.md
+geo-split/docs/comparison
+smartdns-redirect/docs/ipv6-dns-leak-fix.md
+net-check/docs/fuzzy-decomposition-assessment.md
+webui/docs/cli-ui-naming.md
+webui/docs/modular-assessment.md
+webui/docs/status-cache-design.md
+webui/docs/stock-backup-runbook.md
 
 # === IDE local settings ===
 .vscode/

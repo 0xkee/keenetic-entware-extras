@@ -26,7 +26,7 @@ SMARTDNS_DATA=(config init.d scripts/generate-conf.sh scripts/status.sh scripts/
 SMARTDNS_REDIRECT_DATA=(init.d scripts config docs/user-manual.ru.md README.md CHANGELOG.md)
 
 # net-check → /opt/keenetic-entware-extras/net-check/
-NET_CHECK_DATA=(config scripts README.md CHANGELOG.md)
+NET_CHECK_DATA=(config scripts docs/user-manual.ru.md README.md CHANGELOG.md)
 
 # webui → /opt/keenetic-entware-extras/webui/
 WEBUI_DATA=(config init.d lua patches static scripts docs/user-manual.ru.md README.md CHANGELOG.md)

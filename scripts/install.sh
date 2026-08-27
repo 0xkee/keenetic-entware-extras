@@ -4,16 +4,21 @@
 #   Interactive:  curl -fsSL https://0xkee.github.io/keenetic-entware-extras/install.sh | sh
 #   With args:    curl -fsSL ... | sh -s -- geo-split webui
 #   All packages: curl -fsSL ... | sh -s -- --all
-#   Direct:       sh install.sh [--all | package-names...]
+#   Force reinstall: curl -fsSL ... | sh -s -- --force --all
+#   Direct:       sh install.sh [--force] [--all | package-names...]
 set -eu
 
 FEED_URL="https://0xkee.github.io/keenetic-entware-extras/stable"
 FEED_NAME="kee"
+FORCE=false
 
 # ── Output helpers (deploy.sh style) ─────────────────────────────
 die()  { echo "❌ $*" >&2; exit 1; }
 info() { echo "→ $*"; }
 warn() { echo "⚠️  $*" >&2; }
+
+# Indent opkg output for readability
+indent() { sed 's/^/     /'; }
 
 # ── Counters ─────────────────────────────────────────────────────
 INSTALLED=0
@@ -82,11 +87,8 @@ ensure_wget_ssl() {
 
     info "Installing wget-ssl (required for HTTPS feeds)..."
     opkg update >/dev/null 2>&1 || true
-    if opkg install wget-ssl 2>&1 | grep -qE 'Installing|Configuring|already'; then
-        echo "  ✅ wget-ssl installed"
-    else
-        die "Failed to install wget-ssl"
-    fi
+    opkg install wget-ssl 2>&1 | indent
+    echo "  ✅ wget-ssl installed"
 
     fix_wget_path
 }
@@ -117,10 +119,20 @@ add_feed() {
 }
 
 update_index() {
+    # Skip if index exists and is fresh (< 10 min old)
+    idx_file="/opt/var/opkg-lists/${FEED_NAME}"
+    if [ -f "$idx_file" ] && ! $FORCE; then
+        age=$(( $(date +%s) - $(date -r "$idx_file" +%s 2>/dev/null || echo 0) ))
+        if [ "$age" -lt 600 ]; then
+            echo "  ⏭  Package index is fresh ($(( age / 60 ))m ago)"
+            return 0
+        fi
+    fi
+
     info "Updating package index..."
     if opkg update 2>&1 | tail -5 | grep -q "Updated.*${FEED_NAME}"; then
         echo "  ✅ Package index updated"
-    elif [ -f "/opt/var/opkg-lists/${FEED_NAME}" ]; then
+    elif [ -f "$idx_file" ]; then
         echo "  ✅ Package index updated"
     else
         die "Failed to update package index. Check network connectivity."
@@ -130,9 +142,24 @@ update_index() {
 # ── Package installation ────────────────────────────────────────
 install_pkg() {
     pkg="$1"
+
+    # --force: always reinstall from feed
+    if $FORCE; then
+        echo "  📦 $pkg (--force-reinstall)"
+        opkg install --force-reinstall "$pkg" 2>&1 | indent || {
+            echo "  ❌ $pkg — reinstall failed"
+            FAILED=$((FAILED + 1))
+            return 1
+        }
+        INSTALLED=$((INSTALLED + 1))
+        echo "  ✅ $pkg — reinstalled"
+        return 0
+    fi
+
+    # Normal: try install, migrate if already present
     output=$(opkg install "$pkg" 2>&1) || {
         echo "  ❌ $pkg — install failed"
-        echo "     $output"
+        echo "$output" | indent
         FAILED=$((FAILED + 1))
         return 1
     }
@@ -140,17 +167,19 @@ install_pkg() {
         *"up to date"*)
             # Package exists (possibly installed manually via .ipk file).
             # Force-reinstall from feed to ensure proper opkg tracking.
-            output=$(opkg install --force-reinstall "$pkg" 2>&1) || {
-                echo "  ❌ $pkg — reinstall failed"
-                echo "     $output"
+            echo "  🔄 $pkg (migrating to feed)"
+            opkg install --force-reinstall "$pkg" 2>&1 | indent || {
+                echo "  ❌ $pkg — migration failed"
                 FAILED=$((FAILED + 1))
                 return 1
             }
-            echo "  🔄 $pkg — migrated to feed"
+            echo "  ✅ $pkg — migrated to feed"
             MIGRATED=$((MIGRATED + 1))
             ;;
         *)
-            echo "  📦 $pkg — installed"
+            echo "  📦 $pkg (new)"
+            echo "$output" | indent
+            echo "  ✅ $pkg — installed"
             INSTALLED=$((INSTALLED + 1))
             ;;
     esac
@@ -158,6 +187,7 @@ install_pkg() {
 
 install_packages() {
     echo ""
+    $FORCE && echo "🔄 FORCE — reinstalling all packages from feed" && echo ""
     info "Installing packages..."
     echo ""
     for pkg in $1; do
@@ -222,11 +252,7 @@ parse_choice() {
 show_summary() {
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    if [ "$FAILED" -eq 0 ]; then
-        echo "📊 Done: ✅ $INSTALLED installed | 🔄 $MIGRATED migrated | ❌ $FAILED failed"
-    else
-        echo "📊 Done: ✅ $INSTALLED installed | 🔄 $MIGRATED migrated | ❌ $FAILED failed"
-    fi
+    echo "📊 Done: ✅ $INSTALLED installed | 🔄 $MIGRATED migrated | ❌ $FAILED failed"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     echo "  Run kee-status to check service status."
@@ -234,8 +260,23 @@ show_summary() {
     echo ""
 }
 
+# ── CLI parsing ──────────────────────────────────────────────────
+parse_args() {
+    args=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --force)  FORCE=true ;;
+            *)        args="$args $1" ;;
+        esac
+        shift
+    done
+    echo "$args"
+}
+
 # ── Main ─────────────────────────────────────────────────────────
 main() {
+    remaining=$(parse_args "$@")
+
     header
     check_root
     check_entware
@@ -244,8 +285,8 @@ main() {
     update_index
 
     # Non-interactive: packages passed as arguments
-    if [ $# -gt 0 ]; then
-        pkgs=$(parse_choice "$*")
+    if [ -n "$remaining" ]; then
+        pkgs=$(parse_choice "$remaining")
         if [ -z "$pkgs" ]; then
             info "Nothing to install"
             exit 0

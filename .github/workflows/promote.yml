@@ -25,7 +25,7 @@ jobs:
       - name: Get index generator from main
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: master
           path: _main
           sparse-checkout: |
             scripts/generate-packages-index.sh

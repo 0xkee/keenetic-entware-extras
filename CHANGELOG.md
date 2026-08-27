@@ -5,6 +5,15 @@ All notable changes to `keenetic-entware-extras` (base package) are documented h
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [Unreleased]
+
+### Added
+- `scripts/install.sh` — bootstrap installer (`curl | sh`): auto-installs wget-ssl, configures opkg feed, interactive package menu, `--force` reinstall, `--all` mode, deploy.sh-style emoji output with summary
+- `scripts/generate-packages-index.sh` — opkg Packages index generator for self-hosted repo (dev script, not shipped in .ipk)
+- CI: `release.yml` auto-deploys .ipk to `dev/` channel on gh-pages after GitHub Release
+- CI: `promote.yml` workflow for manual dev→stable promotion
+- opkg repo: `gh-pages` orphan branch with `dev/` and `stable/` channels (7 packages, Packages + Packages.gz indexes)
+
 ## [0.16.17] - 2026-08-22
 
 ### Added

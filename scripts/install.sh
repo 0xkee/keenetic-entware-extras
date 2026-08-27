@@ -142,47 +142,42 @@ update_index() {
 # ── Package installation ────────────────────────────────────────
 install_pkg() {
     pkg="$1"
+    _tmp="/tmp/kee-install-$$"
 
-    # --force: always reinstall from feed
     if $FORCE; then
         echo "  📦 $pkg (--force-reinstall)"
-        opkg install --force-reinstall "$pkg" 2>&1 | indent || {
+        opkg install --force-reinstall "$pkg" 2>&1 | tee "$_tmp" | indent
+        if grep -q "Collected errors" "$_tmp" 2>/dev/null; then
             echo "  ❌ $pkg — reinstall failed"
-            FAILED=$((FAILED + 1))
-            return 1
-        }
-        INSTALLED=$((INSTALLED + 1))
+            FAILED=$((FAILED + 1)); rm -f "$_tmp"; return 1
+        fi
+        rm -f "$_tmp"
         echo "  ✅ $pkg — reinstalled"
+        INSTALLED=$((INSTALLED + 1))
         return 0
     fi
 
-    # Normal: try install, migrate if already present
-    output=$(opkg install "$pkg" 2>&1) || {
+    # Normal: stream install output, check result after
+    opkg install "$pkg" 2>&1 | tee "$_tmp" | indent
+
+    if grep -q "Collected errors" "$_tmp" 2>/dev/null; then
         echo "  ❌ $pkg — install failed"
-        echo "$output" | indent
-        FAILED=$((FAILED + 1))
-        return 1
-    }
-    case "$output" in
-        *"up to date"*)
-            # Package exists (possibly installed manually via .ipk file).
-            # Force-reinstall from feed to ensure proper opkg tracking.
-            echo "  🔄 $pkg (migrating to feed)"
-            opkg install --force-reinstall "$pkg" 2>&1 | indent || {
-                echo "  ❌ $pkg — migration failed"
-                FAILED=$((FAILED + 1))
-                return 1
-            }
-            echo "  ✅ $pkg — migrated to feed"
-            MIGRATED=$((MIGRATED + 1))
-            ;;
-        *)
-            echo "  📦 $pkg (new)"
-            echo "$output" | indent
-            echo "  ✅ $pkg — installed"
-            INSTALLED=$((INSTALLED + 1))
-            ;;
-    esac
+        FAILED=$((FAILED + 1)); rm -f "$_tmp"; return 1
+    fi
+
+    if grep -q "up to date" "$_tmp" 2>/dev/null; then
+        rm -f "$_tmp"
+        # Package exists (possibly installed manually via .ipk file).
+        # Force-reinstall from feed to ensure proper opkg tracking.
+        echo "  🔄 $pkg (migrating to feed)"
+        opkg install --force-reinstall "$pkg" 2>&1 | indent
+        echo "  ✅ $pkg — migrated to feed"
+        MIGRATED=$((MIGRATED + 1))
+    else
+        rm -f "$_tmp"
+        echo "  ✅ $pkg — installed"
+        INSTALLED=$((INSTALLED + 1))
+    fi
 }
 
 install_packages() {

@@ -568,7 +568,7 @@ _tls_targets_host_verdict() {
   esac
   # Annotate with blocked path count when some paths failed but cert matches
   if [ "$_tt_host_error" -gt 0 ] && [ "$_verdict" != "all_error" ]; then
-    _vtext="${_vtext} (${_tt_host_error} blocked)"
+    _vtext="${_vtext} (${_tt_host_error} filtered)"
   fi
   cmp_row_end "$(color_status "$_vst" "$_vtext")"
 }

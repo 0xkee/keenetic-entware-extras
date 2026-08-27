@@ -79,7 +79,7 @@ flowchart LR
   R50 -->|"match /32"| T1000["📋 Table 1000<br/>domains<br/>~175 host routes"]
   R51 -->|"match CIDR"| T1001["📋 Table 1001<br/>subnets<br/>~11K routes"]
 
-  T1000 --> OUT["🌐 ROUTE_OUT<br/>ISP / VPN"]
+  T1000 --> OUT["🌐 ROUTE_OUT<br/>ISP / Tunnel"]
   T1001 --> OUT
 
   R50 -->|no match| R51

@@ -330,9 +330,9 @@ _dns_render_summary() {
         printf ' %s\n' "$(status_mark ok)"
       fi
       if [ "$_isp_filtered" -gt 0 ]; then
-        printf '→ %s%s ISP DNS filtering: %s domain(s) blocked%s\n' \
+        printf '→ %s%s ISP DNS filtering: %s domain(s) filtered%s\n' \
           "$C_YELLOW" "$(status_mark warn)" "$_isp_filtered" "$C_RST"
-        printf '  %s(Expected — blocked domains resolve via SmartDNS/tunnel)%s\n' \
+        printf '  %s(Expected — filtered domains resolve via SmartDNS/tunnel)%s\n' \
           "$C_DIM" "$C_RST"
       elif [ -n "$_dns_isp_first" ]; then
         printf '→ %sNo ISP DNS filtering%s %s\n' \

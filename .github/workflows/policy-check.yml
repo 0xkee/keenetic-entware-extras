@@ -1,0 +1,121 @@
+name: Policy Check
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  legal-terminology:
+    name: Legal & Privacy Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for forbidden legal terminology
+        run: |
+          echo "── Checking legal terminology (CRITICAL) ──"
+          # Absolute ban terms from legal-terminology.md
+          # These must NEVER appear in public code
+          CRITICAL_TERMS=(
+            "обход блокировок"
+            "bypass censorship"
+            "circumvent censorship"
+            "anti-censorship"
+            "антицензура"
+            "access blocked content"
+            "обход ТСПУ"
+            "bypass TSPU"
+            "обход DPI"
+            "anti-DPI"
+            "Great Firewall bypass"
+            "翻墙"
+            "科学上网"
+            "فیلترشکن"
+            "kill switch"
+          )
+
+          # False positives: files that legitimately reference these terms
+          FP_EXCLUDES="check-privacy\.sh|pre-commit|legal-terminology|policy-check\.yml|docs/archive|docs/comparison|alternatives-research|zone-sizes-research"
+
+          errors=0
+          for term in "${CRITICAL_TERMS[@]}"; do
+            matches=$(grep -rnI "$term" . \
+              --include='*.sh' --include='*.md' --include='*.lua' \
+              --include='*.js' --include='*.css' --include='*.html' \
+              --include='*.conf' --include='*.txt' \
+              --exclude-dir=.git \
+              | grep -vE "$FP_EXCLUDES" || true)
+            if [ -n "$matches" ]; then
+              echo "::error::Forbidden term '$term' found"
+              echo "$matches"
+              errors=$((errors + 1))
+            fi
+          done
+
+          echo "── Checking legal terminology (HIGH) ──"
+          HIGH_TERMS=(
+            '\bVPN\b'
+            '\bТСПУ\b'
+            '\bTSPU\b'
+            '\bРКН\b'
+            '\bRKN\b'
+            'Роскомнадзор'
+            '\bcensorship\b'
+            '\bcensored\b'
+            '\bцензура\b'
+            'заблокировано'
+            'геоблокировк'
+          )
+
+          warnings=0
+          for term in "${HIGH_TERMS[@]}"; do
+            matches=$(grep -rnIE "$term" . \
+              --include='*.sh' --include='*.md' --include='*.lua' \
+              --include='*.js' --include='*.css' --include='*.html' \
+              --include='*.conf' --include='*.txt' \
+              --exclude-dir=.git \
+              | grep -vE "$FP_EXCLUDES|ru-whitelist|rkn\.gov\.ru|docs/archive|docs/comparison" || true)
+            if [ -n "$matches" ]; then
+              echo "::warning::Discouraged term '$term' found"
+              echo "$matches"
+              warnings=$((warnings + 1))
+            fi
+          done
+
+          if [ "$errors" -gt 0 ]; then
+            echo "::error::$errors CRITICAL legal term violation(s) found"
+            exit 1
+          fi
+          echo "✓ Legal check: $errors critical, $warnings warnings"
+
+      - name: Check for hardcoded secrets
+        run: |
+          echo "── Checking for hardcoded secrets ──"
+          errors=0
+          SECRET_PATTERNS=(
+            "PRIVATE KEY"
+            "BEGIN RSA"
+            "BEGIN EC PRIVATE"
+          )
+
+          FP_EXCLUDES="check-privacy|pre-commit|policy-check|\.gitignore"
+
+          for pattern in "${SECRET_PATTERNS[@]}"; do
+            matches=$(grep -rnI "$pattern" . \
+              --exclude-dir=.git \
+              --exclude='*.ipk' --exclude='*.gz' \
+              | grep -vE "$FP_EXCLUDES" || true)
+            if [ -n "$matches" ]; then
+              echo "::error::Secret pattern '$pattern' found"
+              echo "$matches" | head -5
+              errors=$((errors + 1))
+            fi
+          done
+
+          if [ "$errors" -gt 0 ]; then
+            echo "::error::$errors secret pattern(s) found"
+            exit 1
+          fi
+          echo "✓ No hardcoded secrets"

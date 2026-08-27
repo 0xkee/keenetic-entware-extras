@@ -1,0 +1,62 @@
+name: Promote to Stable
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: "Package name (empty = all packages)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    name: Promote dev → stable
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - name: Get index generator from main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: _main
+          sparse-checkout: |
+            scripts/generate-packages-index.sh
+          sparse-checkout-cone-mode: false
+
+      - name: Promote packages
+        run: |
+          mkdir -p stable
+          PKG="${{ inputs.package }}"
+
+          if [ -n "$PKG" ]; then
+            # Remove old versions of this package from stable
+            rm -f "stable/${PKG}_"*_all.ipk
+            # Copy specific package from dev
+            cp "dev/${PKG}_"*_all.ipk stable/
+            echo "Promoted $PKG from dev to stable"
+          else
+            # Copy all packages from dev to stable
+            cp dev/*.ipk stable/
+            echo "Promoted all packages from dev to stable"
+          fi
+
+      - name: Regenerate stable index
+        run: ./_main/scripts/generate-packages-index.sh stable
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          PKG="${{ inputs.package }}"
+          git commit -m "stable: promote ${PKG:-all packages}"
+          git push origin gh-pages

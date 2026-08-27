@@ -20,8 +20,8 @@ geo-split-data/lists/geoip/*.zone.gz
 
 # === Private content (symlinks to ../kee-private/) ===
 # These are symlinks transparent to IDE/Roo but invisible to git
-# Dev infrastructure
-.github
+# Dev infrastructure (hooks from kee-private, workflows tracked)
+.github/hooks
 boot-diag
 scripts/release.sh
 scripts/deploy.sh

@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get install -y shellcheck
+
+      - name: Run shellcheck on router scripts (POSIX sh)
+        run: |
+          # Find all .sh files, exclude dev-only bash scripts and tests
+          find . -name '*.sh' \
+            -not -path './.git/*' \
+            -not -path './tests/*' \
+            -not -path './scripts/build-ipk.sh' \
+            -not -path './scripts/release.sh' \
+            -not -path './scripts/deploy.sh' \
+            -not -path './scripts/check-privacy.sh' \
+            -not -path './scripts/stock-webui-check.sh' \
+            -not -path './scripts/test-geo-zones.sh' \
+            -not -path './scripts/kee-status.sh' \
+            -not -path './scripts/compat-check.sh' \
+            -not -path './scripts/bug-report.sh' \
+            -not -path './geo-split-data/scripts/fetch-zones.sh' \
+            -not -path './lib/zones.sh' \
+            -exec shellcheck -x -s sh --severity=error {} +
+
+      - name: Run shellcheck on dev scripts (bash)
+        run: |
+          find ./scripts -maxdepth 1 -name '*.sh' \
+            -not -name 'build-ipk.sh' \
+            -not -name 'release.sh' \
+            | while read -r f; do
+                # Only check bash scripts (errors only)
+                head -1 "$f" | grep -q '#!/bin/bash' && \
+                  shellcheck -x -s bash --severity=error "$f" || true
+              done
+          # Also check fetch-zones.sh
+          if [ -f ./geo-split-data/scripts/fetch-zones.sh ]; then
+            shellcheck -x -s bash --severity=error ./geo-split-data/scripts/fetch-zones.sh
+          fi
+
+  validate-shebang:
+    name: Validate shebangs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check shebang lines
+        run: |
+          errors=0
+          while IFS= read -r f; do
+            # Skip dev-only bash scripts (run on host, not router)
+            case "$f" in
+              ./scripts/build-ipk.sh|./scripts/release.sh) continue ;;
+              ./scripts/deploy.sh|./scripts/check-privacy.sh) continue ;;
+              ./scripts/stock-webui-check.sh|./scripts/test-geo-zones.sh) continue ;;
+              ./scripts/kee-status.sh|./scripts/compat-check.sh) continue ;;
+              ./scripts/bug-report.sh) continue ;;
+              ./geo-split-data/scripts/fetch-zones.sh) continue ;;
+              ./tests/*) continue ;;
+            esac
+            shebang=$(head -1 "$f")
+            # Sourced library files (no shebang) — skip
+            case "$shebang" in
+              '#!'*) ;; # has shebang, check it
+              *) continue ;; # no shebang = sourced file, skip
+            esac
+            if [ "$shebang" != "#!/opt/bin/sh" ]; then
+              echo "ERROR: non-standard shebang in $f: $shebang"
+              errors=$((errors + 1))
+            fi
+          done < <(find . -name '*.sh' -not -path './.git/*')
+          if [ "$errors" -gt 0 ]; then
+            echo "Found $errors file(s) with non-standard shebang"
+            exit 1
+          fi
+          echo "All shebangs OK"
+
+  validate-packaging:
+    name: Validate packaging metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check control files
+        run: |
+          errors=0
+          for pkg in packaging/*/control; do
+            echo "--- Checking $pkg ---"
+            for field in Package Version Architecture Maintainer Description; do
+              if ! grep -q "^${field}:" "$pkg"; then
+                echo "ERROR: missing $field in $pkg"
+                errors=$((errors + 1))
+              fi
+            done
+          done
+          if [ "$errors" -gt 0 ]; then
+            exit 1
+          fi
+          echo "All control files valid"

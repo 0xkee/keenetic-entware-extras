@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'base-v*'
+      - 'geo-split-v*'
+      - 'geo-split-data-v*'
+      - 'net-check-v*'
+      - 'smartdns-geo-conf-v*'
+      - 'smartdns-redirect-v*'
+      - 'webui-v*'
+
+jobs:
+  build-and-release:
+    name: Build .ipk and create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine package from tag
+        id: pkg
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          # Map tag prefix → package name
+          case "$TAG" in
+            base-v*)              PKG="keenetic-entware-extras"; VER="${TAG#base-v}" ;;
+            geo-split-data-v*)    PKG="geo-split-data";          VER="${TAG#geo-split-data-v}" ;;
+            geo-split-v*)         PKG="geo-split";               VER="${TAG#geo-split-v}" ;;
+            smartdns-geo-conf-v*)     PKG="smartdns-geo-conf";  VER="${TAG#smartdns-geo-conf-v}" ;;
+            net-check-v*)         PKG="net-check";               VER="${TAG#net-check-v}" ;;
+            smartdns-redirect-v*) PKG="smartdns-redirect";       VER="${TAG#smartdns-redirect-v}" ;;
+            webui-v*)             PKG="webui";                   VER="${TAG#webui-v}" ;;
+            *) echo "ERROR: Unknown tag format: $TAG"; exit 1 ;;
+          esac
+
+          echo "package=$PKG" >> "$GITHUB_OUTPUT"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "Detected: package=$PKG version=$VER"
+
+      - name: Verify version matches control file
+        run: |
+          CONTROL_VER=$(grep '^Version:' "packaging/${{ steps.pkg.outputs.package }}/control" | cut -d' ' -f2)
+          if [ "$CONTROL_VER" != "${{ steps.pkg.outputs.version }}" ]; then
+            echo "ERROR: Tag version (${{ steps.pkg.outputs.version }}) != control version ($CONTROL_VER)"
+            exit 1
+          fi
+          echo "Version verified: $CONTROL_VER"
+
+      - name: Install build dependencies
+        if: steps.pkg.outputs.package == 'geo-split-data'
+        run: sudo apt-get update && sudo apt-get install -y aggregate
+
+      - name: Build .ipk
+        run: |
+          ./scripts/build-ipk.sh "${{ steps.pkg.outputs.package }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "${{ steps.pkg.outputs.package }} v${{ steps.pkg.outputs.version }}"
+          generate_release_notes: true
+          files: dist/*.ipk
+
+      - name: Deploy to dev channel
+        run: |
+          git fetch origin gh-pages
+          git worktree add /tmp/gh-pages gh-pages
+
+          PKG="${{ steps.pkg.outputs.package }}"
+          VER="${{ steps.pkg.outputs.version }}"
+          IPK="dist/${PKG}_${VER}_all.ipk"
+
+          # Remove old versions of this package from dev/
+          rm -f "/tmp/gh-pages/dev/${PKG}_"*_all.ipk
+
+          # Copy new .ipk
+          mkdir -p /tmp/gh-pages/dev
+          cp "$IPK" /tmp/gh-pages/dev/
+
+          # Regenerate Packages index
+          ./scripts/generate-packages-index.sh /tmp/gh-pages/dev
+
+          # Commit and push
+          cd /tmp/gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "dev: ${PKG} v${VER}"
+          git push origin gh-pages

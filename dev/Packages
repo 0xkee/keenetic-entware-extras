@@ -87,7 +87,7 @@ MD5sum: cd3880c986f2df5443f8cf09ecbf3c2a
 SHA256sum: d9ec2b7dc61aa75d049e147d28a1d45900906548f7c1229e550c42ad9838b001
 
 Package: smartdns-redirect
-Version: 0.6.3
+Version: 0.6.4
 Architecture: all
 Maintainer: 0xkee
 Depends: keenetic-entware-extras, iptables
@@ -100,10 +100,10 @@ Description: Universal DNS DNAT for Keenetic/Entware — redirect LAN :53 to loc
  netfilter.d hook. Compatible with smartdns-geo-conf and geo-split.
 Section: net
 Priority: optional
-Filename: smartdns-redirect_0.6.3_all.ipk
-Size: 19829
-MD5sum: 9ea86a29f405b6f54e77be8e8898f36c
-SHA256sum: e37aab9bf08fba9cab90be5a121ae817f9827795da6e86506cf64f57e169bf59
+Filename: smartdns-redirect_0.6.4_all.ipk
+Size: 19984
+MD5sum: c7a8375e515126f00ca605218769fafb
+SHA256sum: f6771f76b5a92047d7617a2e3e9eeab20a5a826e554df842bd3d866bd7bd9b89
 
 Package: webui
 Version: 0.37.6

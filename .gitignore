@@ -23,7 +23,6 @@ geo-split-data/lists/geoip/*.zone.gz
 # Dev infrastructure
 .github
 boot-diag
-Makefile
 scripts/build-ipk.sh
 scripts/release.sh
 scripts/deploy.sh

@@ -260,22 +260,16 @@ show_summary() {
     echo ""
 }
 
-# ── CLI parsing ──────────────────────────────────────────────────
-parse_args() {
-    args=""
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            --force)  FORCE=true ;;
-            *)        args="$args $1" ;;
-        esac
-        shift
-    done
-    echo "$args"
-}
-
 # ── Main ─────────────────────────────────────────────────────────
 main() {
-    remaining=$(parse_args "$@")
+    # Parse --force flag, collect remaining args
+    remaining=""
+    for arg in "$@"; do
+        case "$arg" in
+            --force)  FORCE=true ;;
+            *)        remaining="${remaining:+$remaining }$arg" ;;
+        esac
+    done
 
     header
     check_root

@@ -165,8 +165,7 @@ function setDetails(id, data) {
 
         // app.js-specific: version badge link
         if (e.label.toLowerCase() === 'version') {
-            // TODO: replace forum link with GitHub releases URL when available
-            valHtml = '<a class="ew-version-badge" href="https://forum.keenetic.ru/topic/28369-geo-split-routing-%D0%B4%D0%BB%D1%8F-keenetic-%D1%81-entware-geoip-%D0%B4%D0%BE%D0%BC%D0%B5%D0%BD%D1%8B-ipk-%D0%BF%D0%B0%D0%BA%D0%B5%D1%82%D1%8B/" target="_blank" rel="noopener" data-tooltip="Open project page">' + EW.escapeHtml(e.value) + '</a>';
+            valHtml = '<a class="ew-version-badge" href="https://github.com/0xkee/keenetic-entware-extras" target="_blank" rel="noopener" data-tooltip="Open project page on GitHub">' + EW.escapeHtml(e.value) + '</a>';
         }
 
         var isNumericOnly = /^\d[\d,.]*[KMG]?[Bb]?$/.test(e.value.trim());

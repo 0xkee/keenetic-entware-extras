@@ -30,7 +30,7 @@
 | `nginx-mod-lua` | Lua-модуль для API-эндпоинтов |
 | `logrotate` | Ротация логов nginx |
 
-**Из проекта keenetic-entware-extras** (устанавливаются вручную):
+**Из проекта keenetic-entware-extras** (устанавливаются из [opkg-репозитория](../../releases/README.md)):
 
 | Пакет | Назначение |
 |-------|-----------|
@@ -40,16 +40,19 @@
 
 ## Установка
 
-### Шаг 1. Установить зависимости проекта
+### Шаг 1. Подключить opkg-репозиторий
 
 ```sh
-opkg install keenetic-entware-extras_<версия>_all.ipk
+cat >> /opt/etc/opkg.conf << 'EOF'
+src/gz kee https://0xkee.github.io/keenetic-entware-extras/stable
+EOF
+opkg update
 ```
 
 ### Шаг 2. Установить пакет
 
 ```sh
-opkg install webui_<версия>_all.ipk
+opkg install webui
 ```
 
 После установки:

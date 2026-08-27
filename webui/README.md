@@ -11,10 +11,10 @@ Typical use cases:
 
 ## Installation
 
-Primary method — via opkg:
+Requires [opkg repository](../releases/README.md) configured.
 
 ```sh
-opkg install webui_<ver>_all.ipk
+opkg install webui
 ```
 
 Dependencies (`keenetic-entware-extras`, `nginx`, `nginx-mod-lua`, `logrotate`) are installed automatically.

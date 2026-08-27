@@ -5,6 +5,12 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.37.7] - 2026-08-28
+
+### Changed
+- **Version badge → GitHub link** — clickable version badges in dashboard cards now link to `github.com/0xkee/keenetic-entware-extras` (was forum.keenetic.ru)
+- Docs: installation instructions updated for opkg feed — `opkg install webui` instead of `.ipk` filenames, opkg repo setup steps in user manual
+
 ## [0.37.6] - 2026-08-26
 
 ### Changed

@@ -53,7 +53,7 @@ MD5sum: 3f0825ea717e036a02040327395ef942
 SHA256sum: a4f2a6ff8e48e26606aaf6034f3ba20194ded5bb7972dbdb5bec9d80bbbbae1b
 
 Package: net-check
-Version: 0.2.12
+Version: 0.2.13
 Architecture: all
 Maintainer: 0xkee
 Depends: keenetic-entware-extras, curl, bind-dig, iputils-ping
@@ -65,10 +65,10 @@ Description: Network connectivity diagnostics and degradation control.
  (delay, jitter, loss metrics per WAN path).
 Section: net
 Priority: optional
-Filename: net-check_0.2.12_all.ipk
-Size: 94673
-MD5sum: 9ccba7c401c63d5e977d4de23ee41e39
-SHA256sum: 0d2d7efe03e8579ec625b242274130d158f72f8d63091b0767c426a26c49dfb9
+Filename: net-check_0.2.13_all.ipk
+Size: 96706
+MD5sum: 7bd59b938d930092cd0c51e84a49b633
+SHA256sum: d7db538440b79978edadbcd70eff5c3af3e546ef050c67def1bf63f4cb625bc1
 
 Package: smartdns-geo-conf
 Version: 0.14.3

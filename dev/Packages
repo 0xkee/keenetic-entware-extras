@@ -1,5 +1,5 @@
 Package: geo-split-data
-Version: 0.6.1
+Version: 0.6.2
 Architecture: all
 Maintainer: 0xkee
 Depends: keenetic-entware-extras
@@ -8,10 +8,10 @@ Description: GeoIP subnet data and domain lists for geo-split.
  Fallback data for geo-split cold start and offline operation.
 Section: net
 Priority: optional
-Filename: geo-split-data_0.6.1_all.ipk
-Size: 651786
-MD5sum: 638236543d049132d6d4db9abc88a7d8
-SHA256sum: 52801ef17e93a039b8974980b2d096fa035c6688adc2bea07ff5ba23ec24ead8
+Filename: geo-split-data_0.6.2_all.ipk
+Size: 651754
+MD5sum: 626e4e8cba94fd90a7cb00094d1a3df3
+SHA256sum: e20951f096edc945317c34e83c98d742fee9bb6d245067627bb3a8791fd78c0d
 
 Package: geo-split
 Version: 0.18.6

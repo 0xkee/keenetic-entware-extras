@@ -23,12 +23,10 @@ geo-split-data/lists/geoip/*.zone.gz
 # Dev infrastructure
 .github
 boot-diag
-scripts/build-ipk.sh
 scripts/release.sh
 scripts/deploy.sh
 scripts/check-privacy.sh
 scripts/stock-webui-check.sh
-scripts/test-geo-zones.sh
 scripts/compat-check.sh
 # Project config & docs
 AGENTS.md

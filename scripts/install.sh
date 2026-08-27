@@ -10,41 +10,17 @@ set -eu
 FEED_URL="https://0xkee.github.io/keenetic-entware-extras/stable"
 FEED_NAME="kee"
 
-# ── Colors ──────────────────────────────────────────────────────────
-if [ -t 1 ] || [ -t 2 ]; then
-    RED='\033[0;31m'
-    GREEN='\033[0;32m'
-    YELLOW='\033[1;33m'
-    BLUE='\033[0;34m'
-    CYAN='\033[0;36m'
-    BOLD='\033[1m'
-    DIM='\033[2m'
-    NC='\033[0m'
-else
-    RED='' GREEN='' YELLOW='' BLUE='' CYAN='' BOLD='' DIM='' NC=''
-fi
+# ── Output helpers (deploy.sh style) ─────────────────────────────
+die()  { echo "❌ $*" >&2; exit 1; }
+info() { echo "→ $*"; }
+warn() { echo "⚠️  $*" >&2; }
 
-# ── Output helpers ──────────────────────────────────────────────────
-info()  { printf "%b▸%b %s\n" "$BLUE" "$NC" "$*"; }
-ok()    { printf "%b✓%b %s\n" "$GREEN" "$NC" "$*"; }
-warn()  { printf "%b⚠%b %s\n" "$YELLOW" "$NC" "$*"; }
-fail()  { printf "%b✗%b %s\n" "$RED" "$NC" "$*"; }
-die()   { fail "$*"; exit 1; }
+# ── Counters ─────────────────────────────────────────────────────
+INSTALLED=0
+MIGRATED=0
+FAILED=0
 
-header() {
-    printf "\n"
-    printf "%b" "$BOLD$CYAN"
-    printf "  ┌───────────────────────────────────────────────┐\n"
-    printf "  │                                               │\n"
-    printf "  │   keenetic-entware-extras  ·  installer       │\n"
-    printf "  │   github.com/0xkee/keenetic-entware-extras    │\n"
-    printf "  │                                               │\n"
-    printf "  └───────────────────────────────────────────────┘\n"
-    printf "%b" "$NC"
-    printf "\n"
-}
-
-# ── Packages catalog ───────────────────────────────────────────────
+# ── Packages catalog ────────────────────────────────────────────
 # Note: geo-split-data is a dependency of geo-split, pulled automatically
 PKG_1="keenetic-entware-extras"
 PKG_2="geo-split"
@@ -61,6 +37,7 @@ DESC_5="network diagnostics toolkit"
 DESC_6="web dashboard (port 8080)"
 
 ALL_PKGS="$PKG_1 $PKG_2 $PKG_3 $PKG_4 $PKG_5 $PKG_6"
+
 pkg_by_num() {
     case "$1" in
         1) echo "$PKG_1" ;; 2) echo "$PKG_2" ;; 3) echo "$PKG_3" ;;
@@ -69,17 +46,23 @@ pkg_by_num() {
     esac
 }
 
-# ── Preflight checks ──────────────────────────────────────────────
+# ── Header ───────────────────────────────────────────────────────
+header() {
+    echo ""
+    echo "╔══════════════════════════════════════════════╗"
+    echo "║   📦 keenetic-entware-extras · installer     ║"
+    echo "║   github.com/0xkee/keenetic-entware-extras   ║"
+    echo "╚══════════════════════════════════════════════╝"
+    echo ""
+}
+
+# ── Preflight checks ────────────────────────────────────────────
 check_entware() {
     if [ ! -d /opt/bin ] || [ ! -f /opt/bin/opkg ]; then
-        fail "Entware not found"
-        printf "\n"
-        printf "  Install Entware first:\n"
-        printf "  %bhttps://help.keenetic.com/hc/ru/articles/360021214160%b\n" "$CYAN" "$NC"
-        printf "\n"
-        exit 1
+        die "Entware not found. Install Entware first:
+    https://help.keenetic.com/hc/ru/articles/360021214160"
     fi
-    ok "Entware detected"
+    echo "  ✅ Entware detected"
 }
 
 check_root() {
@@ -88,11 +71,11 @@ check_root() {
     fi
 }
 
-# ── wget-ssl (HTTPS prerequisite) ─────────────────────────────────
+# ── wget-ssl (HTTPS prerequisite) ────────────────────────────────
 ensure_wget_ssl() {
     # Check if current wget supports HTTPS
     if /opt/bin/wget --help 2>&1 | grep -qi 'https'; then
-        ok "wget with HTTPS support"
+        echo "  ✅ wget with HTTPS support"
         fix_wget_path
         return 0
     fi
@@ -100,7 +83,7 @@ ensure_wget_ssl() {
     info "Installing wget-ssl (required for HTTPS feeds)..."
     opkg update >/dev/null 2>&1 || true
     if opkg install wget-ssl 2>&1 | grep -qE 'Installing|Configuring|already'; then
-        ok "wget-ssl installed"
+        echo "  ✅ wget-ssl installed"
     else
         die "Failed to install wget-ssl"
     fi
@@ -116,79 +99,91 @@ fix_wget_path() {
         case "$real_path" in
             *busybox*)
                 ln -sf /opt/bin/wget /opt/usr/bin/wget
-                ok "Fixed wget PATH priority (BusyBox → wget-ssl)"
+                info "Fixed wget PATH priority (BusyBox → wget-ssl)"
                 ;;
         esac
     fi
 }
 
-# ── Feed configuration ────────────────────────────────────────────
+# ── Feed configuration ──────────────────────────────────────────
 add_feed() {
     if grep -q "^src/gz ${FEED_NAME} " /opt/etc/opkg.conf 2>/dev/null; then
-        ok "Feed '$FEED_NAME' already configured"
+        echo "  ✅ Feed '${FEED_NAME}' already configured"
         return 0
     fi
 
     printf "src/gz %s %s\n" "$FEED_NAME" "$FEED_URL" >> /opt/etc/opkg.conf
-    ok "Feed added: $FEED_NAME → $FEED_URL"
+    echo "  ✅ Feed added: ${FEED_NAME} → ${FEED_URL}"
 }
 
 update_index() {
     info "Updating package index..."
     if opkg update 2>&1 | tail -5 | grep -q "Updated.*${FEED_NAME}"; then
-        ok "Package index updated"
+        echo "  ✅ Package index updated"
     elif [ -f "/opt/var/opkg-lists/${FEED_NAME}" ]; then
-        ok "Package index updated"
+        echo "  ✅ Package index updated"
     else
         die "Failed to update package index. Check network connectivity."
     fi
 }
 
-# ── Package installation ──────────────────────────────────────────
+# ── Package installation ────────────────────────────────────────
 install_pkg() {
     pkg="$1"
-    info "Installing ${BOLD}${pkg}${NC}..."
     output=$(opkg install "$pkg" 2>&1) || {
-        fail "Failed to install ${pkg}"
-        printf "     %b%s%b\n" "$DIM" "$output" "$NC"
+        echo "  ❌ $pkg — install failed"
+        echo "     $output"
+        FAILED=$((FAILED + 1))
         return 1
     }
     case "$output" in
-        *"up to date"*)  ok "${pkg} — already up to date" ;;
-        *)               ok "${pkg} installed" ;;
+        *"up to date"*)
+            # Package exists (possibly installed manually via .ipk file).
+            # Force-reinstall from feed to ensure proper opkg tracking.
+            output=$(opkg install --force-reinstall "$pkg" 2>&1) || {
+                echo "  ❌ $pkg — reinstall failed"
+                echo "     $output"
+                FAILED=$((FAILED + 1))
+                return 1
+            }
+            echo "  🔄 $pkg — migrated to feed"
+            MIGRATED=$((MIGRATED + 1))
+            ;;
+        *)
+            echo "  📦 $pkg — installed"
+            INSTALLED=$((INSTALLED + 1))
+            ;;
     esac
 }
 
 install_packages() {
-    printf "\n"
+    echo ""
     info "Installing packages..."
-    printf "\n"
-    errors=0
+    echo ""
     for pkg in $1; do
-        install_pkg "$pkg" || errors=$((errors + 1))
+        install_pkg "$pkg" || true
     done
-    return "$errors"
 }
 
-# ── Interactive menu ──────────────────────────────────────────────
+# ── Interactive menu ─────────────────────────────────────────────
 show_menu() {
-    printf "  %bAvailable packages:%b\n" "$BOLD" "$NC"
-    printf "\n"
-    printf "  %b1%b)  %-25s %b%s%b\n" "$CYAN" "$NC" "$PKG_1" "$DIM" "$DESC_1" "$NC"
-    printf "  %b2%b)  %-25s %b%s%b\n" "$CYAN" "$NC" "$PKG_2" "$DIM" "$DESC_2" "$NC"
-    printf "  %b3%b)  %-25s %b%s%b\n" "$CYAN" "$NC" "$PKG_3" "$DIM" "$DESC_3" "$NC"
-    printf "  %b4%b)  %-25s %b%s%b\n" "$CYAN" "$NC" "$PKG_4" "$DIM" "$DESC_4" "$NC"
-    printf "  %b5%b)  %-25s %b%s%b\n" "$CYAN" "$NC" "$PKG_5" "$DIM" "$DESC_5" "$NC"
-    printf "  %b6%b)  %-25s %b%s%b\n" "$CYAN" "$NC" "$PKG_6" "$DIM" "$DESC_6" "$NC"
-    printf "\n"
-    printf "  %bA%b)  Install all packages\n" "$CYAN" "$NC"
-    printf "  %bQ%b)  Quit\n" "$CYAN" "$NC"
-    printf "\n"
+    echo "  Available packages:"
+    echo ""
+    echo "  1)  $PKG_1               — $DESC_1"
+    echo "  2)  $PKG_2                        — $DESC_2"
+    echo "  3)  $PKG_3              — $DESC_3"
+    echo "  4)  $PKG_4             — $DESC_4"
+    echo "  5)  $PKG_5                       — $DESC_5"
+    echo "  6)  $PKG_6                          — $DESC_6"
+    echo ""
+    echo "  A)  Install all packages"
+    echo "  Q)  Quit"
+    echo ""
 }
 
 read_choice() {
     # Works both with direct execution and curl|sh (reads from /dev/tty)
-    printf "  %bChoose packages (e.g. 1 3 5, A=all, Q=quit):%b " "$BOLD" "$NC"
+    printf "  Choose packages (e.g. 1 3 5, A=all, Q=quit): "
     if [ -t 0 ]; then
         read -r choice
     elif [ -e /dev/tty ]; then
@@ -223,19 +218,23 @@ parse_choice() {
     esac
 }
 
-# ── Finish ────────────────────────────────────────────────────────
-show_done() {
-    printf "\n"
-    printf "  %b%b┌─────────────────────────────────────────┐%b\n" "$BOLD" "$GREEN" "$NC"
-    printf "  %b%b│  Installation complete!                  │%b\n" "$BOLD" "$GREEN" "$NC"
-    printf "  %b%b└─────────────────────────────────────────┘%b\n" "$BOLD" "$GREEN" "$NC"
-    printf "\n"
-    printf "  Run %bkee-status%b to check service status.\n" "$CYAN" "$NC"
-    printf "  Docs: %bhttps://github.com/0xkee/keenetic-entware-extras%b\n" "$DIM" "$NC"
-    printf "\n"
+# ── Summary ──────────────────────────────────────────────────────
+show_summary() {
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    if [ "$FAILED" -eq 0 ]; then
+        echo "📊 Done: ✅ $INSTALLED installed | 🔄 $MIGRATED migrated | ❌ $FAILED failed"
+    else
+        echo "📊 Done: ✅ $INSTALLED installed | 🔄 $MIGRATED migrated | ❌ $FAILED failed"
+    fi
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "  Run kee-status to check service status."
+    echo "  Docs: https://github.com/0xkee/keenetic-entware-extras"
+    echo ""
 }
 
-# ── Main ──────────────────────────────────────────────────────────
+# ── Main ─────────────────────────────────────────────────────────
 main() {
     header
     check_root
@@ -252,7 +251,7 @@ main() {
             exit 0
         fi
         install_packages "$pkgs"
-        show_done
+        show_summary
         exit 0
     fi
 
@@ -267,7 +266,7 @@ main() {
     fi
 
     install_packages "$pkgs"
-    show_done
+    show_summary
 }
 
 main "$@"

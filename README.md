@@ -17,21 +17,54 @@ Includes subprojects: **geo-split** (GeoIP/domain split routing), **smartdns-geo
 | `net-check` | Network connectivity diagnostics: reachability verification, anomaly detection, CDN geo-steering, DNS leak testing |
 | `webui` | Custom dashboard for Keenetic/Entware services on :8080 + Config Editor, Route Check, DNS Check, stock WebUI integration |
 
-## Installation via opkg
+## Installation
 
-Primary installation method for users.
+### Quick install (recommended)
+
+One command — configures the opkg feed, installs `wget-ssl` for HTTPS, and offers a package selection menu:
 
 ```sh
-# Copy .ipk files to router
-scp *.ipk root@<router-ip>:/tmp/
-
-# Install (order matters — base first, then data, then geo-split)
-opkg install /tmp/keenetic-entware-extras_<ver>_all.ipk
-opkg install /tmp/geo-split-data_<ver>_all.ipk
-opkg install /tmp/geo-split_<ver>_all.ipk
+curl -fsSL https://raw.githubusercontent.com/0xkee/keenetic-entware-extras/master/scripts/install.sh | sh
 ```
 
-Dependencies (`ip-full`, `curl`, `bind-dig`, `aggregate`) are installed automatically via opkg.
+Install all packages non-interactively:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/0xkee/keenetic-entware-extras/master/scripts/install.sh | sh -s -- --all
+```
+
+Or pick specific packages:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/0xkee/keenetic-entware-extras/master/scripts/install.sh | sh -s -- geo-split webui
+```
+
+### Manual install
+
+Prerequisites: `wget-ssl` (required for HTTPS opkg feeds):
+
+```sh
+opkg update
+opkg install wget-ssl
+```
+
+Add the [opkg repository](releases/README.md) and install packages:
+
+```sh
+cat >> /opt/etc/opkg.conf << 'EOF'
+src/gz kee https://0xkee.github.io/keenetic-entware-extras/stable
+EOF
+opkg update
+opkg install keenetic-entware-extras
+```
+
+Install any combination of sub-packages:
+
+```sh
+opkg install geo-split smartdns-geo-conf smartdns-redirect net-check webui
+```
+
+Dependencies are resolved automatically. See [repository docs](releases/README.md) for channels (stable/dev), switching, and uninstall.
 
 ## Diagnostics
 

@@ -7,6 +7,21 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.16.18] - 2026-08-28
+
+### Fixed
+- `scripts/install.sh` — crash when running via `ssh host "curl ... | sh"` (no TTY): `/dev/tty` exists but not functional without `-t` flag, now properly detected with subshell open test
+- `scripts/install.sh` — prompt text leaked into `$choice` variable (printf to stdout captured by `$()` subshell), now outputs prompt to stderr
+- `scripts/install.sh` — menu descriptions misaligned (manual spacing), now uses `printf %-26s` for consistent column layout
+- `scripts/install.sh` — "up to date" packages were force-reinstalled unconditionally ("migrating to feed"), now correctly skipped
+
+### Changed
+- `scripts/install.sh` — refactored package catalog from 12 individual variables + case-based lookup to single `CATALOG` string with loop-based `pkg_name()`/`pkg_desc()` helpers
+- `scripts/install.sh` — `indent()` changed from `sed` to `while read` loop for line-buffered (real-time) output streaming over SSH
+- `scripts/install.sh` — validate user input in `parse_choice()`: reject non-numeric tokens before catalog lookup
+- `scripts/install.sh` — show menu with available packages even when no TTY, then die with usage hint
+- `scripts/install.sh` — interactive menu: added `F)` option for force reinstall of all packages (explicit `--force` for CLI)
+
 ### Added
 - `scripts/install.sh` — bootstrap installer (`curl | sh`): auto-installs wget-ssl, configures opkg feed, interactive package menu, `--force` reinstall, `--all` mode, deploy.sh-style emoji output with summary
 - `scripts/generate-packages-index.sh` — opkg Packages index generator for self-hosted repo (dev script, not shipped in .ipk)

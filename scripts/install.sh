@@ -12,43 +12,40 @@ FEED_URL="https://0xkee.github.io/keenetic-entware-extras/stable"
 FEED_NAME="kee"
 FORCE=false
 
-# ── Output helpers (deploy.sh style) ─────────────────────────────
+# ── Output helpers ───────────────────────────────────────────────
 die()  { echo "❌ $*" >&2; exit 1; }
 info() { echo "→ $*"; }
 warn() { echo "⚠️  $*" >&2; }
 
-# Indent opkg output for readability
-indent() { sed 's/^/     /'; }
+# Indent opkg output for readability (line-buffered for real-time streaming)
+indent() { while IFS= read -r line; do printf '     %s\n' "$line"; done; }
 
 # ── Counters ─────────────────────────────────────────────────────
 INSTALLED=0
-MIGRATED=0
+SKIPPED=0
 FAILED=0
 
-# ── Packages catalog ────────────────────────────────────────────
+# ── Package catalog ──────────────────────────────────────────────
+# Format: name|description (one entry per line)
 # Note: geo-split-data is a dependency of geo-split, pulled automatically
-PKG_1="keenetic-entware-extras"
-PKG_2="geo-split"
-PKG_3="smartdns-geo-conf"
-PKG_4="smartdns-redirect"
-PKG_5="net-check"
-PKG_6="webui"
+CATALOG="keenetic-entware-extras|shared libraries, kee-status CLI
+geo-split|split routing by GeoIP & domains
+smartdns-geo-conf|SmartDNS config for DNS geo-splitting
+smartdns-redirect|DNS DNAT to local resolver
+net-check|network diagnostics toolkit
+webui|web dashboard (port 8080)"
 
-DESC_1="shared libraries, kee-status CLI"
-DESC_2="split routing by GeoIP & domains"
-DESC_3="SmartDNS config for DNS geo-splitting"
-DESC_4="DNS DNAT to local resolver"
-DESC_5="network diagnostics toolkit"
-DESC_6="web dashboard (port 8080)"
+PKG_COUNT=$(printf '%s\n' "$CATALOG" | wc -l)
+ALL_PKGS=$(printf '%s\n' "$CATALOG" | cut -d'|' -f1 | tr '\n' ' ')
 
-ALL_PKGS="$PKG_1 $PKG_2 $PKG_3 $PKG_4 $PKG_5 $PKG_6"
+# Get package name by 1-based index (empty if out of range)
+pkg_name() {
+    printf '%s\n' "$CATALOG" | sed -n "${1}p" | cut -d'|' -f1
+}
 
-pkg_by_num() {
-    case "$1" in
-        1) echo "$PKG_1" ;; 2) echo "$PKG_2" ;; 3) echo "$PKG_3" ;;
-        4) echo "$PKG_4" ;; 5) echo "$PKG_5" ;; 6) echo "$PKG_6" ;;
-        *) echo "" ;;
-    esac
+# Get package description by 1-based index
+pkg_desc() {
+    printf '%s\n' "$CATALOG" | sed -n "${1}p" | cut -d'|' -f2
 }
 
 # ── Header ───────────────────────────────────────────────────────
@@ -142,7 +139,7 @@ update_index() {
 # ── Package installation ────────────────────────────────────────
 install_pkg() {
     pkg="$1"
-    _tmp="/tmp/kee-install-$$"
+    _tmp="/tmp/kee-install-$$-${pkg}"
 
     if $FORCE; then
         echo "  📦 $pkg (--force-reinstall)"
@@ -167,12 +164,8 @@ install_pkg() {
 
     if grep -q "up to date" "$_tmp" 2>/dev/null; then
         rm -f "$_tmp"
-        # Package exists (possibly installed manually via .ipk file).
-        # Force-reinstall from feed to ensure proper opkg tracking.
-        echo "  🔄 $pkg (migrating to feed)"
-        opkg install --force-reinstall "$pkg" 2>&1 | indent
-        echo "  ✅ $pkg — migrated to feed"
-        MIGRATED=$((MIGRATED + 1))
+        echo "  ⏭  $pkg — already up to date"
+        SKIPPED=$((SKIPPED + 1))
     else
         rm -f "$_tmp"
         echo "  ✅ $pkg — installed"
@@ -190,31 +183,41 @@ install_packages() {
     done
 }
 
+# ── TTY detection ────────────────────────────────────────────────
+# Check if interactive input is possible.
+# stdin may be a pipe (curl|sh) — fall back to /dev/tty.
+# /dev/tty may exist but not be functional (ssh without -t flag).
+has_tty() {
+    [ -t 0 ] && return 0
+    # Actually try opening /dev/tty in a subshell
+    (exec 0</dev/tty) 2>/dev/null
+}
+
 # ── Interactive menu ─────────────────────────────────────────────
 show_menu() {
     echo "  Available packages:"
     echo ""
-    echo "  1)  $PKG_1               — $DESC_1"
-    echo "  2)  $PKG_2                        — $DESC_2"
-    echo "  3)  $PKG_3              — $DESC_3"
-    echo "  4)  $PKG_4             — $DESC_4"
-    echo "  5)  $PKG_5                       — $DESC_5"
-    echo "  6)  $PKG_6                          — $DESC_6"
+    i=1
+    while [ "$i" -le "$PKG_COUNT" ]; do
+        name=$(pkg_name "$i")
+        desc=$(pkg_desc "$i")
+        printf "  %d)  %-26s — %s\n" "$i" "$name" "$desc"
+        i=$((i + 1))
+    done
     echo ""
     echo "  A)  Install all packages"
+    echo "  F)  Force reinstall all packages"
     echo "  Q)  Quit"
     echo ""
 }
 
 read_choice() {
-    # Works both with direct execution and curl|sh (reads from /dev/tty)
-    printf "  Choose packages (e.g. 1 3 5, A=all, Q=quit): "
+    # Prompt goes to stderr so it is not captured by $()
+    printf "  Choose packages (e.g. 1 3 5, a=all, f=force, q=quit): " >&2
     if [ -t 0 ]; then
         read -r choice
-    elif [ -e /dev/tty ]; then
-        read -r choice < /dev/tty
     else
-        die "No terminal available for interactive input. Use: sh -s -- --all"
+        read -r choice </dev/tty
     fi
     echo "$choice"
 }
@@ -231,12 +234,20 @@ parse_choice() {
         *)
             pkgs=""
             for token in $choice; do
-                p=$(pkg_by_num "$token")
-                if [ -n "$p" ]; then
-                    pkgs="$pkgs $p"
-                else
-                    warn "Unknown option: $token (skipping)"
-                fi
+                # Validate token is a number before looking up
+                case "$token" in
+                    [1-9]|[1-9][0-9])
+                        p=$(pkg_name "$token")
+                        if [ -n "$p" ]; then
+                            pkgs="$pkgs $p"
+                        else
+                            warn "Unknown package number: $token (skipping)"
+                        fi
+                        ;;
+                    *)
+                        warn "Unknown option: $token (skipping)"
+                        ;;
+                esac
             done
             echo "$pkgs"
             ;;
@@ -247,7 +258,7 @@ parse_choice() {
 show_summary() {
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "📊 Done: ✅ $INSTALLED installed | 🔄 $MIGRATED migrated | ❌ $FAILED failed"
+    echo "📊 Done: ✅ $INSTALLED installed | ⏭ $SKIPPED up to date | ❌ $FAILED failed"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     echo "  Run kee-status to check service status."
@@ -285,9 +296,23 @@ main() {
         exit 0
     fi
 
-    # Interactive: show menu
+    # Interactive mode requires a terminal
+    if ! has_tty; then
+        show_menu
+        die "No terminal for interactive input.
+    Use:  curl ... | sh -s -- --all
+    Or:   curl ... | sh -s -- 1 3 5"
+    fi
+
+    # Interactive: show menu and prompt
     show_menu
     choice=$(read_choice)
+
+    # Handle F (force) in parent shell — parse_choice runs in subshell
+    case "$choice" in
+        [Ff]) FORCE=true; choice="A" ;;
+    esac
+
     pkgs=$(parse_choice "$choice")
 
     if [ -z "$pkgs" ]; then

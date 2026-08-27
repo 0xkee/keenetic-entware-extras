@@ -38,8 +38,10 @@
 
 ## Установка
 
+Требуется [подключённый opkg-репозиторий](../../releases/README.md).
+
 ```sh
-opkg install geo-split-data_<версия>_all.ipk
+opkg install geo-split-data
 ```
 
 Файлы устанавливаются в `/opt/keenetic-entware-extras/geo-split-data/`.

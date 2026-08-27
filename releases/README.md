@@ -2,18 +2,55 @@
 
 Pre-built `.ipk` packages for Keenetic routers running Entware.
 
+## Channels
+
+| Channel | URL | Description |
+|---------|-----|-------------|
+| **stable** | `https://0xkee.github.io/keenetic-entware-extras/stable` | Recommended. Tested releases |
+| **dev** | `https://0xkee.github.io/keenetic-entware-extras/dev` | Bleeding edge. Latest builds |
+
 ## Quick Setup
 
-Add the repository to your Entware opkg config:
+Add the **stable** repository (recommended):
 
 ```sh
 cat >> /opt/etc/opkg.conf << 'EOF'
-src/gz kee-extras https://0xkee.github.io/keenetic-entware-extras/releases/all
+src/gz kee https://0xkee.github.io/keenetic-entware-extras/stable
 EOF
 opkg update
 ```
 
-## Install Packages
+## Switch Channel
+
+Switch from stable to dev:
+
+```sh
+sed -i 's|/stable$|/dev|' /opt/etc/opkg.conf
+opkg update
+```
+
+Switch from dev to stable:
+
+```sh
+sed -i 's|/dev$|/stable|' /opt/etc/opkg.conf
+opkg update && opkg upgrade
+```
+
+## Available Packages
+
+| Package | Description |
+|---------|-------------|
+| `keenetic-entware-extras` | Shared libraries for all packages |
+| `geo-split` | Geo-based policy routing (subnets + ip rules) |
+| `geo-split-data` | Zone lists and GeoIP data |
+| `smartdns-geo-conf` | SmartDNS geo-aware DNS configuration |
+| `smartdns-redirect` | DNS redirect with netfilter hooks |
+| `net-check` | Network connectivity diagnostics |
+| `webui` | Web dashboard (nginx + Lua) |
+
+All packages are `Architecture: all` — compatible with any Entware-supported Keenetic router (mipsel, mips, aarch64).
+
+## Install
 
 ```sh
 # Core libraries (dependency for all other packages)
@@ -32,24 +69,7 @@ opkg install net-check
 opkg install webui
 ```
 
-## Available Packages
-
-| Package | Description |
-|---------|-------------|
-| `keenetic-entware-extras` | Shared libraries for all packages |
-| `geo-split` | Geo-based policy routing (subnets + ip rules) |
-| `geo-split-data` | Zone lists and GeoIP data |
-| `smartdns-geo-conf` | SmartDNS geo-aware DNS configuration |
-| `smartdns-redirect` | DNS redirect with netfilter hooks |
-| `net-check` | Network connectivity diagnostics |
-| `webui` | Web dashboard (nginx + Lua) |
-
-## Architecture
-
-All packages are `Architecture: all` — compatible with any Entware-supported
-Keenetic router (mipsel, mips, aarch64).
-
-## Updates
+## Update
 
 ```sh
 opkg update && opkg upgrade
@@ -68,15 +88,6 @@ opkg remove geo-split geo-split-data
 opkg remove keenetic-entware-extras
 
 # Remove repository config
-sed -i '/kee-extras/d' /opt/etc/opkg.conf
+sed -i '/kee/d' /opt/etc/opkg.conf
 opkg update
-```
-
-## Manual Install (without repository)
-
-Download `.ipk` from [GitHub Releases](https://github.com/0xkee/keenetic-entware-extras/releases):
-
-```sh
-wget https://github.com/0xkee/keenetic-entware-extras/releases/download/<tag>/<pkg>.ipk
-opkg install ./<pkg>.ipk
 ```

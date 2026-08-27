@@ -38,8 +38,30 @@
 
 ## Установка
 
+### Подключение opkg-репозитория
+
 ```sh
-opkg install keenetic-entware-extras_<версия>_all.ipk
+cat >> /opt/etc/opkg.conf << 'EOF'
+src/gz kee https://0xkee.github.io/keenetic-entware-extras/stable
+EOF
+opkg update
+```
+
+Доступны два канала:
+- **stable** (рекомендуемый) — протестированные релизы
+- **dev** — последние сборки
+
+Переключение канала:
+
+```sh
+sed -i 's|/stable$|/dev|' /opt/etc/opkg.conf
+opkg update
+```
+
+### Установка пакетов
+
+```sh
+opkg install keenetic-entware-extras
 ```
 
 Устанавливается в `/opt/keenetic-entware-extras/`. Зависимость `cron` подтягивается автоматически.
@@ -61,7 +83,7 @@ kee-status
 ```
 keenetic-entware-extras status:
   geo-split            Alive
-  smartdns-geo-conf Alive
+  smartdns-geo-conf    Alive
   smartdns-redirect    Alive
   webui                Alive
 ```
@@ -71,7 +93,7 @@ keenetic-entware-extras status:
 ```
 keenetic-entware-extras status:
   geo-split            Alive
-  smartdns-geo-conf FAIL
+  smartdns-geo-conf    FAIL
     Service:
       Ports:       none listening ✗
   smartdns-redirect    Alive
@@ -124,21 +146,21 @@ keenetic-entware-extras status:
 
 ## Порядок установки проекта
 
-Рекомендуемый порядок установки всех пакетов:
+После подключения репозитория (см. выше), установите пакеты:
 
 ```sh
 # 1. Базовый пакет (обязательно первым)
-opkg install keenetic-entware-extras_<ver>_all.ipk
+opkg install keenetic-entware-extras
 
 # 2. Данные (опционально, для быстрого старта geo-split)
-opkg install geo-split-data_<ver>_all.ipk
+opkg install geo-split-data
 
 # 3. Модули (в любом порядке)
-opkg install geo-split_<ver>_all.ipk
-opkg install smartdns-geo-conf_<ver>_all.ipk
-opkg install smartdns-redirect_<ver>_all.ipk
-opkg install net-check_<ver>_all.ipk
-opkg install webui_<ver>_all.ipk
+opkg install geo-split
+opkg install smartdns-geo-conf
+opkg install smartdns-redirect
+opkg install net-check
+opkg install webui
 ```
 
 ### Зависимости между модулями
@@ -158,7 +180,7 @@ keenetic-entware-extras  ← обязательная база для всех
 ## Обновление
 
 ```sh
-opkg upgrade keenetic-entware-extras
+opkg update && opkg upgrade
 ```
 
 Библиотеки обновляются на месте. Все модули продолжают использовать обновлённые версии `lib/*.sh` автоматически.
@@ -168,7 +190,15 @@ opkg upgrade keenetic-entware-extras
 ## Удаление
 
 ```sh
+# Удалить модули
+opkg remove webui net-check smartdns-redirect smartdns-geo-conf geo-split geo-split-data
+
+# Удалить базовый пакет (последним)
 opkg remove keenetic-entware-extras
+
+# Удалить репозиторий
+sed -i '/kee/d' /opt/etc/opkg.conf
+opkg update
 ```
 
 > ⚠️ Перед удалением базового пакета удалите все зависящие модули — без `lib/*.sh` они не смогут работать.

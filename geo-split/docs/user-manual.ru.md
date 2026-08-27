@@ -42,7 +42,7 @@
 | `aggregate` | Агрегация (оптимизация) CIDR-подсетей |
 | `coreutils-touch` | Управление метками времени кэшей |
 
-**Из проекта keenetic-entware-extras** (пока не настроен репозиторий — устанавливаются вручную):
+**Из проекта keenetic-entware-extras** (устанавливаются автоматически как зависимости opkg):
 
 | Пакет | Назначение |
 |-------|-----------|
@@ -59,20 +59,19 @@
 
 ## Установка
 
-### Шаг 1. Установить зависимости проекта
+### Шаг 1. Подключить opkg-репозиторий
 
 ```sh
-# Сначала — общие библиотеки (обязательно)
-opkg install keenetic-entware-extras_<версия>_all.ipk
-
-# Предзаполненные данные (опционально, для быстрого старта)
-opkg install geo-split-data_<версия>_all.ipk
+cat >> /opt/etc/opkg.conf << 'EOF'
+src/gz kee https://0xkee.github.io/keenetic-entware-extras/stable
+EOF
+opkg update
 ```
 
-### Шаг 2. Установить geo-split
+### Шаг 2. Установить пакеты
 
 ```sh
-opkg install geo-split_<версия>_all.ipk
+opkg install geo-split geo-split-data
 ```
 
 Зависимости из Entware-репозитория (`ip-full`, `curl`, `bind-dig`, `aggregate`, `coreutils-touch`) установятся автоматически.

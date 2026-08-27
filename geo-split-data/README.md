@@ -15,8 +15,10 @@ GeoIP subnet data and domain lists for [geo-split](../geo-split/).
 
 ## Installation
 
+Requires [opkg repository](../releases/README.md) configured.
+
 ```sh
-opkg install /tmp/geo-split-data_<ver>_all.ipk
+opkg install geo-split-data
 ```
 
 > **conffiles:** `lists/domains.txt` and `lists/ru-whitelist.txt` are declared as conffiles —

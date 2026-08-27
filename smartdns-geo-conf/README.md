@@ -25,21 +25,10 @@ Split DNS: routing DNS queries by geo-zones.
 
 ## Installation
 
-### Via .ipk (recommended)
+Requires [opkg repository](../releases/README.md) configured.
 
 ```sh
-# Copy to router
-scp -O smartdns-geo-conf_<ver>_all.ipk root@<router-ip>:/tmp/
-
-# Install
-opkg install /tmp/smartdns-geo-conf_<ver>_all.ipk
-```
-
-### From repository (for developers)
-
-```sh
-./scripts/build-ipk.sh smartdns-geo-conf
-# Result: dist/smartdns-geo-conf_<ver>_all.ipk
+opkg install smartdns-geo-conf
 ```
 
 ## Direct DNS traffic to SmartDNS
@@ -51,7 +40,7 @@ After installation, DNS queries from clients need to be directed to SmartDNS. Tw
 Install the [`smartdns-redirect`](../smartdns-redirect/) package — it automatically intercepts DNS queries from LAN via iptables DNAT. Changes to Keenetic settings (DNS, DoT/DoH) are **not required**.
 
 ```sh
-opkg install /tmp/smartdns-redirect_<ver>_all.ipk
+opkg install smartdns-redirect
 ```
 
 ### Option B: manual Keenetic DNS setup

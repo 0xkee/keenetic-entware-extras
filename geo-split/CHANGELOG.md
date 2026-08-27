@@ -5,6 +5,11 @@ All notable changes to `geo-split` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.18.6] - 2026-08-28
+
+### Changed
+- Docs: installation instructions updated for opkg feed — `opkg install geo-split` instead of `.ipk` filenames, opkg repo setup steps in user manual
+
 ## [0.18.5] - 2026-08-16
 
 ### Changed

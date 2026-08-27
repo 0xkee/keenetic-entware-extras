@@ -37,7 +37,7 @@
 |-------|-----------|
 | `iptables` | NAT PREROUTING DNAT правила |
 
-**Из проекта keenetic-entware-extras** (устанавливаются вручную):
+**Из проекта keenetic-entware-extras** (устанавливаются автоматически как зависимости opkg):
 
 | Пакет | Назначение |
 |-------|-----------|
@@ -53,10 +53,13 @@
 
 ## Установка
 
-### Шаг 1. Установить зависимости проекта
+### Шаг 1. Подключить opkg-репозиторий
 
 ```sh
-opkg install keenetic-entware-extras_<версия>_all.ipk
+cat >> /opt/etc/opkg.conf << 'EOF'
+src/gz kee https://0xkee.github.io/keenetic-entware-extras/stable
+EOF
+opkg update
 ```
 
 ### Шаг 2. Убедиться, что DNS-резолвер работает
@@ -69,7 +72,7 @@ dig ya.ru @127.0.0.1 -p 6053 +short
 ### Шаг 3. Установить пакет
 
 ```sh
-opkg install smartdns-redirect_<версия>_all.ipk
+opkg install smartdns-redirect
 ```
 
 После установки `postinst` автоматически:

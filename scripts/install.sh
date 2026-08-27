@@ -195,6 +195,7 @@ has_tty() {
 
 # ── Interactive menu ─────────────────────────────────────────────
 show_menu() {
+    echo ""
     echo "  Available packages:"
     echo ""
     i=1
@@ -258,7 +259,7 @@ parse_choice() {
 show_summary() {
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "📊 Done: ✅ $INSTALLED installed | ⏭ $SKIPPED up to date | ❌ $FAILED failed"
+    echo "📊 Done: ✅ $INSTALLED installed | ⏭  $SKIPPED up to date | ❌ $FAILED failed"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     echo "  Run kee-status to check service status."

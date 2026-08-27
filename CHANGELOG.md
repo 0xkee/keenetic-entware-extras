@@ -7,6 +7,14 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.16.19] - 2026-08-28
+
+### Changed
+- Docs: installation instructions updated for opkg feed (`opkg install <pkg>` instead of `.ipk` filenames)
+- `releases/README.md`: opkg repo docs overhaul — channels table, feed name `kee`, switch/install/uninstall sections
+- `user-manual.ru.md`: installation section rewritten for opkg feed (was `.ipk` filenames)
+- `scripts/install.sh`: minor UI fixes (menu spacing, emoji alignment in summary)
+
 ## [0.16.18] - 2026-08-28
 
 ### Fixed

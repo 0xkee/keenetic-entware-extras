@@ -5,6 +5,11 @@ All notable changes to `smartdns-geo-conf` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.14.3] - 2026-08-28
+
+### Changed
+- Docs: installation instructions updated for opkg feed — `opkg install smartdns-geo-conf` instead of `.ipk` filenames, opkg repo setup steps in user manual
+
 ## [0.14.2] - 2026-08-16
 
 ### Changed

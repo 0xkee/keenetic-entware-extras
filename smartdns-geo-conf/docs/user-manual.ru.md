@@ -34,7 +34,7 @@
 | `smartdns` | DNS-сервер с группами и кэшированием |
 | `ca-certificates` | TLS-сертификаты для DoT/DoH соединений |
 
-**Из проекта keenetic-entware-extras** (устанавливаются вручную):
+**Из проекта keenetic-entware-extras** (устанавливаются автоматически как зависимости opkg):
 
 | Пакет | Назначение |
 |-------|-----------|
@@ -44,16 +44,19 @@
 
 ## Установка
 
-### Шаг 1. Установить зависимости проекта
+### Шаг 1. Подключить opkg-репозиторий
 
 ```sh
-opkg install keenetic-entware-extras_<версия>_all.ipk
+cat >> /opt/etc/opkg.conf << 'EOF'
+src/gz kee https://0xkee.github.io/keenetic-entware-extras/stable
+EOF
+opkg update
 ```
 
 ### Шаг 2. Установить пакет
 
 ```sh
-opkg install smartdns-geo-conf_<версия>_all.ipk
+opkg install smartdns-geo-conf
 ```
 
 Зависимости `smartdns` и `ca-certificates` установятся автоматически.
@@ -69,7 +72,7 @@ opkg install smartdns-geo-conf_<версия>_all.ipk
 Самый простой вариант — установить пакет [`smartdns-redirect`](../../smartdns-redirect/docs/user-manual.ru.md), который автоматически перехватывает DNS-запросы с LAN и направляет их на SmartDNS. Не требует изменения настроек роутера.
 
 ```sh
-opkg install smartdns-redirect_<версия>_all.ipk
+opkg install smartdns-redirect
 ```
 
 #### Способ B: Настроить Keenetic DNS вручную

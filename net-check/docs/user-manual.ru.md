@@ -38,7 +38,7 @@
 | `openssl-util` | Инспекция TLS-сертификатов |
 | `traceroute` | Трассировка маршрута |
 
-**Из проекта keenetic-entware-extras** (устанавливаются вручную):
+**Из проекта keenetic-entware-extras** (устанавливаются автоматически как зависимости opkg):
 
 | Пакет | Назначение |
 |-------|-----------|
@@ -48,16 +48,19 @@
 
 ## Установка
 
-### Шаг 1. Установить зависимости проекта
+### Шаг 1. Подключить opkg-репозиторий
 
 ```sh
-opkg install keenetic-entware-extras_<версия>_all.ipk
+cat >> /opt/etc/opkg.conf << 'EOF'
+src/gz kee https://0xkee.github.io/keenetic-entware-extras/stable
+EOF
+opkg update
 ```
 
 ### Шаг 2. Установить пакет
 
 ```sh
-opkg install net-check_<версия>_all.ipk
+opkg install net-check
 ```
 
 Зависимости `curl`, `bind-dig`, `iputils-ping` установятся автоматически.

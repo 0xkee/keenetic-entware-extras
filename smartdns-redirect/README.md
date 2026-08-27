@@ -28,11 +28,10 @@ iptables DNAT on `PREROUTING` for configured interfaces (`br0` LAN, `br1` Guest,
 
 ## Installation
 
-### Via .ipk (recommended)
+Requires [opkg repository](../releases/README.md) configured.
 
 ```sh
-scp -O smartdns-redirect_<ver>_all.ipk root@<router-ip>:/tmp/
-opkg install /tmp/smartdns-redirect_<ver>_all.ipk
+opkg install smartdns-redirect
 ```
 
 `postinst` automatically:

@@ -1,4 +1,4 @@
-# Keenetic Entware Extras
+л# Keenetic Entware Extras
 
 > 📖 **[User Manual (RU)](user-manual.ru.md)** — installation, kee-status, bug-report.
 
@@ -159,7 +159,7 @@ keenetic-entware-extras/
 ## Requirements
 
 - Keenetic with Entware installed
-- All dependencies are installed automatically via `opkg install <pkg>.ipk`
+- All dependencies are installed automatically via `opkg install <pkg>`
 
 **Base** (`keenetic-entware-extras`): `cron`
 

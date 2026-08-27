@@ -11,10 +11,10 @@ Typical use cases:
 
 ## Installation
 
-Primary method — via opkg:
+Requires [opkg repository](../releases/README.md) configured.
 
 ```sh
-opkg install geo-split_<ver>_all.ipk
+opkg install geo-split
 ```
 
 Dependencies (`keenetic-entware-extras`, `geo-split-data`, `ip-full`, `curl`, `bind-dig`, `aggregate`) are installed automatically.

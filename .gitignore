@@ -1,16 +1,3 @@
-# === Dev infrastructure (local only, not on public GitHub) ===
-.github/
-boot-diag/
-dist/
-Makefile
-scripts/build-ipk.sh
-scripts/release.sh
-scripts/deploy.sh
-scripts/check-privacy.sh
-scripts/stock-webui-check.sh
-scripts/test-geo-zones.sh
-scripts/compat-check.sh
-
 # === Standard ignores ===
 *.bak
 *~
@@ -25,8 +12,7 @@ secrets/
 *.log
 
 # === Generated / built ===
-dist/*.ipk
-dist/archive/
+dist/
 webui/htdocs-cache/
 geo-split-data/lists/ru-subnets.txt
 geo-split-data/lists/domains-resolved.txt
@@ -34,6 +20,18 @@ geo-split-data/lists/geoip/*.zone.gz
 
 # === Private content (symlinks to ../kee-private/) ===
 # These are symlinks transparent to IDE/Roo but invisible to git
+# Dev infrastructure
+.github
+boot-diag
+Makefile
+scripts/build-ipk.sh
+scripts/release.sh
+scripts/deploy.sh
+scripts/check-privacy.sh
+scripts/stock-webui-check.sh
+scripts/test-geo-zones.sh
+scripts/compat-check.sh
+# Project config & docs
 AGENTS.md
 awg-manager
 .project

@@ -148,12 +148,15 @@ update_index() {
 install_pkg() {
     pkg="$1"
     info "Installing ${BOLD}${pkg}${NC}..."
-    if opkg install "$pkg" 2>&1 | grep -qE 'Installing|Configuring|already installed'; then
-        ok "${pkg} installed"
-    else
+    output=$(opkg install "$pkg" 2>&1) || {
         fail "Failed to install ${pkg}"
+        printf "     %b%s%b\n" "$DIM" "$output" "$NC"
         return 1
-    fi
+    }
+    case "$output" in
+        *"up to date"*)  ok "${pkg} — already up to date" ;;
+        *)               ok "${pkg} installed" ;;
+    esac
 }
 
 install_packages() {

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/opt/bin/sh
 # Generate opkg Packages index from .ipk files in a directory.
 # Usage: ./scripts/generate-packages-index.sh [dir]
 #
@@ -6,7 +6,7 @@
 #   - Extracts control metadata from the package
 #   - Appends Filename, Size, MD5sum, SHA256sum fields
 # Produces <dir>/Packages and <dir>/Packages.gz
-set -euo pipefail
+set -eu
 
 DIR="${1:-.}"
 

@@ -25,6 +25,7 @@ indent() { while IFS= read -r line; do printf '     %s\n' "$line"; done; }
 
 # ── Counters ─────────────────────────────────────────────────────
 INSTALLED=0
+UPGRADED=0
 SKIPPED=0
 FAILED=0
 
@@ -148,7 +149,7 @@ prompt_channel() {
     esac
     echo ""
     add_feed
-    update_index
+    update_index force
 }
 
 # ── Feed configuration ──────────────────────────────────────────
@@ -175,8 +176,9 @@ add_feed() {
 
 update_index() {
     # Skip if index exists and is fresh (< 10 min old)
+    # $1 = "force" to skip freshness check (e.g. after channel change)
     idx_file="/opt/var/opkg-lists/${FEED_NAME}"
-    if [ -f "$idx_file" ] && ! $FORCE; then
+    if [ "${1-}" != "force" ] && [ -f "$idx_file" ] && ! $FORCE; then
         age=$(( $(date +%s) - $(date -r "$idx_file" +%s 2>/dev/null || echo 0) ))
         if [ "$age" -lt 600 ]; then
             echo "  ⏭  Package index is fresh ($(( age / 60 ))m ago)"
@@ -224,6 +226,10 @@ install_pkg() {
         rm -f "$_tmp"
         echo "  ⏭  $pkg — already up to date"
         SKIPPED=$((SKIPPED + 1))
+    elif grep -q "Upgrading" "$_tmp" 2>/dev/null; then
+        rm -f "$_tmp"
+        echo "  ✅ $pkg — upgraded"
+        UPGRADED=$((UPGRADED + 1))
     else
         rm -f "$_tmp"
         echo "  ✅ $pkg — installed"
@@ -320,7 +326,12 @@ parse_choice() {
 show_summary() {
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "📊 Done: ✅ $INSTALLED installed | ⏭  $SKIPPED up to date | ❌ $FAILED failed"
+    summary="✅ $INSTALLED installed"
+    if [ "$UPGRADED" -gt 0 ]; then
+        summary="$summary | 🔄 $UPGRADED upgraded"
+    fi
+    summary="$summary | ⏭  $SKIPPED up to date | ❌ $FAILED failed"
+    echo "📊 Done: $summary"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     echo "  Run kee-status to check service status."

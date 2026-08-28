@@ -5,7 +5,17 @@ All notable changes to `keenetic-entware-extras` (base package) are documented h
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
-## [Unreleased]
+## [0.17.0] - 2026-08-28
+
+### Added
+- `scripts/install.sh` — `--stable`/`--dev` CLI flags for channel selection; interactive `C) Change channel` option in package menu with `📡 Channel:` indicator; auto-detect existing channel from opkg.conf; default to `stable` for first-time install
+- `scripts/install.sh` — `upgraded` status label and `🔄 N upgraded` counter in summary (was: upgrades shown as "installed")
+- CI: `auto-tag.yml` — auto-creates git tags when `packaging/*/control` version changes on push to master, dispatches `release.yml` for each changed package
+- CI: `release.yml` — supports `workflow_dispatch` with `tag` input (for auto-tag triggering)
+
+### Fixed
+- `scripts/install.sh` — `update_index()` skipped `opkg update` after channel switch (index file was "fresh" from previous channel)
+- `scripts/generate-packages-index.sh` — non-standard shebang `#!/bin/bash` → `#!/opt/bin/sh`, removed `pipefail` bashism
 
 ## [0.16.19] - 2026-08-28
 

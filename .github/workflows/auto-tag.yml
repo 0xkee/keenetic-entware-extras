@@ -1,0 +1,82 @@
+name: Auto-tag releases
+
+# When packaging/*/control version changes on master → create tag + trigger release
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'packaging/*/control'
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  auto-tag:
+    name: Detect version bumps and release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # Need previous commit for diff
+
+      - name: Detect version changes
+        id: detect
+        run: |
+          # Map package name → tag prefix
+          tag_prefix() {
+            case "$1" in
+              keenetic-entware-extras) echo "base-v" ;;
+              *) echo "$1-v" ;;
+            esac
+          }
+
+          TAGS=""
+          for control in packaging/*/control; do
+            pkg=$(basename "$(dirname "$control")")
+
+            # Get current and previous version
+            cur_ver=$(grep '^Version:' "$control" | cut -d' ' -f2)
+            prev_ver=$(git show HEAD~1:"$control" 2>/dev/null | grep '^Version:' | cut -d' ' -f2 || echo "")
+
+            if [ "$cur_ver" != "$prev_ver" ] && [ -n "$cur_ver" ]; then
+              prefix=$(tag_prefix "$pkg")
+              tag="${prefix}${cur_ver}"
+
+              if git rev-parse "$tag" >/dev/null 2>&1; then
+                echo "⏭ Tag $tag already exists, skipping"
+              else
+                echo "🏷 Creating tag: $tag ($pkg: ${prev_ver:-new} → $cur_ver)"
+                git tag "$tag"
+                TAGS="${TAGS:+$TAGS,}$tag"
+              fi
+            fi
+          done
+
+          echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
+          if [ -n "$TAGS" ]; then
+            echo "🏷 Tags to release: $TAGS"
+          else
+            echo "No version changes detected"
+          fi
+
+      - name: Push tags
+        if: steps.detect.outputs.tags != ''
+        run: |
+          IFS=',' read -ra TAGS <<< "${{ steps.detect.outputs.tags }}"
+          git push origin "${TAGS[@]}"
+          echo "✅ Pushed ${#TAGS[@]} tag(s)"
+
+      - name: Trigger release for each tag
+        if: steps.detect.outputs.tags != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          IFS=',' read -ra TAGS <<< "${{ steps.detect.outputs.tags }}"
+          for tag in "${TAGS[@]}"; do
+            echo "🚀 Dispatching release for $tag"
+            gh workflow run release.yml -f tag="$tag"
+            sleep 2  # Avoid rate limits between dispatches
+          done
+          echo "✅ Dispatched ${#TAGS[@]} release(s)"

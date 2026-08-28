@@ -357,7 +357,6 @@ main() {
     check_entware
     ensure_wget_ssl
     choose_channel
-    echo "  ✅ Channel: $CHANNEL"
     add_feed
     update_index
 

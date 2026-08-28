@@ -5,9 +5,10 @@
 Split routing for Keenetic/Entware — route traffic by GeoIP subnets and domain lists through different network interfaces.
 
 Typical use cases:
-- 🇷🇺 **EAEU → ISP:** EAEU subnets (RU+BY+KZ+AM+KG) go through ISP, everything else — through tunnel
-- 🔒 **Selected → tunnel:** specific subnets/domains routed into a tunnel
-- 🌍 **Multi-zone:** any combination of countries or alliances (CIS, BRICS, EU, etc.) — 232 zones, 40+ unions
+- 🌐 **Multi-WAN traffic engineering:** regional subnets go through ISP, everything else — through tunnel (e.g. EAEU, EU, ASEAN — 232 zones, 40+ alliances)
+- 🔒 **Split tunneling:** specific subnets/domains routed into a tunnel for service compatibility (CDN, banking, government portals)
+- ⚡ **Performance optimization:** local/regional networks go direct, rest through another uplink
+- 🔄 **Failover:** automatic routing reconciliation on interface state changes
 
 ## Installation
 
@@ -181,12 +182,12 @@ GEO_ZONE="eas"
 ROUTE_OUT="auto"
 ```
 
-**Russia only:**
+**Single country (example):**
 ```sh
 GEO_ZONE="ru"
 ```
 
-**CIS via tunnel (access to RU services from abroad):**
+**Regional services via tunnel (service compatibility):**
 ```sh
 GEO_ZONE="cis"
 ROUTE_OUT="nwg0"

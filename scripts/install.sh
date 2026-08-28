@@ -7,13 +7,15 @@
 #   Stable channel: curl -fsSL ... | sh -s -- --stable --all
 #   Dev channel:    curl -fsSL ... | sh -s -- --dev --all
 #   Force reinstall: curl -fsSL ... | sh -s -- --force --all
-#   Direct:       sh install.sh [--force] [--stable|--dev] [--all | package-names...]
+#   Uninstall:    curl -fsSL ... | sh -s -- --uninstall
+#   Direct:       sh install.sh [--force] [--stable|--dev] [--all | --uninstall | package-names...]
 set -eu
 
 FEED_BASE="https://0xkee.github.io/keenetic-entware-extras"
 FEED_NAME="kee"
 CHANNEL=""
 FORCE=false
+UNINSTALL=false
 
 # ── Output helpers ───────────────────────────────────────────────
 die()  { echo "❌ $*" >&2; exit 1; }
@@ -28,6 +30,7 @@ INSTALLED=0
 UPGRADED=0
 SKIPPED=0
 FAILED=0
+REMOVED=0
 
 # ── Package catalog ──────────────────────────────────────────────
 # Format: name|description (one entry per line)
@@ -247,6 +250,57 @@ install_packages() {
     done
 }
 
+# ── Package removal ──────────────────────────────────────────────
+# Removal order: reverse of catalog (webui first, base last)
+# geo-split-data is added explicitly since it's not in the menu catalog
+UNINSTALL_ORDER="webui net-check smartdns-redirect smartdns-geo-conf geo-split geo-split-data keenetic-entware-extras"
+
+remove_pkg() {
+    pkg="$1"
+    if ! opkg status "$pkg" 2>/dev/null | grep -q "^Status:.*installed"; then
+        echo "  ⏭  $pkg — not installed"
+        SKIPPED=$((SKIPPED + 1))
+        return 0
+    fi
+
+    echo "  🗑  $pkg"
+    if opkg remove "$pkg" 2>&1 | indent; then
+        echo "  ✅ $pkg — removed"
+        REMOVED=$((REMOVED + 1))
+    else
+        echo "  ❌ $pkg — removal failed"
+        FAILED=$((FAILED + 1))
+    fi
+}
+
+remove_feed() {
+    if grep -q "^src/gz ${FEED_NAME} " /opt/etc/opkg.conf 2>/dev/null; then
+        sed -i "/^src\/gz ${FEED_NAME} /d" /opt/etc/opkg.conf
+        echo "  ✅ Feed '${FEED_NAME}' removed from opkg.conf"
+    else
+        echo "  ⏭  Feed '${FEED_NAME}' not found in opkg.conf"
+    fi
+}
+
+do_uninstall() {
+    echo ""
+    echo "🗑  Uninstalling keenetic-entware-extras..."
+    echo ""
+
+    for pkg in $UNINSTALL_ORDER; do
+        remove_pkg "$pkg"
+    done
+
+    echo ""
+    remove_feed
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "📊 Done: ✅ $REMOVED removed | ⏭  $SKIPPED skipped | ❌ $FAILED failed"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+}
+
 # ── TTY detection ────────────────────────────────────────────────
 # Check if interactive input is possible.
 # stdin may be a pipe (curl|sh) — fall back to /dev/tty.
@@ -275,13 +329,14 @@ show_menu() {
     echo "  A)  Install all packages"
     echo "  F)  Force reinstall all packages"
     echo "  C)  Change channel (stable/dev)"
+    echo "  U)  Uninstall all packages"
     echo "  Q)  Quit"
     echo ""
 }
 
 read_choice() {
     # Prompt goes to stderr so it is not captured by $()
-    printf "  Choose packages (e.g. 1 3 5, a=all, f=force, c=channel, q=quit): " >&2
+    printf "  Choose packages (e.g. 1 3 5, a=all, f=force, u=uninstall, q=quit): " >&2
     if [ -t 0 ]; then
         read -r choice
     else
@@ -345,16 +400,24 @@ main() {
     remaining=""
     for arg in "$@"; do
         case "$arg" in
-            --force)   FORCE=true ;;
-            --stable)  CHANNEL="stable" ;;
-            --dev)     CHANNEL="dev" ;;
-            *)         remaining="${remaining:+$remaining }$arg" ;;
+            --force)     FORCE=true ;;
+            --stable)    CHANNEL="stable" ;;
+            --dev)       CHANNEL="dev" ;;
+            --uninstall) UNINSTALL=true ;;
+            *)           remaining="${remaining:+$remaining }$arg" ;;
         esac
     done
 
     header
     check_root
     check_entware
+
+    # Non-interactive uninstall
+    if $UNINSTALL; then
+        do_uninstall
+        exit 0
+    fi
+
     ensure_wget_ssl
     choose_channel
     add_feed
@@ -389,6 +452,7 @@ main() {
         case "$choice" in
             [Cc]) prompt_channel; continue ;;
             [Ff]) FORCE=true; choice="A" ;;
+            [Uu]) do_uninstall; exit 0 ;;
         esac
 
         pkgs=$(parse_choice "$choice")

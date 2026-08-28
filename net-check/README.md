@@ -55,7 +55,7 @@ net-check.sh --quiet all                # One-line summary per section
 - `config/check-targets.conf` — HTTP/DNS/TLS target list
 - `config/cdn-domains.conf` — CDN domains for steering analysis
 - `config/dns-providers.conf` — DNS provider identification
-- `config/anomaly-markers.conf` — ISP block page detection
+- `config/anomaly-markers.conf` — ISP anomaly page detection
 - `config/mitm-issuers.conf` — known MITM proxy CA patterns
 
 All config files are protected from overwrite on package upgrade.
@@ -78,7 +78,7 @@ net-check/
 │   ├── cdn-domains.conf        # CDN domains for steering analysis
 │   ├── cdn-domains-custom.conf # User custom CDN domains (not overwritten)
 │   ├── dns-providers.conf      # DNS provider identification
-│   ├── anomaly-markers.conf    # ISP block page detection patterns
+│   ├── anomaly-markers.conf    # ISP anomaly page detection patterns
 │   ├── mitm-issuers.conf       # Known MITM proxy CA patterns
 │   ├── known-cas.conf          # Known national/regional CAs (allowlist)
 │   ├── privacy-providers.conf  # Privacy provider patterns for anonymization

@@ -5,6 +5,14 @@ All notable changes to `keenetic-entware-extras` (base package) are documented h
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.18.0] - 2026-08-29
+
+### Added
+- `scripts/install.sh` — `--uninstall` mode: removes all kee packages (reverse order) and opkg feed; interactive `U) Uninstall all packages` menu option
+
+### Changed
+- `README.md` — rewritten: removed Project structure / Development / Subprojects sections; added per-package descriptions (accessible + technical); added Uninstall section with one-liner
+
 ## [0.17.0] - 2026-08-28
 
 ### Added

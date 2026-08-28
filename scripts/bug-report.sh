@@ -791,7 +791,7 @@ if command -v ip >/dev/null 2>&1; then
     printf "IPv6 default route:\n"
     if [ -n "$_v6_def" ]; then
         echo "$_v6_def" | sed 's/^/  /'
-        printf "  ⚠ IPv6 is active — dual-stack sites may bypass geo-split (IPv4-only).\n"
+        printf "  ⚠ IPv6 is active — dual-stack sites may skip geo-split (IPv4-only routing).\n"
     else
         printf "  (none — IPv6 not routed, no leak risk)\n"
     fi

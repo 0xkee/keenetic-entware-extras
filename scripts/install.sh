@@ -108,10 +108,10 @@ fix_wget_path() {
 }
 
 # ── Channel selection ────────────────────────────────────────────
+# Resolve channel: CLI flag > existing feed > default (stable)
 choose_channel() {
     # Already set via --stable or --dev flag
     if [ -n "$CHANNEL" ]; then
-        echo "  ✅ Channel: $CHANNEL (from --$CHANNEL flag)"
         return 0
     fi
 
@@ -120,25 +120,22 @@ choose_channel() {
         /opt/etc/opkg.conf 2>/dev/null || true)
     if [ -n "$existing" ]; then
         CHANNEL="$existing"
-        echo "  ✅ Channel: $CHANNEL (existing feed)"
         return 0
     fi
 
-    # Non-interactive: default to stable
-    if ! has_tty; then
-        CHANNEL="stable"
-        echo "  ✅ Channel: stable (default, no TTY)"
-        return 0
-    fi
+    # Default to stable
+    CHANNEL="stable"
+}
 
-    # Interactive: ask user
+# Interactive channel switcher (called from menu)
+prompt_channel() {
     echo ""
     echo "  Select update channel:"
     echo ""
     echo "  1)  stable   — recommended, tested releases"
     echo "  2)  dev      — bleeding edge, latest builds"
     echo ""
-    printf "  Channel [1]: " >&2
+    printf "  Current: %s. Choose [1/2]: " "$CHANNEL" >&2
     if [ -t 0 ]; then
         read -r ch_choice
     else
@@ -147,9 +144,11 @@ choose_channel() {
 
     case "$ch_choice" in
         2|[Dd]|[Dd][Ee][Vv])  CHANNEL="dev" ;;
-        *)                     CHANNEL="stable" ;;
+        1|[Ss]|*)             CHANNEL="stable" ;;
     esac
-    echo "  ✅ Channel: $CHANNEL"
+    echo ""
+    add_feed
+    update_index
 }
 
 # ── Feed configuration ──────────────────────────────────────────
@@ -255,6 +254,8 @@ has_tty() {
 # ── Interactive menu ─────────────────────────────────────────────
 show_menu() {
     echo ""
+    echo "  📡 Channel: $CHANNEL"
+    echo ""
     echo "  Available packages:"
     echo ""
     i=1
@@ -267,13 +268,14 @@ show_menu() {
     echo ""
     echo "  A)  Install all packages"
     echo "  F)  Force reinstall all packages"
+    echo "  C)  Change channel (stable/dev)"
     echo "  Q)  Quit"
     echo ""
 }
 
 read_choice() {
     # Prompt goes to stderr so it is not captured by $()
-    printf "  Choose packages (e.g. 1 3 5, a=all, f=force, q=quit): " >&2
+    printf "  Choose packages (e.g. 1 3 5, a=all, f=force, c=channel, q=quit): " >&2
     if [ -t 0 ]; then
         read -r choice
     else
@@ -344,6 +346,7 @@ main() {
     check_entware
     ensure_wget_ssl
     choose_channel
+    echo "  ✅ Channel: $CHANNEL"
     add_feed
     update_index
 
@@ -367,24 +370,28 @@ main() {
     Or:   curl ... | sh -s -- 1 3 5"
     fi
 
-    # Interactive: show menu and prompt
-    show_menu
-    choice=$(read_choice)
+    # Interactive: show menu and prompt (loop for channel change)
+    while true; do
+        show_menu
+        choice=$(read_choice)
 
-    # Handle F (force) in parent shell — parse_choice runs in subshell
-    case "$choice" in
-        [Ff]) FORCE=true; choice="A" ;;
-    esac
+        # Handle C (channel) and F (force) in parent shell
+        case "$choice" in
+            [Cc]) prompt_channel; continue ;;
+            [Ff]) FORCE=true; choice="A" ;;
+        esac
 
-    pkgs=$(parse_choice "$choice")
+        pkgs=$(parse_choice "$choice")
 
-    if [ -z "$pkgs" ]; then
-        info "Nothing to install. Bye!"
-        exit 0
-    fi
+        if [ -z "$pkgs" ]; then
+            info "Nothing to install. Bye!"
+            exit 0
+        fi
 
-    install_packages "$pkgs"
-    show_summary
+        install_packages "$pkgs"
+        show_summary
+        break
+    done
 }
 
 main "$@"

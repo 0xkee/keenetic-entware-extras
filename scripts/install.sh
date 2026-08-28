@@ -4,12 +4,15 @@
 #   Interactive:  curl -fsSL https://0xkee.github.io/keenetic-entware-extras/install.sh | sh
 #   With args:    curl -fsSL ... | sh -s -- geo-split webui
 #   All packages: curl -fsSL ... | sh -s -- --all
+#   Stable channel: curl -fsSL ... | sh -s -- --stable --all
+#   Dev channel:    curl -fsSL ... | sh -s -- --dev --all
 #   Force reinstall: curl -fsSL ... | sh -s -- --force --all
-#   Direct:       sh install.sh [--force] [--all | package-names...]
+#   Direct:       sh install.sh [--force] [--stable|--dev] [--all | package-names...]
 set -eu
 
-FEED_URL="https://0xkee.github.io/keenetic-entware-extras/stable"
+FEED_BASE="https://0xkee.github.io/keenetic-entware-extras"
 FEED_NAME="kee"
+CHANNEL=""
 FORCE=false
 
 # ── Output helpers ───────────────────────────────────────────────
@@ -104,15 +107,71 @@ fix_wget_path() {
     fi
 }
 
-# ── Feed configuration ──────────────────────────────────────────
-add_feed() {
-    if grep -q "^src/gz ${FEED_NAME} " /opt/etc/opkg.conf 2>/dev/null; then
-        echo "  ✅ Feed '${FEED_NAME}' already configured"
+# ── Channel selection ────────────────────────────────────────────
+choose_channel() {
+    # Already set via --stable or --dev flag
+    if [ -n "$CHANNEL" ]; then
+        echo "  ✅ Channel: $CHANNEL (from --$CHANNEL flag)"
         return 0
     fi
 
-    printf "src/gz %s %s\n" "$FEED_NAME" "$FEED_URL" >> /opt/etc/opkg.conf
-    echo "  ✅ Feed added: ${FEED_NAME} → ${FEED_URL}"
+    # Detect existing channel from opkg.conf
+    existing=$(sed -n "s|^src/gz ${FEED_NAME} ${FEED_BASE}/\(.*\)|\1|p" \
+        /opt/etc/opkg.conf 2>/dev/null || true)
+    if [ -n "$existing" ]; then
+        CHANNEL="$existing"
+        echo "  ✅ Channel: $CHANNEL (existing feed)"
+        return 0
+    fi
+
+    # Non-interactive: default to stable
+    if ! has_tty; then
+        CHANNEL="stable"
+        echo "  ✅ Channel: stable (default, no TTY)"
+        return 0
+    fi
+
+    # Interactive: ask user
+    echo ""
+    echo "  Select update channel:"
+    echo ""
+    echo "  1)  stable   — recommended, tested releases"
+    echo "  2)  dev      — bleeding edge, latest builds"
+    echo ""
+    printf "  Channel [1]: " >&2
+    if [ -t 0 ]; then
+        read -r ch_choice
+    else
+        read -r ch_choice </dev/tty
+    fi
+
+    case "$ch_choice" in
+        2|[Dd]|[Dd][Ee][Vv])  CHANNEL="dev" ;;
+        *)                     CHANNEL="stable" ;;
+    esac
+    echo "  ✅ Channel: $CHANNEL"
+}
+
+# ── Feed configuration ──────────────────────────────────────────
+add_feed() {
+    feed_url="${FEED_BASE}/${CHANNEL}"
+
+    # Check if feed exists with any channel
+    if grep -q "^src/gz ${FEED_NAME} " /opt/etc/opkg.conf 2>/dev/null; then
+        cur_url=$(sed -n "s|^src/gz ${FEED_NAME} ||p" /opt/etc/opkg.conf)
+        if [ "$cur_url" = "$feed_url" ]; then
+            echo "  ✅ Feed '${FEED_NAME}' already configured (${CHANNEL})"
+            return 0
+        fi
+        # Channel changed — update in-place
+        sed -i "s|^src/gz ${FEED_NAME} .*|src/gz ${FEED_NAME} ${feed_url}|" \
+            /opt/etc/opkg.conf
+        echo "  🔄 Feed updated: ${FEED_NAME} → ${feed_url}"
+        return 0
+    fi
+
+    printf "src/gz %s %s\n" "$FEED_NAME" "$feed_url" >> /opt/etc/opkg.conf
+    echo "  ✅ Feed added: ${FEED_NAME} → ${feed_url}"
 }
 
 update_index() {
@@ -269,12 +328,14 @@ show_summary() {
 
 # ── Main ─────────────────────────────────────────────────────────
 main() {
-    # Parse --force flag, collect remaining args
+    # Parse flags, collect remaining args
     remaining=""
     for arg in "$@"; do
         case "$arg" in
-            --force)  FORCE=true ;;
-            *)        remaining="${remaining:+$remaining }$arg" ;;
+            --force)   FORCE=true ;;
+            --stable)  CHANNEL="stable" ;;
+            --dev)     CHANNEL="dev" ;;
+            *)         remaining="${remaining:+$remaining }$arg" ;;
         esac
     done
 
@@ -282,6 +343,7 @@ main() {
     check_root
     check_entware
     ensure_wget_ssl
+    choose_channel
     add_feed
     update_index
 

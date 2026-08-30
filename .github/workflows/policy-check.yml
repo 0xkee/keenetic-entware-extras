@@ -14,33 +14,25 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Check for forbidden legal terminology
+        env:
+          CRITICAL_TERMS_JSON: ${{ secrets.POLICY_CRITICAL_TERMS }}
+          HIGH_TERMS_JSON: ${{ secrets.POLICY_HIGH_TERMS }}
         run: |
-          echo "── Checking legal terminology (CRITICAL) ──"
-          # Absolute ban terms from legal-terminology.md
-          # These must NEVER appear in public code
-          CRITICAL_TERMS=(
-            "обход блокировок"
-            "bypass censorship"
-            "circumvent censorship"
-            "anti-censorship"
-            "антицензура"
-            "access blocked content"
-            "обход ТСПУ"
-            "bypass TSPU"
-            "обход DPI"
-            "anti-DPI"
-            "Great Firewall bypass"
-            "翻墙"
-            "科学上网"
-            "فیلترشکن"
-            "kill switch"
-          )
+          # Terms are stored in GitHub Secrets (not in public code)
+          # POLICY_CRITICAL_TERMS: JSON array of absolute-ban terms (literal grep)
+          # POLICY_HIGH_TERMS: JSON array of discouraged terms (regex grep -E)
+          if [ -z "$CRITICAL_TERMS_JSON" ] || [ -z "$HIGH_TERMS_JSON" ]; then
+            echo "::warning::Policy secrets not configured — skipping legal scan"
+            echo "Set POLICY_CRITICAL_TERMS and POLICY_HIGH_TERMS repository secrets"
+            exit 0
+          fi
 
-          # False positives: files that legitimately reference these terms
           FP_EXCLUDES="check-privacy\.sh|pre-commit|legal-terminology|policy-check\.yml|docs/archive|docs/comparison|alternatives-research|zone-sizes-research"
 
+          echo "── Checking legal terminology (CRITICAL) ──"
           errors=0
-          for term in "${CRITICAL_TERMS[@]}"; do
+          while IFS= read -r term; do
+            [ -z "$term" ] && continue
             matches=$(grep -rnI "$term" . \
               --include='*.sh' --include='*.md' --include='*.lua' \
               --include='*.js' --include='*.css' --include='*.html' \
@@ -48,29 +40,16 @@ jobs:
               --exclude-dir=.git \
               | grep -vE "$FP_EXCLUDES" || true)
             if [ -n "$matches" ]; then
-              echo "::error::Forbidden term '$term' found"
+              echo "::error::Forbidden term found in:"
               echo "$matches"
               errors=$((errors + 1))
             fi
-          done
+          done < <(echo "$CRITICAL_TERMS_JSON" | jq -r '.[]')
 
           echo "── Checking legal terminology (HIGH) ──"
-          HIGH_TERMS=(
-            '\bVPN\b'
-            '\bТСПУ\b'
-            '\bTSPU\b'
-            '\bРКН\b'
-            '\bRKN\b'
-            'Роскомнадзор'
-            '\bcensorship\b'
-            '\bcensored\b'
-            '\bцензура\b'
-            'заблокировано'
-            'геоблокировк'
-          )
-
           warnings=0
-          for term in "${HIGH_TERMS[@]}"; do
+          while IFS= read -r term; do
+            [ -z "$term" ] && continue
             matches=$(grep -rnIE "$term" . \
               --include='*.sh' --include='*.md' --include='*.lua' \
               --include='*.js' --include='*.css' --include='*.html' \
@@ -78,11 +57,11 @@ jobs:
               --exclude-dir=.git \
               | grep -vE "$FP_EXCLUDES|ru-whitelist|rkn\.gov\.ru|docs/archive|docs/comparison" || true)
             if [ -n "$matches" ]; then
-              echo "::warning::Discouraged term '$term' found"
+              echo "::warning::Discouraged term found in:"
               echo "$matches"
               warnings=$((warnings + 1))
             fi
-          done
+          done < <(echo "$HIGH_TERMS_JSON" | jq -r '.[]')
 
           if [ "$errors" -gt 0 ]; then
             echo "::error::$errors CRITICAL legal term violation(s) found"

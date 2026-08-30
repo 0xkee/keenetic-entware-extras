@@ -74,6 +74,7 @@ jobs:
           tag_name: ${{ steps.pkg.outputs.tag }}
           name: "${{ steps.pkg.outputs.package }} v${{ steps.pkg.outputs.version }}"
           generate_release_notes: true
+          make_latest: false
           files: dist/*.ipk
 
       - name: Deploy to dev channel

@@ -53,11 +53,11 @@ MD5sum: 3f0825ea717e036a02040327395ef942
 SHA256sum: a4f2a6ff8e48e26606aaf6034f3ba20194ded5bb7972dbdb5bec9d80bbbbae1b
 
 Package: net-check
-Version: 0.2.13
+Version: 0.2.14
 Architecture: all
 Maintainer: 0xkee
 Depends: keenetic-entware-extras, curl, bind-dig, iputils-ping
-Recommends: netcat, openssl-util
+Recommends: netcat, openssl-util, traceroute
 Description: Network connectivity diagnostics and degradation control.
  End-to-end reachability verification across WAN interfaces,
  MITM/DPI anomaly detection, CDN geo-steering analysis,
@@ -65,10 +65,10 @@ Description: Network connectivity diagnostics and degradation control.
  (delay, jitter, loss metrics per WAN path).
 Section: net
 Priority: optional
-Filename: net-check_0.2.13_all.ipk
-Size: 96706
-MD5sum: 7bd59b938d930092cd0c51e84a49b633
-SHA256sum: d7db538440b79978edadbcd70eff5c3af3e546ef050c67def1bf63f4cb625bc1
+Filename: net-check_0.2.14_all.ipk
+Size: 96780
+MD5sum: b6b3a9ead44e1c4d4add629aa2899c80
+SHA256sum: ca5ab0a4ed821831c081e9870bea5539207bd3d7ecdf780fd2351c744a20e81b
 
 Package: smartdns-geo-conf
 Version: 0.14.3

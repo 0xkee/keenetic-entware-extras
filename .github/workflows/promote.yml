@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  pages: write
 
 jobs:
   promote:
@@ -61,3 +62,10 @@ jobs:
           PKG="${{ inputs.package }}"
           git commit -m "stable: promote ${PKG:-all packages}"
           git push origin gh-pages
+
+      - name: Trigger Pages rebuild
+        run: |
+          curl -fsSL -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/pages/builds"

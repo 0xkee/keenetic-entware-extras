@@ -1,8 +1,8 @@
 Package: smartdns-redirect
-Version: 0.6.4
+Version: 0.6.5
 Architecture: all
 Maintainer: 0xkee
-Depends: keenetic-entware-extras, iptables
+Depends: keenetic-entware-extras, iptables, bind-dig
 Recommends: smartdns
 Description: Universal DNS DNAT for Keenetic/Entware — redirect LAN :53 to local DNS.
  Intercepts LAN DNS traffic (br0 by default) and redirects to a local DNS

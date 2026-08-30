@@ -5,6 +5,11 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.37.8] - 2026-08-30
+
+### Fixed
+- Add `curl` to package dependencies — `status.sh` uses `curl` for HTTP health checks
+
 ## [0.37.7] - 2026-08-28
 
 ### Changed

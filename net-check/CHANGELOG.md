@@ -5,6 +5,11 @@ All notable changes to `net-check` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.2.14] - 2026-08-30
+
+### Fixed
+- Add `traceroute` to Recommends — used by connectivity check for hop count display
+
 ## [0.2.13] - 2026-08-28
 
 ### Changed

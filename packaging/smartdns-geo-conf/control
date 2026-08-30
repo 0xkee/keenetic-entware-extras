@@ -1,8 +1,8 @@
 Package: smartdns-geo-conf
-Version: 0.14.3
+Version: 0.14.4
 Architecture: all
 Maintainer: 0xkee
-Depends: keenetic-entware-extras, smartdns, ca-certificates
+Depends: keenetic-entware-extras, smartdns, ca-certificates, bind-dig
 Description: SmartDNS configuration for DNS splitting by geo-zones on Keenetic/Entware.
  Configurable DNS zones (RU, EAEU, CIS, BRICS, EU, etc.) with per-country
  DNS server presets. International DNS via tunnel interfaces (MITM protection).

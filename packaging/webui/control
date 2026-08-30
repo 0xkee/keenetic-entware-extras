@@ -1,8 +1,8 @@
 Package: webui
-Version: 0.37.7
+Version: 0.37.8
 Architecture: all
 Maintainer: 0xkee
-Depends: keenetic-entware-extras, nginx, nginx-mod-lua, logrotate
+Depends: keenetic-entware-extras, nginx, nginx-mod-lua, logrotate, curl
 Description: Custom dashboard for Keenetic/Entware services.
  Provides a web dashboard at port 8080 showing status of
  geo-split, smartdns-geo-conf, and smartdns-redirect services.

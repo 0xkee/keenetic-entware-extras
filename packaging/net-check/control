@@ -1,9 +1,9 @@
 Package: net-check
-Version: 0.2.13
+Version: 0.2.14
 Architecture: all
 Maintainer: 0xkee
 Depends: keenetic-entware-extras, curl, bind-dig, iputils-ping
-Recommends: netcat, openssl-util
+Recommends: netcat, openssl-util, traceroute
 Description: Network connectivity diagnostics and degradation control.
  End-to-end reachability verification across WAN interfaces,
  MITM/DPI anomaly detection, CDN geo-steering analysis,

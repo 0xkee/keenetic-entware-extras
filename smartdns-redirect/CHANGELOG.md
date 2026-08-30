@@ -5,6 +5,11 @@ All notable changes to `smartdns-redirect` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.6.5] - 2026-08-30
+
+### Fixed
+- Add `bind-dig` to package dependencies — `watchdog.sh` uses `dig` for upstream health check
+
 ## [0.6.4] - 2026-08-28
 
 ### Changed

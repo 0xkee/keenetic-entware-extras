@@ -43,7 +43,8 @@ jobs:
             cp "dev/${PKG}_"*_all.ipk stable/
             echo "Promoted $PKG from dev to stable"
           else
-            # Copy all packages from dev to stable
+            # Clean stable and copy all packages from dev
+            rm -f stable/*.ipk
             cp dev/*.ipk stable/
             echo "Promoted all packages from dev to stable"
           fi

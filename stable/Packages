@@ -1,19 +1,4 @@
 Package: geo-split-data
-Version: 0.6.1
-Architecture: all
-Maintainer: 0xkee
-Depends: keenetic-entware-extras
-Description: GeoIP subnet data and domain lists for geo-split.
- Pre-built country IP subnets (ipdeny.com) and curated domain lists.
- Fallback data for geo-split cold start and offline operation.
-Section: net
-Priority: optional
-Filename: geo-split-data_0.6.1_all.ipk
-Size: 651786
-MD5sum: 638236543d049132d6d4db9abc88a7d8
-SHA256sum: 52801ef17e93a039b8974980b2d096fa035c6688adc2bea07ff5ba23ec24ead8
-
-Package: geo-split-data
 Version: 0.6.2
 Architecture: all
 Maintainer: 0xkee
@@ -27,23 +12,6 @@ Filename: geo-split-data_0.6.2_all.ipk
 Size: 651754
 MD5sum: 626e4e8cba94fd90a7cb00094d1a3df3
 SHA256sum: e20951f096edc945317c34e83c98d742fee9bb6d245067627bb3a8791fd78c0d
-
-Package: geo-split
-Version: 0.18.5
-Architecture: all
-Maintainer: 0xkee
-Depends: keenetic-entware-extras, geo-split-data, ip-full, curl, bind-dig, aggregate, coreutils-touch
-Recommends: jq
-Description: Split routing by GeoIP subnets and domain lists for Keenetic/Entware.
- Route traffic through different network interfaces based on country IP zones
- and curated domain lists. Configurable via ROUTE_OUT (target interface) and ROUTE_IN (LAN sources).
- Uses ip rule + ip route (no iptables fwmark) for Keenetic NDM compatibility.
-Section: net
-Priority: optional
-Filename: geo-split_0.18.5_all.ipk
-Size: 38811
-MD5sum: 8c4c5e80b9e088a90087dbfcab521f13
-SHA256sum: f6e98dd635428a580b22643de0d278183f88da29aa0632494a107dbccd2dcbfc
 
 Package: geo-split
 Version: 0.18.6
@@ -61,28 +29,6 @@ Filename: geo-split_0.18.6_all.ipk
 Size: 39204
 MD5sum: 3cfb3854c74351aca2007c2d481b53a2
 SHA256sum: 7290f0d5c7627535ec0430cfd45596d22e9806d7f885540771bc376d2813b5df
-
-Package: keenetic-entware-extras
-Version: 0.16.17
-Architecture: all
-Maintainer: 0xkee
-Depends: cron
-Description: Shared shell libraries and CLI tools for keenetic-entware-extras.
- Provides common.sh (logging, validation, router IP detection), lists.sh
- (list processing with @include support, deduplication), ip.sh (CIDR
- aggregation, ISP interface detection, DNS resolver auto-detection),
- privacy.sh (IP/ASN/IPv6 masking for public-facing output),
- and status.sh (shared check/show functions for service diagnostics).
- Installs the `kee-status` command (/opt/bin/kee-status) — an aggregated
- diagnostic that runs every sub-package status.sh and reports Alive/FAIL
- plus filtered error lines grouped by subsection.
- Base package for geo-split, smartdns-geo-conf, smartdns-redirect and others.
-Section: lib
-Priority: optional
-Filename: keenetic-entware-extras_0.16.17_all.ipk
-Size: 41686
-MD5sum: 935d4189800a46d10003e19cbb037e74
-SHA256sum: 78714c314ac23a944cbd953162de5f7fa5143fae507caf6fd598a08401d2b358
 
 Package: keenetic-entware-extras
 Version: 0.16.19
@@ -107,24 +53,6 @@ MD5sum: 3f0825ea717e036a02040327395ef942
 SHA256sum: a4f2a6ff8e48e26606aaf6034f3ba20194ded5bb7972dbdb5bec9d80bbbbae1b
 
 Package: net-check
-Version: 0.2.12
-Architecture: all
-Maintainer: 0xkee
-Depends: keenetic-entware-extras, curl, bind-dig, iputils-ping
-Recommends: netcat, openssl-util
-Description: Network connectivity diagnostics and degradation control.
- End-to-end reachability verification across WAN interfaces,
- MITM/DPI anomaly detection, CDN geo-steering analysis,
- DNS routing alignment, ISP filtering detection, path quality comparison
- (delay, jitter, loss metrics per WAN path).
-Section: net
-Priority: optional
-Filename: net-check_0.2.12_all.ipk
-Size: 94673
-MD5sum: 9ccba7c401c63d5e977d4de23ee41e39
-SHA256sum: 0d2d7efe03e8579ec625b242274130d158f72f8d63091b0767c426a26c49dfb9
-
-Package: net-check
 Version: 0.2.13
 Architecture: all
 Maintainer: 0xkee
@@ -143,22 +71,6 @@ MD5sum: 7bd59b938d930092cd0c51e84a49b633
 SHA256sum: d7db538440b79978edadbcd70eff5c3af3e546ef050c67def1bf63f4cb625bc1
 
 Package: smartdns-geo-conf
-Version: 0.14.2
-Architecture: all
-Maintainer: 0xkee
-Depends: keenetic-entware-extras, smartdns, ca-certificates
-Description: SmartDNS configuration for DNS splitting by geo-zones on Keenetic/Entware.
- Configurable DNS zones (RU, EAEU, CIS, BRICS, EU, etc.) with per-country
- DNS server presets. International DNS via tunnel interfaces (MITM protection).
- Toggle: enable/disable split-DNS. Init: S37smartdns-conf.
-Section: net
-Priority: optional
-Filename: smartdns-geo-conf_0.14.2_all.ipk
-Size: 43868
-MD5sum: 7121cdf64d3054d21c42ef4afa4e175a
-SHA256sum: fa494fffb52b51110d98d9e63bcd4a5eb7037cb606ee56e6ef1f7c64ea12be91
-
-Package: smartdns-geo-conf
 Version: 0.14.3
 Architecture: all
 Maintainer: 0xkee
@@ -173,25 +85,6 @@ Filename: smartdns-geo-conf_0.14.3_all.ipk
 Size: 44312
 MD5sum: cd3880c986f2df5443f8cf09ecbf3c2a
 SHA256sum: d9ec2b7dc61aa75d049e147d28a1d45900906548f7c1229e550c42ad9838b001
-
-Package: smartdns-redirect
-Version: 0.6.3
-Architecture: all
-Maintainer: 0xkee
-Depends: keenetic-entware-extras, iptables
-Recommends: smartdns
-Description: Universal DNS DNAT for Keenetic/Entware — redirect LAN :53 to local DNS.
- Intercepts LAN DNS traffic (br0 by default) and redirects to a local DNS
- resolver (SmartDNS :6053 by default; configurable for AGH, Unbound, dnsmasq).
- Keenetic ndnproxy remains intact for the router itself. Latency improvement:
- ~130ms to <80ms measured. NDM-aware: survives iptables flush via
- netfilter.d hook. Compatible with smartdns-geo-conf and geo-split.
-Section: net
-Priority: optional
-Filename: smartdns-redirect_0.6.3_all.ipk
-Size: 19829
-MD5sum: 9ea86a29f405b6f54e77be8e8898f36c
-SHA256sum: e37aab9bf08fba9cab90be5a121ae817f9827795da6e86506cf64f57e169bf59
 
 Package: smartdns-redirect
 Version: 0.6.4
@@ -211,23 +104,6 @@ Filename: smartdns-redirect_0.6.4_all.ipk
 Size: 19984
 MD5sum: c7a8375e515126f00ca605218769fafb
 SHA256sum: f6771f76b5a92047d7617a2e3e9eeab20a5a826e554df842bd3d866bd7bd9b89
-
-Package: webui
-Version: 0.37.6
-Architecture: all
-Maintainer: 0xkee
-Depends: keenetic-entware-extras, nginx, nginx-mod-lua, logrotate
-Description: Custom dashboard for Keenetic/Entware services.
- Provides a web dashboard at port 8080 showing status of
- geo-split, smartdns-geo-conf, and smartdns-redirect services.
- Integrates into stock Keenetic WebUI sidebar via inject.js.
- Includes logrotate config for nginx-webui log rotation.
-Section: net
-Priority: optional
-Filename: webui_0.37.6_all.ipk
-Size: 238700
-MD5sum: 6c1468301581fcb02186b0b044ab839f
-SHA256sum: 48119eedd29cbb80fb030665528f70144799f86ab94e506d5a4692bbf6e05454
 
 Package: webui
 Version: 0.37.7

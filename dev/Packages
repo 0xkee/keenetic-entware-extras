@@ -106,10 +106,10 @@ MD5sum: c7a8375e515126f00ca605218769fafb
 SHA256sum: f6771f76b5a92047d7617a2e3e9eeab20a5a826e554df842bd3d866bd7bd9b89
 
 Package: webui
-Version: 0.37.7
+Version: 0.37.8
 Architecture: all
 Maintainer: 0xkee
-Depends: keenetic-entware-extras, nginx, nginx-mod-lua, logrotate
+Depends: keenetic-entware-extras, nginx, nginx-mod-lua, logrotate, curl
 Description: Custom dashboard for Keenetic/Entware services.
  Provides a web dashboard at port 8080 showing status of
  geo-split, smartdns-geo-conf, and smartdns-redirect services.
@@ -117,8 +117,8 @@ Description: Custom dashboard for Keenetic/Entware services.
  Includes logrotate config for nginx-webui log rotation.
 Section: net
 Priority: optional
-Filename: webui_0.37.7_all.ipk
-Size: 234142
-MD5sum: 57b807a244d154e23950a66e80ce3672
-SHA256sum: 35808f56771322d2a00eb58601196262e8b4977d032032d4cc7cdcd821e6ac22
+Filename: webui_0.37.8_all.ipk
+Size: 234195
+MD5sum: 986ea98b1a7c5c8048c6abed447c8094
+SHA256sum: 324d80c5223f5adc51bd577d1c1e39950517ddfa17130f0cc9f41d09f07826f2
 

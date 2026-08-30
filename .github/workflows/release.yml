@@ -94,7 +94,7 @@ jobs:
           cp "$IPK" /tmp/gh-pages/dev/
 
           # Regenerate Packages index
-          ./scripts/generate-packages-index.sh /tmp/gh-pages/dev
+          sh ./scripts/generate-packages-index.sh /tmp/gh-pages/dev
 
           # Commit and push
           cd /tmp/gh-pages

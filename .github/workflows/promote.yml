@@ -50,7 +50,7 @@ jobs:
           fi
 
       - name: Regenerate stable index
-        run: ./_main/scripts/generate-packages-index.sh stable
+        run: sh ./_main/scripts/generate-packages-index.sh stable
 
       - name: Commit and push
         run: |

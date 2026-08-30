@@ -2,9 +2,9 @@ name: Policy Check
 
 on:
   push:
-    branches: [main, master]
+    branches: [master]
   pull_request:
-    branches: [main, master]
+    branches: [master]
 
 jobs:
   legal-terminology:

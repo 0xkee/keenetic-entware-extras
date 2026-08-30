@@ -203,6 +203,7 @@ vi /opt/keenetic-entware-extras/geo-split/config/config.conf
 | `DOWNLOAD_RETRIES` | `2` | Попытки скачивания на каждый интерфейс |
 | `DOWNLOAD_RETRY_DELAY` | `3` | Задержка между попытками (сек) |
 | `DOWNLOAD_INTERFACES` | `"default *"` | Интерфейсы для скачивания с failover |
+| `REFRESH_NICE_ADJUST` | `10` | Приоритет CPU для cron-обновлений (0=отключено, 1-19=ниже приоритет) |
 
 ### Таблицы маршрутизации
 

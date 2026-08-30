@@ -1,5 +1,7 @@
 # Keenetic Entware Extras
 
+> ⚠️ **This is an independent community project.** It is **not** affiliated with, endorsed by, or supported by [Keenetic Ltd](https://keenetic.com). "Keenetic" is a trademark of Keenetic Ltd.
+
 > 📖 **[Руководство пользователя (RU)](user-manual.ru.md)** — установка, настройка, диагностика.
 
 A set of `.ipk` packages for Keenetic routers with Entware. Makes routing smarter, DNS faster, and network problems visible — all manageable from a web dashboard.
@@ -79,6 +81,10 @@ Web panel on port `:8080` with live status of all services. Config editor with v
 
 ## Installation
 
+### Prerequisites
+
+Entware must be installed on your Keenetic router before using these packages. Follow the [official Keenetic guide for Entware installation](https://help.keenetic.com/hc/en-us/articles/360021214160-Installing-Entware-package-manager).
+
 ### Quick install (recommended)
 
 One command — configures the opkg feed, installs HTTPS support, and offers a package selection menu:
@@ -113,6 +119,26 @@ opkg install geo-split smartdns-geo-conf smartdns-redirect net-check webui
 ```
 
 See [repository docs](releases/README.md) for channels (stable/dev), switching, and updating.
+
+### Update
+
+Re-run the install script — it detects already installed packages and upgrades them:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/0xkee/keenetic-entware-extras/master/scripts/install.sh | sh
+```
+
+Or force reinstall of specific packages:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/0xkee/keenetic-entware-extras/master/scripts/install.sh | sh -s -- --force geo-split webui
+```
+
+Or manually via opkg:
+
+```sh
+opkg update && opkg upgrade
+```
 
 ### Uninstall
 

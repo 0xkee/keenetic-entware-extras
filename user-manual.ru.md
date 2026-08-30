@@ -1,5 +1,7 @@
 # keenetic-entware-extras — Руководство пользователя
 
+> ⚠️ **Это независимый проект сообщества.** Он **не** связан с компанией [Keenetic Ltd](https://keenetic.com), не одобрен и не поддерживается ею. «Keenetic» — товарный знак Keenetic Ltd.
+
 ## Что это такое
 
 **keenetic-entware-extras** — базовый пакет проекта. Содержит общие shell-библиотеки и CLI-утилиту `kee-status` для агрегированной диагностики всех установленных модулей.
@@ -25,7 +27,7 @@
 
 ## Требования
 
-- Роутер Keenetic с Entware
+- Роутер Keenetic с установленным **Entware** — [инструкция по установке Entware](https://help.keenetic.com/hc/ru/articles/360021214160)
 - **KeeneticOS 5.0+**
 
 ### Программные зависимости
@@ -38,7 +40,29 @@
 
 ## Установка
 
-### Подключение opkg-репозитория
+### Быстрая установка (рекомендуется)
+
+Одна команда — настраивает opkg-фид, устанавливает HTTPS-поддержку и предлагает меню выбора пакетов:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/0xkee/keenetic-entware-extras/master/scripts/install.sh | sh
+```
+
+Установить конкретные пакеты:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/0xkee/keenetic-entware-extras/master/scripts/install.sh | sh -s -- geo-split webui
+```
+
+Установить все:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/0xkee/keenetic-entware-extras/master/scripts/install.sh | sh -s -- --all
+```
+
+### Ручная установка
+
+#### Подключение opkg-репозитория
 
 ```sh
 cat >> /opt/etc/opkg.conf << 'EOF'
@@ -179,6 +203,20 @@ keenetic-entware-extras  ← обязательная база для всех
 
 ## Обновление
 
+Перезапустите установочный скрипт — он определяет уже установленные пакеты и обновляет их:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/0xkee/keenetic-entware-extras/master/scripts/install.sh | sh
+```
+
+Принудительная переустановка конкретных пакетов:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/0xkee/keenetic-entware-extras/master/scripts/install.sh | sh -s -- --force geo-split webui
+```
+
+Или вручную через opkg:
+
 ```sh
 opkg update && opkg upgrade
 ```
@@ -189,6 +227,14 @@ opkg update && opkg upgrade
 
 ## Удаление
 
+Одна команда — удаляет все пакеты и opkg-фид:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/0xkee/keenetic-entware-extras/master/scripts/install.sh | sh -s -- --uninstall
+```
+
+Или вручную:
+
 ```sh
 # Удалить модули
 opkg remove webui net-check smartdns-redirect smartdns-geo-conf geo-split geo-split-data
@@ -198,7 +244,6 @@ opkg remove keenetic-entware-extras
 
 # Удалить репозиторий
 sed -i '/kee/d' /opt/etc/opkg.conf
-opkg update
 ```
 
 > ⚠️ Перед удалением базового пакета удалите все зависящие модули — без `lib/*.sh` они не смогут работать.

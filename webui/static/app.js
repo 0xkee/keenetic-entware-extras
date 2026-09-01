@@ -590,8 +590,13 @@ document.addEventListener("DOMContentLoaded", function() {
     // Config editor event delegation → moved to config-editor.js
     initConfigEditorEvents();
 
-    // Eagerly load interface label map (shared by status cards, diagrams, config editor)
-    EW.loadIfaceMap();
+    // Load interface label map before first status fetch to avoid
+    // rendering raw Linux device names (race condition fix).
+    // UI skeleton (buildUI) is shown immediately; status data waits for map.
+    EW.loadIfaceMap().then(function() {
+        refreshAll(false); // first load: show Loading immediately
+        startAutoRefresh();
+    });
 
     // Discover correct stock CSS URL (styles-*.css may change after firmware update)
     discoverStockCSS();
@@ -616,9 +621,6 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // Fetch system info (hostname, uptime, RAM, disk)
     fetchSystemInfo();
-
-    refreshAll(false); // first load: show Loading immediately
-    startAutoRefresh();
 
     // Adaptive polling: switch interval on visibility change
     document.addEventListener("visibilitychange", function() {

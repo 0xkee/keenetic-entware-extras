@@ -204,8 +204,9 @@
             // Ensure dashboard polling is started
             if (!EW._dash.getDashboardInjected() && window.location.pathname === '/dashboard') {
                 EW._dash.setDashboardInjected(true);
-                EW.loadIfaceMap();
-                EW._dash.fetchDashboardStatuses();
+                EW.loadIfaceMap().then(function() {
+                    EW._dash.fetchDashboardStatuses();
+                });
                 if (!EW._dash.getDashboardTimer()) {
                     EW._dash.setDashboardTimer(setInterval(EW._dash.fetchDashboardStatuses, DASH_POLL_INTERVAL));
                 }

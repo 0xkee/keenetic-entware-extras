@@ -47,12 +47,14 @@ window.EW = (function() {
      * Eagerly load interface label map from backend.
      * Populates window._ewIfaceMap (dev → human label).
      * Safe to call multiple times — returns cached promise.
+     * Reactively invalidated by _scheduleIfaceMapReload() when an unknown
+     * tunnel interface is encountered during rendering.
      * @returns {Promise}
      */
     var _ifaceMapPromise = null;
     function loadIfaceMap() {
         if (_ifaceMapPromise) return _ifaceMapPromise;
-        _ifaceMapPromise = fetch('/api/system/interfaces')
+        _ifaceMapPromise = fetch('/api/system/interfaces', { cache: 'no-store' })
             .then(function(r) { return r.ok ? r.json() : null; })
             .then(function(data) {
                 if (data && data.interfaces) {
@@ -69,8 +71,25 @@ window.EW = (function() {
     }
 
     /**
+     * Schedule a lazy reload of the interface label map.
+     * Called when a tunnel device name is not found in _ewIfaceMap —
+     * indicates the map is stale (new interface appeared since last load).
+     * Debounced: batches multiple misses within 200ms into a single fetch.
+     */
+    var _ifaceReloadTimer = null;
+    function _scheduleIfaceMapReload() {
+        if (_ifaceReloadTimer) return;
+        _ifaceReloadTimer = setTimeout(function() {
+            _ifaceReloadTimer = null;
+            _ifaceMapPromise = null;
+            loadIfaceMap();
+        }, 200);
+    }
+
+    /**
      * Format device name for UI: "Human Label (dev)" when label is known,
      * or just "dev" when no label available. Handles special keywords.
+     * If a tunnel device is missing from a loaded map, schedules a lazy reload.
      * @param {string} dev - Linux device name (e.g. "br0", "nwg0")
      * @returns {string}
      */
@@ -79,11 +98,13 @@ window.EW = (function() {
         if (IFACE_SPECIAL[dev]) return IFACE_SPECIAL[dev];
         var map = window._ewIfaceMap;
         var label = (map && map[dev]) ? map[dev] : null;
+        if (!label && map && isTunnelIface(dev)) _scheduleIfaceMapReload();
         return label ? label + ' (' + dev + ')' : dev;
     }
 
     /**
      * Format device name for stock dashboard: human label only, no (dev).
+     * If a tunnel device is missing from a loaded map, schedules a lazy reload.
      * @param {string} dev - Linux device name
      * @returns {string}
      */
@@ -91,7 +112,9 @@ window.EW = (function() {
         if (!dev) return '';
         if (IFACE_SPECIAL[dev]) return IFACE_SPECIAL[dev];
         var map = window._ewIfaceMap;
-        return (map && map[dev]) ? map[dev] : dev;
+        if (map && map[dev]) return map[dev];
+        if (map && isTunnelIface(dev)) _scheduleIfaceMapReload();
+        return dev;
     }
 
     /**

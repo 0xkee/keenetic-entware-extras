@@ -7,6 +7,9 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+- Add KeeneticOS 5.1.5 bundle hash `9B8F16F` to compatibility tables (v4 patch, `Oo` enum)
+
 ### Fixed
 - **Interface labels not resolving** — tunnel interfaces (nwg, awg, ovpn) could display as raw Linux device names instead of human labels ("HIP Estonia (nwg7)") for hours. Root cause: `loadIfaceMap()` was fire-and-forget (race condition on first render) and its promise was cached forever within a page session (stale map). Fix: await `loadIfaceMap()` before first render in both custom and stock dashboards; add reactive invalidation — when an unknown tunnel device is encountered in a loaded map, schedule a debounced re-fetch (0 extra requests in steady state)
 

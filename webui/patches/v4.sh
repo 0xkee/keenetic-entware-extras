@@ -8,6 +8,7 @@ PATCH_ENUM="Oo"
 # Verified against stock bundles:
 #   5.2.x    mipsel   main-553997B.js  styles-553997B.css
 #   5.1.4    aarch64  main-AA018C6.js  styles-AA018C6.css
+#   5.1.5    mipsel   main-9B8F16F.js  styles-9B8F16F.css
 #
 # Difference from v3: Enum renamed Mo → Oo
 #   - Same signal-based architecture as v3

@@ -5,9 +5,10 @@ All notable changes to `keenetic-entware-extras` (base package) are documented h
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
-## [Unreleased]
+## [0.18.1] - 2026-09-08
 
 ### Changed
+- `lib/ip.sh`: `list_aggregate_cidrs()` uses `aggregate6` instead of ISC `aggregate`
 - `install.sh`: adds second opkg feed `aggr6` for aggregate6 dependency
 
 ## [0.18.0] - 2026-08-29

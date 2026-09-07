@@ -111,6 +111,7 @@ curl -fsSL https://raw.githubusercontent.com/0xkee/keenetic-entware-extras/maste
 # Add opkg feed
 cat >> /opt/etc/opkg.conf << 'EOF'
 src/gz kee https://0xkee.github.io/keenetic-entware-extras/stable
+src/gz aggr6 https://0xkee.github.io/aggregate6/stable
 EOF
 opkg update
 

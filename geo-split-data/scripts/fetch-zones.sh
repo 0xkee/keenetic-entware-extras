@@ -14,7 +14,7 @@ GEOIP_DIR="$SCRIPT_DIR/../lists/geoip"
 
 # shellcheck source=../../lib/common.sh disable=SC1091
 . "$PROJECT_ROOT/lib/common.sh"
-require_cmd aggregate
+require_cmd aggregate6
 
 # Countries to fetch (ISO 3166-1 alpha-2, lowercase)
 # All countries available on ipdeny.com (~240 zones)

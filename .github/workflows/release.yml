@@ -65,7 +65,11 @@ jobs:
 
       - name: Install build dependencies
         if: steps.pkg.outputs.package == 'geo-split-data'
-        run: sudo apt-get update && sudo apt-get install -y aggregate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download --repo 0xkee/aggregate6 --pattern '*_amd64.deb' --dir /tmp
+          sudo dpkg -i /tmp/aggregate6_*.deb
 
       - name: Build .ipk
         run: |

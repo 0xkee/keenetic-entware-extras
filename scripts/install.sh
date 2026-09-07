@@ -13,6 +13,8 @@ set -eu
 
 FEED_BASE="https://0xkee.github.io/keenetic-entware-extras"
 FEED_NAME="kee"
+AGGR6_FEED_BASE="https://0xkee.github.io/aggregate6"
+AGGR6_FEED_NAME="aggr6"
 CHANNEL=""
 FORCE=false
 UNINSTALL=false
@@ -152,6 +154,7 @@ prompt_channel() {
     esac
     echo ""
     add_feed
+    _add_extra_feed
     update_index force
 }
 
@@ -175,6 +178,25 @@ add_feed() {
 
     printf "src/gz %s %s\n" "$FEED_NAME" "$feed_url" >> /opt/etc/opkg.conf
     echo "  ✅ Feed added: ${FEED_NAME} → ${feed_url}"
+}
+
+# Add aggregate6 opkg feed (separate repository for aggregate6 binary)
+_add_extra_feed() {
+    local name="$AGGR6_FEED_NAME"
+    local feed_url="${AGGR6_FEED_BASE}/${CHANNEL}"
+
+    if grep -q "^src/gz ${name} " /opt/etc/opkg.conf 2>/dev/null; then
+        cur_url=$(sed -n "s|^src/gz ${name} ||p" /opt/etc/opkg.conf)
+        if [ "$cur_url" = "$feed_url" ]; then
+            return 0
+        fi
+        sed -i "s|^src/gz ${name} .*|src/gz ${name} ${feed_url}|" /opt/etc/opkg.conf
+        echo "  🔄 Feed updated: ${name} → ${feed_url}"
+        return 0
+    fi
+
+    printf "src/gz %s %s\n" "$name" "$feed_url" >> /opt/etc/opkg.conf
+    echo "  ✅ Feed added: ${name} → ${feed_url}"
 }
 
 update_index() {
@@ -280,6 +302,7 @@ remove_feed() {
     else
         echo "  ⏭  Feed '${FEED_NAME}' not found in opkg.conf"
     fi
+    sed -i "/^src\/gz ${AGGR6_FEED_NAME} /d" /opt/etc/opkg.conf
 }
 
 do_uninstall() {
@@ -421,6 +444,7 @@ main() {
     ensure_wget_ssl
     choose_channel
     add_feed
+    _add_extra_feed
     update_index
 
     # Non-interactive: packages passed as arguments

@@ -110,12 +110,11 @@ cidr_overlap_routes() {
 }
 
 # Pipe filter: aggregate (merge overlapping/adjacent) CIDR subnets.
-# Uses ISC aggregate (opkg install aggregate). IPv4 only.
-# Future: fork aggregate6 for IPv6 support.
+# Uses aggregate6 (opkg install aggregate6). Supports IPv4 and IPv6.
 # stdin: CIDR lines (one per line)
 # stdout: minimal set of CIDRs covering the same IP space
 list_aggregate_cidrs() {
-  aggregate 2>/dev/null
+  aggregate6 2>/dev/null
 }
 
 # Detect best DNS resolver port via /proc/net/tcp (instant, no network I/O).

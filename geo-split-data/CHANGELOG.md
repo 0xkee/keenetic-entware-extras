@@ -5,6 +5,11 @@ All notable changes to `geo-split-data` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.7.0] - 2026-09-08
+
+### Changed
+- `fetch-zones.sh`: switched from ISC `aggregate` to `aggregate6` for CIDR aggregation
+
 ## [0.6.2] - 2026-08-28
 
 ### Changed

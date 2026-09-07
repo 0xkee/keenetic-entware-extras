@@ -5,6 +5,12 @@ All notable changes to `geo-split` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.19.0] - 2026-09-08
+
+### Changed
+- Dependency: ISC `aggregate` → `aggregate6` (IPv4+IPv6, 1650× faster on ARM)
+- New opkg feed `aggr6` for aggregate6 binary package
+
 ## [0.18.6] - 2026-08-28
 
 ### Changed

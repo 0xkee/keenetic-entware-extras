@@ -131,7 +131,7 @@ section "Installed packages (related)"
 
 if command -v opkg >/dev/null 2>&1; then
     opkg list-installed 2>/dev/null \
-        | grep -E "geo-split|smartdns|webui|keenetic-entware|net-check|boot-diag|nginx|^cron |^aggregate |^bind-dig |^ca-certificates |^coreutils-touch |^curl |^ip-full |^iptables |^logrotate " \
+        | grep -E "geo-split|smartdns|webui|keenetic-entware|net-check|boot-diag|nginx|^cron |^aggregate6 |^bind-dig |^ca-certificates |^coreutils-touch |^curl |^ip-full |^iptables |^logrotate " \
         || echo "  (none found)"
 else
     echo "opkg: not found"

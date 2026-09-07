@@ -16,6 +16,7 @@ Add the **stable** repository (recommended):
 ```sh
 cat >> /opt/etc/opkg.conf << 'EOF'
 src/gz kee https://0xkee.github.io/keenetic-entware-extras/stable
+src/gz aggr6 https://0xkee.github.io/aggregate6/stable
 EOF
 opkg update
 ```
@@ -88,6 +89,6 @@ opkg remove geo-split geo-split-data
 opkg remove keenetic-entware-extras
 
 # Remove repository config
-sed -i '/kee/d' /opt/etc/opkg.conf
+sed -i '/^src\/gz kee /d; /^src\/gz aggr6 /d' /opt/etc/opkg.conf
 opkg update
 ```

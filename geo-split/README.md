@@ -18,7 +18,7 @@ Requires [opkg repository](../releases/README.md) configured.
 opkg install geo-split
 ```
 
-Dependencies (`keenetic-entware-extras`, `geo-split-data`, `ip-full`, `curl`, `bind-dig`, `aggregate`) are installed automatically.
+Dependencies (`keenetic-entware-extras`, `geo-split-data`, `ip-full`, `curl`, `bind-dig`, `aggregate6`) are installed automatically.
 
 > `config/config.conf` — conffile: preserved during `opkg upgrade`.
 
@@ -164,7 +164,7 @@ Config file: `config/config.conf`
 | `SUBNET_URL_PATTERN` | `ipdeny.com/…/{cc}.zone` | URL pattern for subnet download (`{cc}` = country code) |
 | `SUBNET_URL` | `""` | URL override (legacy): ignores GEO_ZONE |
 | `SUBNET_LOADER` | `"cidr-plain"` | Loader from `loaders/` directory |
-| `SUBNET_AGGREGATE` | `1` | CIDR aggregation (1 = enabled, requires `aggregate`) |
+| `SUBNET_AGGREGATE` | `1` | CIDR aggregation (1 = enabled, requires `aggregate6`) |
 | `MAX_CACHE_AGE` | `604800` | Max subnet cache age, seconds (7 days) |
 | `DOWNLOAD_RETRIES` | `2` | Download attempts per interface |
 | `DOWNLOAD_RETRY_DELAY` | `3` | Delay between attempts (seconds) |
@@ -331,7 +331,7 @@ After that, connect a USB drive with Ext4 and install Entware following the [off
 | `ip-full` | Depends | `ip rule`, `ip route`, `ip -batch` |
 | `curl` | Depends | Subnet download |
 | `bind-dig` | Depends | DNS resolution of domains |
-| `aggregate` | Depends | CIDR subnet aggregation |
+| `aggregate6` | Depends | CIDR subnet aggregation |
 | `coreutils-touch` | Depends | Cache file timestamp management |
 | `jq` | Recommends | For `ripe-json` loader |
 

@@ -39,7 +39,7 @@
 | `ip-full` | Policy routing (`ip rule`, `ip route`, `ip -batch`) |
 | `curl` | Скачивание GeoIP-подсетей |
 | `bind-dig` | DNS-резолвинг доменов для маршрутизации |
-| `aggregate` | Агрегация (оптимизация) CIDR-подсетей |
+| `aggregate6` | Агрегация (оптимизация) CIDR-подсетей |
 | `coreutils-touch` | Управление метками времени кэшей |
 
 **Из проекта keenetic-entware-extras** (устанавливаются автоматически как зависимости opkg):
@@ -64,6 +64,7 @@
 ```sh
 cat >> /opt/etc/opkg.conf << 'EOF'
 src/gz kee https://0xkee.github.io/keenetic-entware-extras/stable
+src/gz aggr6 https://0xkee.github.io/aggregate6/stable
 EOF
 opkg update
 ```
@@ -74,7 +75,7 @@ opkg update
 opkg install geo-split geo-split-data
 ```
 
-Зависимости из Entware-репозитория (`ip-full`, `curl`, `bind-dig`, `aggregate`, `coreutils-touch`) установятся автоматически.
+Зависимости из Entware-репозитория (`ip-full`, `curl`, `bind-dig`, `aggregate6`, `coreutils-touch`) установятся автоматически.
 
 После установки сервис **запускается автоматически** с конфигурацией по умолчанию.
 

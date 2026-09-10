@@ -181,9 +181,19 @@ add_feed() {
 }
 
 # Add aggregate6 opkg feed (separate repository for aggregate6 binary)
+# Uses per-architecture subdirectories: .../stable/mipsel-3.4/, .../dev/aarch64-3.10/ etc.
 _add_extra_feed() {
     local name="$AGGR6_FEED_NAME"
-    local feed_url="${AGGR6_FEED_BASE}/${CHANNEL}"
+
+    # Detect Entware architecture (e.g. mipsel-3.4, aarch64-3.10)
+    local entware_arch
+    entware_arch=$(opkg print-architecture 2>/dev/null | awk '$3 == 150 {print $2}')
+    if [ -z "$entware_arch" ]; then
+        warn "Cannot detect Entware architecture, skipping aggregate6 feed"
+        return 0
+    fi
+
+    local feed_url="${AGGR6_FEED_BASE}/${CHANNEL}/${entware_arch}"
 
     if grep -q "^src/gz ${name} " /opt/etc/opkg.conf 2>/dev/null; then
         cur_url=$(sed -n "s|^src/gz ${name} ||p" /opt/etc/opkg.conf)

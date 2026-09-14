@@ -85,6 +85,12 @@ Web panel on port `:8080` with live status of all services. Config editor with v
 
 Entware must be installed on your Keenetic router before using these packages. Follow the [official Keenetic guide for Entware installation](https://help.keenetic.com/hc/en-us/articles/360021214160-Installing-Entware-package-manager).
 
+The installer script requires `curl` (not included in base Entware). Install it first:
+
+```sh
+opkg update && opkg install curl
+```
+
 ### Quick install (recommended)
 
 One command — configures the opkg feed, installs HTTPS support, and offers a package selection menu:

@@ -1,8 +1,16 @@
 #!/opt/bin/sh
 # postrm — runs after package files are removed.
+# Must be idempotent (called on both remove and purge).
 set -eu
 
 rm -f /opt/etc/logrotate.d/nginx-webui
 rm -f /opt/var/run/nginx-webui.pid
 rm -f /opt/keenetic-entware-extras/webui/config/listen.conf
 # Don't delete logs — user might want to inspect them
+
+# Re-enable stock Entware nginx (was disabled by postinst to avoid port conflict).
+# Only restores the execute bit — does NOT start the service.
+if [ -f /opt/etc/init.d/S80nginx ] && [ ! -x /opt/etc/init.d/S80nginx ]; then
+    chmod +x /opt/etc/init.d/S80nginx
+    echo "Stock nginx re-enabled: /opt/etc/init.d/S80nginx (not started)"
+fi

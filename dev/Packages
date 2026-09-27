@@ -71,7 +71,7 @@ MD5sum: b6b3a9ead44e1c4d4add629aa2899c80
 SHA256sum: ca5ab0a4ed821831c081e9870bea5539207bd3d7ecdf780fd2351c744a20e81b
 
 Package: smartdns-geo-conf
-Version: 0.14.4
+Version: 0.15.0
 Architecture: all
 Maintainer: 0xkee
 Depends: keenetic-entware-extras, smartdns, ca-certificates, bind-dig
@@ -81,10 +81,10 @@ Description: SmartDNS configuration for DNS splitting by geo-zones on Keenetic/E
  Toggle: enable/disable split-DNS. Init: S37smartdns-conf.
 Section: net
 Priority: optional
-Filename: smartdns-geo-conf_0.14.4_all.ipk
-Size: 44364
-MD5sum: 6fc0a1cc18ee7e15c4e255aada2180cb
-SHA256sum: c546c87d18ffd301ccd3049ddc6036f13154a6e8d454a00f581a46096ee0a3f8
+Filename: smartdns-geo-conf_0.15.0_all.ipk
+Size: 44701
+MD5sum: 88cca1470bf26101e48bc443d2ed156c
+SHA256sum: 3280273375a20faaa9bad0dd016ca04c08a7e889623e475ea4096d39fb7cccec
 
 Package: smartdns-redirect
 Version: 0.6.4

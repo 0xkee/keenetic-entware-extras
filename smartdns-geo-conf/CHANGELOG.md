@@ -5,6 +5,11 @@ All notable changes to `smartdns-geo-conf` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.15.1] - 2026-09-27
+
+### Fixed
+- **Tunnel health check: skip pseudo-values** — `"default"` and `"*"` in OTHER_DNS_INTERFACES/ZONE_DNS_INTERFACE caused false `warn`/`fail` (no `/sys/class/net/default/operstate`). Both `check_iface_health()` (JSON) and text output tunnel marks now skip WebUI pseudo-values. Fixes yellow card on dashboard when "Default route" is selected alongside real tunnel interfaces.
+
 ## [0.15.0] - 2026-09-27
 
 ### Added

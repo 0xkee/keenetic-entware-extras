@@ -103,6 +103,7 @@ check_iface_health() {
   [ -z "$ifaces" ] && return
   local up=0 total=0 iface
   for iface in $ifaces; do
+    case "$iface" in default|"*") continue ;; esac
     total=$((total + 1))
     iface_is_up "$iface" && up=$((up + 1))
   done
@@ -428,6 +429,7 @@ text_output() {
       local _iface _first_tun=1
       for _iface in $_ck_other_ifaces $_ck_zone_iface; do
         [ -z "$_iface" ] && continue
+        case "$_iface" in default|"*") continue ;; esac
         local _mark; iface_is_up "$_iface" && _mark="ok" || _mark="fail"
         if [ "$_first_tun" = 1 ]; then
           status_line "Tunnels" "$_iface" "$_mark"

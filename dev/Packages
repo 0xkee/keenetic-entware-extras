@@ -31,7 +31,7 @@ MD5sum: 0020d3993fe5fb61cdb9f8dc8364e9bc
 SHA256sum: 1f5fcd3d2265b9af88e0b4f70c7cb3d0b349de1953f0d650db220755c94cb902
 
 Package: keenetic-entware-extras
-Version: 0.18.1
+Version: 0.18.2
 Architecture: all
 Maintainer: 0xkee
 Depends: cron
@@ -47,10 +47,10 @@ Description: Shared shell libraries and CLI tools for keenetic-entware-extras.
  Base package for geo-split, smartdns-geo-conf, smartdns-redirect and others.
 Section: lib
 Priority: optional
-Filename: keenetic-entware-extras_0.18.1_all.ipk
-Size: 42715
-MD5sum: f51704f409677e4c614b0b76ced9391f
-SHA256sum: e6707766756dc50941d8abd3a23851ff61a8bb16961ce363a8fd6965c4cc3cc1
+Filename: keenetic-entware-extras_0.18.2_all.ipk
+Size: 43121
+MD5sum: ad2870f36c8405552b2e1113c54dd409
+SHA256sum: fee8189c95c8c0cde970b2a7347c53982a853d6de3f7bdb3c7aa6f67a8811bbc
 
 Package: net-check
 Version: 0.2.14

@@ -14,7 +14,7 @@ MD5sum: 153e4cc2b8f0ae4c73fa58b04e1586fc
 SHA256sum: 1c4bcacd9aefe67e11eebcc6e1364c4d904ff66ac3bb890f12fa82fa6788149b
 
 Package: geo-split
-Version: 0.19.0
+Version: 0.19.1
 Architecture: all
 Maintainer: 0xkee
 Depends: keenetic-entware-extras, geo-split-data, ip-full, curl, bind-dig, aggregate6, coreutils-touch
@@ -25,10 +25,10 @@ Description: Split routing by GeoIP subnets and domain lists for Keenetic/Entwar
  Uses ip rule + ip route (no iptables fwmark) for Keenetic NDM compatibility.
 Section: net
 Priority: optional
-Filename: geo-split_0.19.0_all.ipk
-Size: 39541
-MD5sum: 3111d8360845c389c485a8eb6935f87a
-SHA256sum: 25e3813987c65b4141e94f0cd126e39b05b909d208a902b7f0012732d04b79e5
+Filename: geo-split_0.19.1_all.ipk
+Size: 39306
+MD5sum: 0020d3993fe5fb61cdb9f8dc8364e9bc
+SHA256sum: 1f5fcd3d2265b9af88e0b4f70c7cb3d0b349de1953f0d650db220755c94cb902
 
 Package: keenetic-entware-extras
 Version: 0.18.1

@@ -106,7 +106,7 @@ MD5sum: c7a8375e515126f00ca605218769fafb
 SHA256sum: f6771f76b5a92047d7617a2e3e9eeab20a5a826e554df842bd3d866bd7bd9b89
 
 Package: webui
-Version: 0.37.8
+Version: 0.38.0
 Architecture: all
 Maintainer: 0xkee
 Depends: keenetic-entware-extras, nginx, nginx-mod-lua, logrotate, curl
@@ -117,8 +117,8 @@ Description: Custom dashboard for Keenetic/Entware services.
  Includes logrotate config for nginx-webui log rotation.
 Section: net
 Priority: optional
-Filename: webui_0.37.8_all.ipk
-Size: 234195
-MD5sum: 986ea98b1a7c5c8048c6abed447c8094
-SHA256sum: 324d80c5223f5adc51bd577d1c1e39950517ddfa17130f0cc9f41d09f07826f2
+Filename: webui_0.38.0_all.ipk
+Size: 240323
+MD5sum: 12ebb686fd7f79366a778a6a578372d5
+SHA256sum: 92a5c382e0c8ad1bfdc7f10d7536dcd72a15a3d8c3330bc331fba76019457237
 

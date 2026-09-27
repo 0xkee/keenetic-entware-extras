@@ -65,13 +65,14 @@ check_cache() {
 
 # Check split-DNS enabled state.
 # Sets: _ck_enabled ("true"|"false"), _ck_disabled ("true"|"false"),
-#        _ck_zone, _ck_active_zones, _ck_other_ifaces
+#        _ck_zone, _ck_active_zones, _ck_other_ifaces, _ck_zone_iface
 check_enabled() {
   _ck_enabled="false"
   _ck_disabled="false"
   _ck_zone="${DNS_ZONE:-ru}"
   _ck_active_zones=""
   _ck_other_ifaces="${OTHER_DNS_INTERFACES:-}"
+  _ck_zone_iface="${ZONE_DNS_INTERFACE:-}"
   _ck_other_provider="${OTHER_DNS_PROVIDER:-google cloudflare}"
   _ck_zone_provider="${ZONE_DNS_PROVIDER:-yandex adguard}"
   if [ -f "$STATE_FILE" ]; then
@@ -90,6 +91,28 @@ check_custom_providers() {
   local _f="$_CONFIG_DIR/dns-providers-custom.conf"
   if [ -f "$_f" ]; then
     _ck_custom_providers=$(grep -v '^[[:space:]]*#' "$_f" | grep -c '_LABEL=' 2>/dev/null) || _ck_custom_providers=0
+  fi
+}
+
+# Check tunnel interface health for DNS routing.
+# Covers OTHER_DNS_INTERFACES + ZONE_DNS_INTERFACE.
+# Sets: _ck_iface_status ("ok"|"warn"|"fail"|"skip")
+check_iface_health() {
+  _ck_iface_status="skip"
+  local ifaces="${_ck_other_ifaces}${_ck_zone_iface:+ $_ck_zone_iface}"
+  [ -z "$ifaces" ] && return
+  local up=0 total=0 iface
+  for iface in $ifaces; do
+    total=$((total + 1))
+    iface_is_up "$iface" && up=$((up + 1))
+  done
+  if [ "$up" -eq "$total" ]; then
+    _ck_iface_status="ok"
+  elif [ "$up" -gt 0 ]; then
+    _ck_iface_status="warn"
+  else
+    _ck_iface_status="fail"
+    STATUS_OK=1
   fi
 }
 
@@ -325,6 +348,7 @@ json_output() {
   status_detail "zone_dns_providers" "$_ck_zone_provider"
   status_detail "other_dns_providers" "$_ck_other_provider"
   status_detail "other_interfaces" "$_ck_other_ifaces"
+  [ -n "$_ck_zone_iface" ] && status_detail "zone_interface" "$_ck_zone_iface"
   status_detail "ports" "$_st_port_addrs"
   status_detail "servers" "$_ck_servers" "num"
   status_detail "rules" "$_ck_rules" "num"
@@ -348,6 +372,7 @@ json_output() {
     status_check_result "ports" "$(if [ "$_st_port_ok" = "true" ]; then printf ok; else printf fail; fi)"
   fi
   status_check_result "config" "$(if [ "$_ck_config_ok" = "true" ]; then printf ok; else printf fail; fi)"
+  status_check_result "iface_health" "$_ck_iface_status"
 
   # Emit
   status_emit_json "$enabled_val" "$([ "$_st_running" = "true" ] && echo 0 || echo 1)" "$STATUS_OK"
@@ -365,6 +390,7 @@ check_config
 check_cache
 check_enabled
 check_custom_providers
+check_iface_health
 
 # Set STATUS_OK based on critical checks (disabled state is not a failure)
 if [ "$_ck_disabled" != "true" ]; then
@@ -398,8 +424,18 @@ text_output() {
     status_line "Zone" "$_ck_zone → [$_ck_active_zones]"
     status_line "Zone DNS" "$_ck_zone_provider"
     status_line "Other DNS" "$_ck_other_provider"
-    if [ -n "$_ck_other_ifaces" ]; then
-      status_line "Other tunnels" "$_ck_other_ifaces"
+    if [ -n "$_ck_other_ifaces" ] || [ -n "$_ck_zone_iface" ]; then
+      local _iface _first_tun=1
+      for _iface in $_ck_other_ifaces $_ck_zone_iface; do
+        [ -z "$_iface" ] && continue
+        local _mark; iface_is_up "$_iface" && _mark="ok" || _mark="fail"
+        if [ "$_first_tun" = 1 ]; then
+          status_line "Tunnels" "$_iface" "$_mark"
+          _first_tun=0
+        else
+          status_line_cont "$_iface" "$_mark"
+        fi
+      done
     fi
     status_show_process
     show_ports

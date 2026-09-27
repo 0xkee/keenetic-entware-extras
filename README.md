@@ -20,7 +20,7 @@ A set of `.ipk` packages for Keenetic routers with Entware. Makes routing smarte
 
 **Route traffic by country.**
 
-Sends traffic to specific countries through one network path (e.g. ISP), and everything else through another (e.g. encrypted tunnel). Works with GeoIP subnets and domain lists — resolves domains to IPs and routes them too.
+Sends traffic to specific countries through one network path (e.g. ISP), and everything else through another (e.g. encrypted tunnel) — or vice versa. Works with GeoIP subnets and domain lists — resolves domains to IPs and routes them too.
 
 - 240 countries + 40 regional alliances (EAEU, BRICS, EU, ASEAN…)
 - Automatic failover on interface changes (NDM hook)

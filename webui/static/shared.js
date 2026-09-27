@@ -35,6 +35,7 @@ window.EW = (function() {
         route_in: 'space-list',
         route_out: 'single-suffix',
         other_interfaces: 'space-list',
+        zone_interface: 'space-list',
         interfaces: 'space-list',
         gateway: 'gateway'
     };
@@ -64,6 +65,7 @@ window.EW = (function() {
                         map[ifc.id || ifc.name] = ifc.label || ifc.description || ifc.id || ifc.name || '';
                     }
                     window._ewIfaceMap = map;
+                    window._ewIfaceData = data.interfaces;
                 }
                 return data;
             }).catch(function() { return null; });
@@ -439,6 +441,7 @@ window.EW = (function() {
                 key: key,
                 label: formatKey(key),
                 value: strVal,
+                rawValue: (IFACE_DETAIL_KEYS[key] && typeof rawVal === 'string') ? rawVal : null,
                 shortValue: shortValue,
                 lines: lines,
                 isError: isError,
@@ -548,8 +551,23 @@ window.EW = (function() {
 
         // Multiline entries (e.lines from parseDetails)
         if (e.lines) {
-            return e.lines.map(function(l) {
-                return l.isError ? '<span style="color:var(--error,#f44336)">' + escapeHtml(l.text) + '</span>' : escapeHtml(l.text);
+            // Interface health enrichment: add ✓/✗ for tunnel devices (mirrors DNS provider enrichment)
+            var isIfaceList = IFACE_DETAIL_KEYS[e.key] === 'space-list' && e.rawValue && window._ewIfaceData;
+            var rawDevs = isIfaceList ? e.rawValue.split(/\s+/).filter(Boolean) : null;
+            return e.lines.map(function(l, idx) {
+                var txt = l.isError ? '<span style="color:var(--error,#f44336)">' + escapeHtml(l.text) + '</span>' : escapeHtml(l.text);
+                if (rawDevs) {
+                    var rd = rawDevs[idx];
+                    if (rd && isTunnelIface(rd)) {
+                        var ifUp = _findIfaceUp(rd);
+                        if (ifUp !== undefined) {
+                            var ic = ifUp ? '\u2713' : '\u2717';
+                            var cl = ifUp ? 'ew-bool-icon--ok' : 'ew-bool-icon--fail';
+                            txt = '<span class="ew-bool-icon ' + cl + '">' + ic + '</span> ' + txt;
+                        }
+                    }
+                }
+                return txt;
             }).join('<br>');
         }
 
@@ -654,6 +672,20 @@ window.EW = (function() {
     function isTunnelIface(dev) {
         if (!dev) return false;
         return /^(nwg|awg|wg|ovpn|l2tp|pptp|sstp|ipsec|tun\d|tap|gre|vti|sit|ip6tnl|xfrm)/.test(dev);
+    }
+
+    /**
+     * Look up interface UP state from cached interface data.
+     * @param {string} dev - Linux device name
+     * @returns {boolean|undefined} true=UP, false=DOWN, undefined=unknown
+     */
+    function _findIfaceUp(dev) {
+        var data = window._ewIfaceData;
+        if (!data) return undefined;
+        for (var i = 0; i < data.length; i++) {
+            if (data[i].name === dev) return data[i].up;
+        }
+        return undefined;
     }
 
     return {

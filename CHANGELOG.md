@@ -5,6 +5,11 @@ All notable changes to `keenetic-entware-extras` (base package) are documented h
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.18.2] - 2026-09-27
+
+### Added
+- `lib/ip.sh`: `iface_is_up()` — sysfs operstate check for tunnel interface health (instant, ~1ms, no network I/O)
+
 ## [0.18.1] - 2026-09-08
 
 ### Changed

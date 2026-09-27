@@ -153,6 +153,19 @@ is_tunnel_iface() {
   esac
 }
 
+# Check if a network interface is operationally UP.
+# Uses sysfs operstate (instant, ~1ms, no network I/O).
+# WireGuard/AmneziaWG interfaces report "unknown" when UP (no carrier detection);
+# "down" when actually down. Both "up" and "unknown" are treated as UP.
+# Args: $1 - interface name
+# Returns: 0 if UP, 1 if DOWN/absent
+iface_is_up() {
+  case "$(cat "/sys/class/net/$1/operstate" 2>/dev/null)" in
+    up|unknown) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 # Detect outgoing ISP interface for geo-split routes.
 # Priority: main table default route (most reliable, reflects actual connectivity).
 # Fallback: scan all routing tables (handles "tunnel = default policy" where ISP

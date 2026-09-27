@@ -5,6 +5,11 @@ All notable changes to `smartdns-geo-conf` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.15.0] - 2026-09-27
+
+### Added
+- **Tunnel interface health indicators** — `status.sh` checks operstate of configured tunnel interfaces (OTHER_DNS_INTERFACES + ZONE_DNS_INTERFACE) via sysfs. CLI shows per-interface ✓/✗ marks. JSON adds `checks.iface_health` ("ok"/"warn"/"fail"/"skip") and `details.zone_interface` when ZONE_DNS_INTERFACE is set. All DOWN → fail (STATUS_OK=1), partial DOWN → warn, all UP → ok.
+
 ## [0.14.4] - 2026-08-30
 
 ### Fixed

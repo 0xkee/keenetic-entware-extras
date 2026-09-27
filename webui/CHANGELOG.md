@@ -5,6 +5,11 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.38.0] - 2026-09-27
+
+### Added
+- **Interface health indicators** — tunnel interfaces in status card details (other_interfaces, zone_interface) now show ✓/✗ UP/DOWN icons. Uses existing `/api/system/interfaces` UP data (no additional API calls). Same CSS pattern as DNS provider health checks (ew-bool-icon). `zone_interface` added to IFACE_DETAIL_KEYS for automatic humanization.
+
 ## [0.37.9] - 2026-09-14
 
 ### Changed

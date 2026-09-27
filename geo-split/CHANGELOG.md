@@ -5,6 +5,11 @@ All notable changes to `geo-split` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.19.1] - 2026-09-27
+
+### Added
+- `status.sh`: `tunnel_health` check — verifies active output tunnel interface operstate via sysfs. Emits "ok"/"warn"/"skip" in JSON checks (skip when route_out is ISP, not tunnel)
+
 ## [0.19.0] - 2026-09-08
 
 ### Changed

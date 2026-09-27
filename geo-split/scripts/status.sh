@@ -467,6 +467,16 @@ json_output() {
   fi
   status_check_result "rules" "$_r_status"
 
+  # Tunnel health: check active output interface(s) if routing via tunnel
+  local _th_status="skip" _th_dev
+  if [ "$_ck_out_type" = "tunnel" ] && [ -n "$_ck_active_out" ]; then
+    _th_status="ok"
+    for _th_dev in $_ck_active_out; do
+      iface_is_up "$_th_dev" || _th_status="warn"
+    done
+  fi
+  status_check_result "tunnel_health" "$_th_status"
+
   # Emit
   status_emit_json "$enabled_val" "$([ "$running" = "true" ] && echo 0 || echo 1)" "$STATUS_OK"
 }

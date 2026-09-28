@@ -44,8 +44,8 @@ jobs:
               prefix=$(tag_prefix "$pkg")
               tag="${prefix}${cur_ver}"
 
-              if git rev-parse "$tag" >/dev/null 2>&1; then
-                echo "⏭ Tag $tag already exists, skipping"
+              if git ls-remote --tags origin "$tag" | grep -q .; then
+                echo "⏭ Tag $tag already exists on remote, skipping"
               else
                 echo "🏷 Creating tag: $tag ($pkg: ${prev_ver:-new} → $cur_ver)"
                 git tag "$tag"

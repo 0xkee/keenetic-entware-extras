@@ -1,5 +1,5 @@
 # Signal-family patch logic for ENTWARE_EXTRAS dashboard card integration.
-# Sourced by v3.sh, v4.sh — do NOT execute directly.
+# Sourced by v3.sh, v4.sh, v5.sh, v6.sh — do NOT execute directly.
 #
 # Signal-based Angular architecture (KeeneticOS 5.1.0+):
 #   order=V([]) writable signal (no setter)

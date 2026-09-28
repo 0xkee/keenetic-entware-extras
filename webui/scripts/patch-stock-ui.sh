@@ -6,7 +6,7 @@
 #
 # Patch detection:
 #   Auto-detects patch set by scanning the stock Angular bundle for the
-#   DashboardSection enum name: Po → v1, Vo → v2, Mo → v3.
+#   DashboardSection enum name: Po → v1, Vo → v2, Mo → v3, Oo → v4, Lo → v5, Qo → v6.
 #   Works regardless of firmware version string or architecture.
 #   Writes result to webui/htdocs-cache/.patch-state for status.sh.
 # shellcheck disable=SC1091  # sourced files resolved at runtime on router

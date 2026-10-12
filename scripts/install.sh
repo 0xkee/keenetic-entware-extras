@@ -209,6 +209,130 @@ _add_extra_feed() {
     echo "  ✅ Feed added: ${name} → ${feed_url}"
 }
 
+# ── Network helpers (opkg update fallbacks) ──────────────────────
+
+# Run opkg update with a timeout (BusyBox has no timeout binary).
+# Returns 0 on success, 1 on timeout/failure.
+_opkg_update_with_timeout() {
+    local secs="$1" tmp_out pid elapsed
+    tmp_out="/tmp/kee-opkg-update-$$"
+
+    opkg update > "$tmp_out" 2>&1 &
+    pid=$!
+    elapsed=0
+    while [ "$elapsed" -lt "$secs" ]; do
+        if ! kill -0 "$pid" 2>/dev/null; then
+            wait "$pid" && { rm -f "$tmp_out"; return 0; }
+            rm -f "$tmp_out"
+            return 1
+        fi
+        sleep 1
+        elapsed=$((elapsed + 1))
+    done
+
+    # Still running after timeout — kill it
+    kill "$pid" 2>/dev/null
+    wait "$pid" 2>/dev/null || true
+    rm -f "$tmp_out" /opt/tmp/opkg.lock
+    return 1
+}
+
+# Find a tunnel interface IP that can reach bin.entware.net.
+# Prints the working IP and returns 0, or returns 1 if none found.
+_find_tunnel_ip() {
+    local ifaces iface ip test_url spider_pid elapsed
+    ifaces=$(ip link show up 2>/dev/null \
+        | grep -oE '(nwg|awg|ovpn|wg)[0-9]+' || true)
+    [ -z "$ifaces" ] && return 1
+
+    test_url=$(sed -n 's|^src/gz [^ ]* \(http://bin\.entware\.net/[^ ]*\)|\1|p' \
+        /opt/etc/opkg.conf | head -1)
+    [ -z "$test_url" ] && return 1
+
+    for iface in $ifaces; do
+        ip=$(ip addr show "$iface" 2>/dev/null \
+            | grep -oE 'inet [0-9.]+' | head -1 | cut -d' ' -f2)
+        [ -z "$ip" ] && continue
+        # Hard 8s timeout: GNU wget -T is per-operation, not total;
+        # with default 20 retries a throttled host takes minutes.
+        wget --bind-address="$ip" -T 5 --tries=1 -q --spider \
+            "${test_url}/Packages.gz" >/dev/null 2>&1 &
+        spider_pid=$!
+        elapsed=0
+        while [ "$elapsed" -lt 8 ]; do
+            if ! kill -0 "$spider_pid" 2>/dev/null; then
+                wait "$spider_pid" && { echo "$ip"; return 0; }
+                break  # spider failed, try next iface
+            fi
+            sleep 1
+            elapsed=$((elapsed + 1))
+        done
+        if kill -0 "$spider_pid" 2>/dev/null; then
+            kill "$spider_pid" 2>/dev/null
+            wait "$spider_pid" 2>/dev/null || true
+        fi
+    done
+    return 1
+}
+
+# Download a single feed index: Packages.gz → gunzip → /opt/var/opkg-lists/<name>
+# Usage: _download_feed <name> <url> [bind_ip]
+_download_feed() {
+    local name="$1" url="$2" bind_ip="${3:-}"
+    local dest="/opt/var/opkg-lists/$name"
+    local rc=0
+
+    if [ -n "$bind_ip" ]; then
+        wget --bind-address="$bind_ip" -T 10 --tries=2 -q -O - \
+            "${url}/Packages.gz" 2>/dev/null \
+            | gunzip > "${dest}.tmp" 2>/dev/null || rc=1
+    else
+        wget -T 10 --tries=2 -q -O - "${url}/Packages.gz" 2>/dev/null \
+            | gunzip > "${dest}.tmp" 2>/dev/null || rc=1
+    fi
+
+    if [ "$rc" -ne 0 ] || [ ! -s "${dest}.tmp" ]; then
+        rm -f "${dest}.tmp"
+        return 1
+    fi
+    mv "${dest}.tmp" "$dest"
+}
+
+# Download ALL feed indices via a tunnel (bind to tunnel IP).
+_download_all_feeds_via_tunnel() {
+    local bind_ip="$1" ok=0 fname furl line
+    while IFS= read -r line; do
+        fname=$(echo "$line" | awk '{print $2}')
+        furl=$(echo "$line" | awk '{print $3}')
+        [ -z "$fname" ] || [ -z "$furl" ] && continue
+        if _download_feed "$fname" "$furl" "$bind_ip"; then
+            ok=$((ok + 1))
+            echo "     ✅ $fname"
+        else
+            echo "     ❌ $fname"
+        fi
+    done <<EOF
+$(grep '^src/gz ' /opt/etc/opkg.conf)
+EOF
+    [ "$ok" -gt 0 ]
+}
+
+# Download only kee + aggr6 feeds directly (GitHub Pages — works without tunnel).
+_download_kee_feeds_direct() {
+    local name furl ok=0
+    for name in "$FEED_NAME" "$AGGR6_FEED_NAME"; do
+        furl=$(sed -n "s|^src/gz ${name} ||p" /opt/etc/opkg.conf)
+        [ -z "$furl" ] && continue
+        if _download_feed "$name" "$furl"; then
+            ok=$((ok + 1))
+            echo "     ✅ $name"
+        else
+            echo "     ❌ $name"
+        fi
+    done
+    [ "$ok" -gt 0 ]
+}
+
 update_index() {
     # Skip if index exists and is fresh (< 10 min old)
     # $1 = "force" to skip freshness check (e.g. after channel change)
@@ -222,13 +346,43 @@ update_index() {
     fi
 
     info "Updating package index..."
-    if opkg update 2>&1 | tail -5 | grep -q "Updated.*${FEED_NAME}"; then
+
+    # Strategy 1: try normal opkg update with 30s timeout
+    if _opkg_update_with_timeout 15; then
         echo "  ✅ Package index updated"
-    elif [ -f "$idx_file" ]; then
-        echo "  ✅ Package index updated"
-    else
-        die "Failed to update package index. Check network connectivity."
+        return 0
     fi
+
+    # opkg update failed or timed out — try fallback downloads
+    warn "opkg update failed (bin.entware.net may be unreachable)"
+    info "Trying alternative download methods (this may take a while)..."
+
+    # Strategy 2: find a working tunnel and download all feeds through it
+    echo "  🔍 Looking for a working tunnel..."
+    tunnel_ip=$(_find_tunnel_ip || true)
+    if [ -n "$tunnel_ip" ]; then
+        info "Downloading all feeds via tunnel ($tunnel_ip)..."
+        if _download_all_feeds_via_tunnel "$tunnel_ip"; then
+            echo "  ✅ Package indices downloaded via tunnel"
+            return 0
+        fi
+    fi
+
+    # Strategy 3: no tunnel — download only kee + aggr6 directly (GitHub Pages works)
+    warn "No working tunnel found"
+    info "Downloading kee feeds directly (GitHub Pages)..."
+    if _download_kee_feeds_direct; then
+        echo "  ✅ kee package indices downloaded"
+        warn "Entware indices (bin.entware.net) not updated — route bin.entware.net through a tunnel to update"
+        return 0
+    fi
+
+    # All strategies failed
+    if [ -f "$idx_file" ]; then
+        warn "Using stale package index"
+        return 0
+    fi
+    die "Failed to update package index. Check network connectivity."
 }
 
 # ── Package installation ────────────────────────────────────────

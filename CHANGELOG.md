@@ -5,6 +5,11 @@ All notable changes to `keenetic-entware-extras` (base package) are documented h
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.19.2] - 2026-10-28
+
+### Fixed
+- `scripts/install.sh`: `P) Upgrade` silently exits without upgrading — `upgradable_pkgs()` returns non-zero exit code when last catalog package is not upgradable, triggering `set -e` script termination; added explicit `return 0`
+
 ## [0.19.1] - 2026-10-28
 
 ### Fixed

@@ -96,6 +96,7 @@ upgradable_pkgs() {
     for pkg in $ALL_PKGS; do
         echo "$_upgradable_cache" | grep -q "^${pkg} " && printf "%s " "$pkg"
     done
+    return 0
 }
 
 # ── Header ───────────────────────────────────────────────────────

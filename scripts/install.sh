@@ -91,9 +91,11 @@ pkg_upgrade_ver() {
     echo "$_upgradable_cache" | awk -v p="$1" '$1==p {print $5; exit}'
 }
 
-# All upgradable package names (space-separated)
+# Upgradable catalog package names only (space-separated)
 upgradable_pkgs() {
-    echo "$_upgradable_cache" | awk '{printf "%s ", $1}'
+    for pkg in $ALL_PKGS; do
+        echo "$_upgradable_cache" | grep -q "^${pkg} " && printf "%s " "$pkg"
+    done
 }
 
 # ── Header ───────────────────────────────────────────────────────
@@ -446,6 +448,12 @@ install_pkg() {
     opkg install "$pkg" 2>&1 | tee "$_tmp" | indent
 
     if grep -q "Collected errors" "$_tmp" 2>/dev/null; then
+        # Non-fatal: opkg configured the package despite warnings
+        # (e.g. remove_obsolesced_files for already-deleted files)
+        if grep -q "Configuring ${pkg}\." "$_tmp" 2>/dev/null; then
+            echo "  ⚠️  $pkg — installed with warnings"
+            INSTALLED=$((INSTALLED + 1)); rm -f "$_tmp"; return 0
+        fi
         echo "  ❌ $pkg — install failed"
         FAILED=$((FAILED + 1)); rm -f "$_tmp"; return 1
     fi

@@ -5,6 +5,12 @@ All notable changes to `keenetic-entware-extras` (base package) are documented h
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.19.1] - 2026-10-28
+
+### Fixed
+- `scripts/install.sh`: false `❌ install failed` on non-fatal opkg errors (e.g. `remove_obsolesced_files` for already-deleted files) — now detects `Configuring <pkg>` as success signal, shows `⚠️ installed with warnings` instead
+- `scripts/install.sh`: `P) Upgrade` was upgrading all system packages — now filtered to catalog packages only
+
 ## [0.19.0] - 2026-10-28
 
 ### Added

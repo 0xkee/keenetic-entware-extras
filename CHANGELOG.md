@@ -5,6 +5,16 @@ All notable changes to `keenetic-entware-extras` (base package) are documented h
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.19.0] - 2026-10-28
+
+### Added
+- `scripts/install.sh`: package version & status display in interactive menu — shows feed version, installed version, upgrade arrows (`🔄 0.18.0 → 0.19.1`), new package indicator (`· 0.6.5 new`), and summary hint (`💡 2 update(s), 1 new`)
+- `scripts/install.sh`: `P) Upgrade N package(s)` menu option — one-key upgrade for all outdated packages (shown conditionally when updates available)
+- `scripts/install.sh`: batch-optimized version caching — 2 opkg calls + 1 file parse instead of 13 individual opkg calls; loading indicator
+
+### Changed
+- `scripts/install.sh`: `show_summary()` — conditional counters, only non-zero stats shown (was: always showing `❌ 0 failed`)
+
 ## [0.18.2] - 2026-09-27
 
 ### Added

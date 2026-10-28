@@ -57,6 +57,45 @@ pkg_desc() {
     printf '%s\n' "$CATALOG" | sed -n "${1}p" | cut -d'|' -f2
 }
 
+# ── Version helpers (batch-optimized) ─────────────────────────────
+# Caches: populated once by cache_version_info(), reused per menu line
+_feed_versions=""
+_installed_versions=""
+_upgradable_cache=""
+
+# Populate all version caches in 2 opkg calls + 1 file parse
+cache_version_info() {
+    printf "→ Checking installed packages..." >&2
+    local idx="/opt/var/opkg-lists/${FEED_NAME}"
+    if [ -f "$idx" ]; then
+        _feed_versions=$(awk '/^Package:/{p=$2} /^Version:/{print p" "$2}' "$idx")
+    fi
+    _installed_versions=$(opkg list-installed 2>/dev/null || true)
+    _upgradable_cache=$(opkg list-upgradable 2>/dev/null || true)
+    printf "\r                                  \r" >&2
+}
+
+# Feed version for a package (from cached index)
+pkg_feed_ver() {
+    echo "$_feed_versions" | awk -v p="$1" '$1==p {print $2; exit}'
+}
+
+# Installed version for a package (from cached list)
+# opkg list-installed format: "name - version"
+pkg_installed_ver() {
+    echo "$_installed_versions" | awk -v p="$1" '$1==p {print $3; exit}'
+}
+
+# Upgrade target version (from cached upgradable list, empty if none)
+pkg_upgrade_ver() {
+    echo "$_upgradable_cache" | awk -v p="$1" '$1==p {print $5; exit}'
+}
+
+# All upgradable package names (space-separated)
+upgradable_pkgs() {
+    echo "$_upgradable_cache" | awk '{printf "%s ", $1}'
+}
+
 # ── Header ───────────────────────────────────────────────────────
 header() {
     echo ""
@@ -505,15 +544,54 @@ show_menu() {
     echo ""
     echo "  Available packages:"
     echo ""
+
     i=1
+    _menu_upgr_count=0
+    _menu_new_count=0
     while [ "$i" -le "$PKG_COUNT" ]; do
         name=$(pkg_name "$i")
         desc=$(pkg_desc "$i")
-        printf "  %d)  %-26s — %s\n" "$i" "$name" "$desc"
+        feed_ver=$(pkg_feed_ver "$name")
+        inst_ver=$(pkg_installed_ver "$name")
+        upgr_ver=$(pkg_upgrade_ver "$name")
+
+        if [ -n "$upgr_ver" ]; then
+            icon="🔄"
+            ver_text="${inst_ver} -> ${upgr_ver}"
+            _menu_upgr_count=$((_menu_upgr_count + 1))
+        elif [ -n "$inst_ver" ]; then
+            icon="✅"
+            ver_text="${inst_ver}"
+        else
+            icon="· "
+            ver_text="${feed_ver} new"
+            _menu_new_count=$((_menu_new_count + 1))
+        fi
+
+        # icon is always 2 visual columns; ver_text is ASCII — %-18s pads reliably
+        printf "  %d)  %-24s %s %-18s %s\n" "$i" "$name" "$icon" "$ver_text" "$desc"
         i=$((i + 1))
     done
+
+    # Summary hint for updates/new packages
+    if [ "$_menu_upgr_count" -gt 0 ] || [ "$_menu_new_count" -gt 0 ]; then
+        echo ""
+        hint="  💡"
+        if [ "$_menu_upgr_count" -gt 0 ]; then
+            hint="$hint ${_menu_upgr_count} update(s)"
+        fi
+        if [ "$_menu_new_count" -gt 0 ]; then
+            [ "$_menu_upgr_count" -gt 0 ] && hint="$hint,"
+            hint="$hint ${_menu_new_count} new"
+        fi
+        echo "${hint} — choose packages or press A to install all"
+    fi
+
     echo ""
     echo "  A)  Install all packages"
+    if [ "$_menu_upgr_count" -gt 0 ]; then
+        echo "  P)  Upgrade ${_menu_upgr_count} package(s)"
+    fi
     echo "  F)  Force reinstall all packages"
     echo "  C)  Change channel (stable/dev)"
     echo "  U)  Uninstall all packages"
@@ -523,7 +601,7 @@ show_menu() {
 
 read_choice() {
     # Prompt goes to stderr so it is not captured by $()
-    printf "  Choose packages (e.g. 1 3 5, a=all, f=force, u=uninstall, q=quit): " >&2
+    printf "  Choose packages (e.g. 1 3 5, a=all, p=upgrade, f=force, u=uninstall, q=quit): " >&2
     if [ -t 0 ]; then
         read -r choice
     else
@@ -568,12 +646,12 @@ parse_choice() {
 show_summary() {
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    summary="✅ $INSTALLED installed"
-    if [ "$UPGRADED" -gt 0 ]; then
-        summary="$summary | 🔄 $UPGRADED upgraded"
-    fi
-    summary="$summary | ⏭  $SKIPPED up to date | ❌ $FAILED failed"
-    echo "📊 Done: $summary"
+    parts=""
+    [ "$INSTALLED" -gt 0 ] && parts="✅ $INSTALLED installed"
+    [ "$UPGRADED" -gt 0 ]  && parts="${parts:+$parts | }🔄 $UPGRADED upgraded"
+    [ "$SKIPPED" -gt 0 ]   && parts="${parts:+$parts | }⏭  $SKIPPED up to date"
+    [ "$FAILED" -gt 0 ]    && parts="${parts:+$parts | }❌ $FAILED failed"
+    echo "📊 Done: ${parts:-nothing to do}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     echo "  Run kee-status to check service status."
@@ -610,6 +688,7 @@ main() {
     add_feed
     _add_extra_feed
     update_index
+    cache_version_info
 
     # Non-interactive: packages passed as arguments
     if [ -n "$remaining" ]; then
@@ -636,10 +715,20 @@ main() {
         show_menu
         choice=$(read_choice)
 
-        # Handle C (channel) and F (force) in parent shell
+        # Handle menu actions in parent shell
         case "$choice" in
-            [Cc]) prompt_channel; continue ;;
+            [Cc]) prompt_channel; cache_version_info; continue ;;
             [Ff]) FORCE=true; choice="A" ;;
+            [Pp])
+                pkgs=$(upgradable_pkgs)
+                if [ -z "$(echo "$pkgs" | tr -d ' ')" ]; then
+                    info "All packages are up to date"
+                    continue
+                fi
+                install_packages "$pkgs"
+                show_summary
+                break
+                ;;
             [Uu]) do_uninstall; exit 0 ;;
         esac
 

@@ -1,10 +1,12 @@
 # Setter-family patch logic for ENTWARE_EXTRAS dashboard card integration.
-# Sourced by v1.sh, v2.sh — do NOT execute directly.
+# Sourced by patch-stock-ui.sh auto-detect — do NOT execute directly.
 #
 # Setter-based Angular architecture (KeeneticOS 5.0.x–5.1 Beta):
 #   set order(e){this.elementsOrder=e}
 #   getTemplate(e){return this.templateMap.get(e)}
 #   Single default layout array (no desktop/mobile split)
+#
+# Architecture marker: grep -qF 'set order(e){this.elementsOrder=e}' "$BUNDLE"
 #
 # Patches: #6, #6a, #7, #8, #QS, #2, #3, #9, #4
 

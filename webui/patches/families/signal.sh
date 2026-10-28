@@ -1,10 +1,12 @@
 # Signal-family patch logic for ENTWARE_EXTRAS dashboard card integration.
-# Sourced by v3.sh, v4.sh, v5.sh, v6.sh — do NOT execute directly.
+# Sourced by patch-stock-ui.sh auto-detect — do NOT execute directly.
 #
 # Signal-based Angular architecture (KeeneticOS 5.1.0+):
 #   order=V([]) writable signal (no setter)
 #   getTemplate(e){return this.templateMap().get(e)??null}
 #   Desktop/mobile split layout: {desktop:[[col1],[col2]], mobile:[[all]]}
+#
+# Architecture marker: grep -qF 'this.templateMap().get' "$BUNDLE"
 #
 # Patches: #6, #6a, #7, #8, #QS-desktop, #QS-mobile, #2+3, #9, #4
 

@@ -1,77 +1,49 @@
-# Bundle Patch Files
+# Bundle Patch System
 
-Version-specific sed patches for Keenetic stock UI Angular bundles.
+Auto-detected sed patches for Keenetic stock UI Angular bundles.
 
 Different routers may run different KeeneticOS firmware versions and CPU
 architectures. Each firmware produces a unique Angular bundle (`main-<HASH>.js`).
-Patches are grouped into **patch sets** (`v1.sh`, `v2.sh`, ...) and auto-detected
-from the bundle content.
+Patches are auto-detected from bundle content and applied dynamically — no
+per-enum configuration files needed.
 
 ## How it works
 
 1. `patch-stock-ui.sh` copies stock UI bundles to `webui/htdocs-cache/`
-2. Content-based detection: greps the stock bundle for `Xx={INTERNET:"INTERNET"` —
-   the DashboardSection enum **definition** (unique across the bundle)
-3. Extracts the enum variable name (e.g. `Po`, `Vo`, `Mo`, `Oo`)
-4. Scans all `patches/v*.sh` files for matching `PATCH_ENUM="<EnumName>"`
-5. First matching patch file is selected
-6. Sources `<version>.sh` and calls `apply_patches "$BUNDLE"`
-7. Verifies critical patterns in the patched bundle
-8. Writes `webui/htdocs-cache/.patch-state` for `status.sh`
+2. Extracts the DashboardSection enum name from the bundle
+   (greps for `Xx={INTERNET:"INTERNET"` — the unique enum definition)
+3. Detects **patch family** from architecture markers:
+   - `signal`: `this.templateMap().get` (KeeneticOS 5.1.0+)
+   - `setter`: `set order(e){this.elementsOrder=e}` (KeeneticOS 5.0.x)
+4. Sources `families/<family>.sh` and applies patches with the detected enum
+5. Verifies each patch via `patch_sed()` (check string after sed)
+6. On any patch failure: rolls back to clean stock bundle
+7. Writes `webui/htdocs-cache/.patch-state` for `status.sh`
+
+**Key benefit:** when a firmware upgrade only renames the minified enum
+(e.g. `Mo`→`Oo`→`Lo`→`zo`), patches apply automatically with zero changes.
+A new release is only needed when the Angular **architecture** changes
+(e.g. setter→signal transition in 5.1.0).
 
 ## File structure
 
 ```
 webui/patches/
 ├── families/
-│   ├── setter.sh   # Shared logic for setter-based Angular (v1, v2)
-│   └── signal.sh   # Shared logic for signal-based Angular (v3, v4)
-├── v1.sh           # Patch set v1: Po enum (KeeneticOS 5.0.x)
-├── v2.sh           # Patch set v2: Vo enum (KeeneticOS 5.1 pre-release)
-├── v3.sh           # Patch set v3: Mo enum (KeeneticOS 5.1.0+)
-├── v4.sh           # Patch set v4: Oo enum (KeeneticOS 5.1.1+)
-├── v5.sh           # Patch set v5: Lo enum (KeeneticOS 5.2.5 Alpha)
-├── v6.sh           # Patch set v6: Qo enum (KeeneticOS 5.2 Alpha 11+)
-├── v7.sh           # Patch set v7: jo enum (KeeneticOS 5.2 Beta 0+)
-├── v8.sh           # Patch set v8: zo enum (KeeneticOS 5.2 Beta 2+)
+│   ├── setter.sh   # Patch logic for setter-based Angular (5.0.x)
+│   └── signal.sh   # Patch logic for signal-based Angular (5.1.0+)
 └── README.md
 ```
 
 ## Patch families
 
-Patch files within the same Angular architecture differ **only** by the minified
-enum name (e.g. `Po` vs `Vo`). To avoid duplicating ~60 lines of sed patterns,
-the common logic is extracted into **family files** under `families/`:
+Each family file contains the sed patterns for a specific Angular architecture.
+The enum name is passed as a parameter (`$_E`) — patterns are enum-agnostic.
 
-| Family | File | Architecture | Used by |
-|--------|------|-------------|---------|
-| **setter** | `families/setter.sh` | `set order(e)`, `templateMap.get(e)`, single layout array | v1, v2 |
-| **signal** | `families/signal.sh` | `order=V([])` signal, `templateMap().get(e)`, desktop/mobile split | v3, v4, v5, v6, v7, v8 |
-
-Each `v<N>.sh` is now a ~20-line declarative wrapper:
-1. Declares `PATCH_ENUM="<EnumName>"`
-2. Sources the appropriate family: `. "$PATCHES_DIR/families/<family>.sh"`
-3. Defines `apply_patches()` → delegates to `_apply_<family>_patches "$PATCH_ENUM" "$1"`
-
-### Adding a new enum (same family)
-
-When a firmware upgrade only renames the enum (e.g. `Oo` → `Xo`), create
-a new ~20-line file:
-
-```sh
-#!/opt/bin/sh
-# Patch set v5 — dashboard card integration for ENTWARE_EXTRAS
-# shellcheck disable=SC2034
-PATCH_ENUM="Xo"
-# Verified against stock bundles:
-#   <firmware>  <arch>  main-<HASH>.js  styles-<HASH>.css
-
-: "${PATCHES_DIR:=$(cd "$(dirname "$0")" && pwd)}"
-# shellcheck source=families/signal.sh
-. "$PATCHES_DIR/families/signal.sh"
-
-apply_patches() { _apply_signal_patches "$PATCH_ENUM" "$1"; }
-```
+| Family | File | Architecture | Marker |
+|--------|------|-------------|--------|
+| **setter** | `families/setter.sh` | `set order(e)`, `templateMap.get(e)`, single layout array | `set order(e){this.elementsOrder=e}` |
+| **signal** | `families/signal.sh` | `order=V([])` signal, `templateMap().get(e)`, desktop/mobile split | `this.templateMap().get` |
 
 ### When to create a new family
 
@@ -81,63 +53,43 @@ fundamentally (e.g. setter → signal transition in 5.1.0). Signs:
 - Order management changes (setter vs signal vs something new)
 - Layout structure changes (single array vs desktop/mobile split)
 
-## Adding support for new firmware
+Also add a new architecture marker grep in `patch-stock-ui.sh` (the
+`DETECTED_FAMILY` detection block).
 
-After a firmware upgrade when patches stop applying (new enum in bundle):
+## Rollback on failure
+
+Before applying patches, `patch-stock-ui.sh` backs up the bundle:
+`cp "$BUNDLE" "$BUNDLE.orig"`. If any `patch_sed` fails (`_PATCH_FAIL > 0`),
+the original is restored. This ensures the UI is never left in a partially
+patched (broken) state — it falls back to stock UI + inject.js overlay.
+
+## Diagnostics after firmware upgrade
 
 ```sh
-# 1. SSH to router, find the enum name in the stock bundle
+# 1. SSH to router, check auto-patch result
+logread -e ew-patch
+
+# 2. Check patch state
+cat /opt/keenetic-entware-extras/webui/htdocs-cache/.patch-state
+
+# 3. Verify architecture markers in stock bundle
 grep -o '[A-Za-z][A-Za-z0-9]*={INTERNET:"INTERNET"' /usr/share/htdocs_/main-*.js
-# => Xo={INTERNET:"INTERNET"  — new enum Xo!
+grep -c 'this.templateMap().get' /usr/share/htdocs_/main-*.js
 
-# 2. Test existing patch patterns (signal family example)
-for pat in 'TELEPHONY:"TELEPHONY"}' \
-  '[Oo.TELEPHONY]:"dashboard.card_nvox.title"};' \
-  'getTemplate(e){return this.templateMap().get(e)??null}'; do
-  grep -qF "$pat" /usr/share/htdocs_/main-*.js && echo "✅ $pat" || echo "❌ $pat"
-done
-
-# 3a. Same family, new enum only: create v5.sh (~10 lines)
-#     PATCH_ENUM="Xo", source families/signal.sh — done!
-
-# 3b. Architecture changed: create families/new-arch.sh with new sed patterns,
-#     then create v5.sh sourcing it
-
-# 4. Deploy and verify
-ssh root@router /opt/etc/init.d/S80nginx-webui restart
-# Check logs: logread -e ew-patch
+# 4. Full compatibility check from dev machine
+./scripts/stock-webui-check.sh --host <router>
 ```
 
-## Known bundle hashes
+## Family file contract
 
-| JS Hash | CSS Hash | Firmware | Arch | Patch Set | Enum |
-|---------|----------|----------|------|-----------|------|
-| `ZYVOXYLQ` | `AVEVNDW4` | KeeneticOS 5.0.4 | mipsel | v1 | Po |
-| `XXXXXXXX` | `J4CVWJOW` | KeeneticOS 5.0.8 | aarch64 | v1 | Po |
-| `4QPHZXFY` | `D5VNMMPD` | KeeneticOS 5.0.8 | mipsel | v1 | Po |
-| `TXLLNFBH` | `DKYWR66I` | KeeneticOS 5.0.10 | mipsel | v1 | Po |
-| `JELMZ7TJ` | `DKYWR66I` | KeeneticOS 5.0.11 | mipsel | v1 | Po |
-| `BRZQI6FO` | `DKYWR66I` | KeeneticOS 5.0.12 | aarch64 | v1 | Po |
-| `3FF05DF` | `3FF05DF` | KeeneticOS 5.1 Beta 3 | mipsel | v2 | Vo |
-| `8787931` | `8787931` | KeeneticOS 5.1.0+ | mipsel | v3 | Mo |
-| `553997B` | `553997B` | KeeneticOS 5.1.1 | mipsel | v4 | Oo |
-| `9D06AA2` | `9D06AA2` | KeeneticOS 5.1.2 | mipsel | v3 | Mo |
-| `AA018C6` | `AA018C6` | KeeneticOS 5.1.4 | aarch64 | v4 | Oo |
-| `9B8F16F` | `9B8F16F` | KeeneticOS 5.1.5 | mipsel | v4 | Oo |
-| `2CA2915` | `2CA2915` | KeeneticOS 5.2.5 Alpha | mipsel | v5 | Lo |
-| `AF1F402` | `AF1F402` | KeeneticOS 5.2 Alpha 11 | NC-1812 | v6 | Qo |
-| `9F0A454` | `9F0A454` | KeeneticOS 5.2 Beta 0 | mipsel | v7 | jo |
-| `2258318` | `2258318` | KeeneticOS 5.2 Beta 2 | mipsel | v8 | zo |
+Each `families/<name>.sh` must:
 
-## Patch set contract
-
-Each `v<N>.sh` file must:
-
-- Declare `PATCH_ENUM="<EnumName>"` — the DashboardSection enum for this bundle
-- Define `apply_patches()` function accepting one argument (bundle path)
-- Use `patch_sed "<label>" "<check>" "<sed_expr>" "$_bundle"` for each patch (sed + verify in one call, defined in `patch-stock-ui.sh`)
+- Define `_apply_<name>_patches()` accepting two arguments: enum name and bundle path
+- Use `patch_sed "<label>" "<check>" "<sed_expr>" "$_bundle"` for each patch
+  (`patch_sed` is defined in `patch-stock-ui.sh`)
 - Not call `exit` (sourced by main script)
 - Be POSIX sh compatible (no bash-isms)
+- Use `$_E` (first argument) for enum substitution in sed patterns
 
 ## See also
 

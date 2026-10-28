@@ -5,6 +5,14 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.39.0] - 2026-10-28
+
+### Changed
+- **Auto-patch for unknown enums** — `patch-stock-ui.sh` now auto-detects patch family from architecture markers (`signal`/`setter`) and applies patches with any enum name extracted at runtime. No more per-enum vN.sh files — minifier renames require zero action. Patches rollback to clean stock bundle on any failure
+- **Removed v1.sh–v8.sh** — all 8 static patch set wrappers replaced by dynamic auto-detection. Family logic preserved in `families/signal.sh` and `families/setter.sh`
+- **`.patch-state` format** — added `PATCH_ENUM`, `PATCH_FAMILY` fields; `PATCH_SET` now contains `auto-signal` or `auto-setter` instead of `v1`–`v8`
+- **`stock-webui-check.sh`** — recommendations updated for auto-patch (no longer suggests creating vN.sh)
+
 ## [0.38.3] - 2026-10-28
 
 ### Added

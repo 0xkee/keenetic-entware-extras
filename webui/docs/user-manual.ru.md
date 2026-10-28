@@ -290,7 +290,7 @@ opkg install webui
 
 > 📝 Патчинг выполняется в `webui/htdocs-cache/` — **оригинальные файлы прошивки не затрагиваются**. При ребуте патч применяется заново. Непатченные файлы отдаёт nginx напрямую с flash (`/usr/share/htdocs_`).
 >
-> Патч определяется автоматически по enum из Angular-бандла KeeneticOS. Поддерживаются patch set v1–v4, два семейства: **setter** (v1/v2) и **signal** (v3/v4).
+> Патч определяется автоматически по enum из Angular-бандла KeeneticOS. Семейство патчей (setter/signal) детектируется по архитектурным маркерам — при смене имени enum (minifier rename) патчи применяются автоматически без обновления пакета.
 
 ---
 
@@ -412,7 +412,7 @@ nginx-webui status: ✓ Alive
 | Порт 8080 не отвечает | nginx не запущен | `S80nginx-webui start` |
 | 502 Bad Gateway на `/` | Stock httpd (:80) недоступен | Проверить, что Keenetic httpd работает |
 | API возвращает ошибку | Lua-модуль не загружен | `opkg install nginx-mod-lua` + restart |
-| Stock UI не патчится | Enum бандла не распознан | `S80nginx-webui reload` после обновления прошивки; если не помогло — нужен новый patch set vN.sh |
+| Stock UI не патчится | Архитектура бандла не распознана | `S80nginx-webui reload` после обновления прошивки; проверить `logread -e ew-patch`. Обычный rename enum обрабатывается автоматически; если изменилась архитектура Angular — нужна новая family |
 | Route Check: «timeout» | DNS-резолвер не отвечает | Проверить SmartDNS: `dig ya.ru @127.0.0.1 -p 6053` |
 | Карточка показывает «Stale» | Временная потеря связи с API | Подождать 30с (stale-while-revalidate), обновится автоматически |
 

@@ -1,13 +1,18 @@
 #!/opt/bin/sh
-# patch-stock-ui.sh -- copy stock UI bundles and apply version-specific patches.
+# patch-stock-ui.sh -- copy stock UI bundles and apply auto-detected patches.
 # Called by S80nginx-webui before starting nginx.
 # Result: webui/htdocs-cache/ with patched index.html + main-*.js bundle + .gz.
 # Unpatched files served by nginx @stock fallback from /usr/share/htdocs_.
 #
-# Patch detection:
-#   Auto-detects patch set by scanning the stock Angular bundle for the
-#   DashboardSection enum name: Po → v1, Vo → v2, Mo → v3, Oo → v4, Lo → v5, Qo → v6, jo → v7.
-#   Works regardless of firmware version string or architecture.
+# Auto-patch detection:
+#   1. Extracts DashboardSection enum name from the stock Angular bundle
+#      (e.g. Po, Mo, zo — changes on each minifier rename)
+#   2. Detects patch family from architecture markers:
+#      - signal: templateMap().get (KeeneticOS 5.1.0+)
+#      - setter: set order(e) (KeeneticOS 5.0.x)
+#   3. Sources families/<family>.sh and applies patches with the detected enum
+#   4. On any patch failure: rolls back to clean stock bundle
+#   Works regardless of firmware version string, architecture, or enum name.
 #   Writes result to webui/htdocs-cache/.patch-state for status.sh.
 # shellcheck disable=SC1091  # sourced files resolved at runtime on router
 set -eu
@@ -70,27 +75,22 @@ if ! grep -q 'inject.js' "$CACHE/index.html"; then
     exit 1
 fi
 
-# -- Apply version-specific bundle patches -----------------------------
-PATCH_VER=""
+# -- Auto-detect and apply bundle patches ------------------------------
 
-# Auto-detect patch set from bundle DashboardSection enum.
-# Each vN.sh declares PATCH_ENUM="<EnumName>" (e.g. Po, Vo, Mo, Oo).
-# Content-based detection: find `Xx={INTERNET:"INTERNET"` — the unique
-# DashboardSection enum pattern. Avoids ambiguous .values(Xx)) grep.
+# Extract DashboardSection enum name from bundle.
+# Pattern: `Xx={INTERNET:"INTERNET"` — unique enum definition.
 BUNDLE_ENUM=$(grep -o '[A-Za-z][A-Za-z0-9]*={INTERNET:"INTERNET"' "$BUNDLE" \
     | head -1 | sed 's/=.*//')
-if [ -n "$BUNDLE_ENUM" ]; then
-    for _pf in "$PATCHES_DIR"/v*.sh; do
-        [ -f "$_pf" ] || continue
-        _enum=$(sed -n 's/^PATCH_ENUM="\([^"]*\)"/\1/p' "$_pf")
-        if [ "$_enum" = "$BUNDLE_ENUM" ]; then
-            PATCH_VER=$(basename "$_pf" .sh)
-            break
-        fi
-    done
-fi
 
-PATCH_FILE="$PATCHES_DIR/${PATCH_VER}.sh"
+# Detect patch family from architecture markers in the bundle.
+# signal: KeeneticOS 5.1.0+ (order=V([]) writable signal, templateMap().get)
+# setter: KeeneticOS 5.0.x  (set order(e){...}, templateMap.get — no signal call)
+DETECTED_FAMILY=""
+if grep -qF 'this.templateMap().get' "$BUNDLE"; then
+    DETECTED_FAMILY="signal"
+elif grep -qF 'set order(e){this.elementsOrder=e}' "$BUNDLE"; then
+    DETECTED_FAMILY="setter"
+fi
 
 # Detect firmware version for diagnostics (state file, logs)
 FW_TITLE=""
@@ -98,7 +98,7 @@ if command -v ndmc >/dev/null 2>&1; then
     FW_TITLE=$(ndmc -c "show version" 2>/dev/null | awk '/title:/ { print $2; exit }')
 fi
 
-# Combined sed + verify helper (called by vN.sh for each patch).
+# Combined sed + verify helper (called by family patches).
 # Usage: patch_sed <label> <expected_fixed_string> <sed_expression> <file>
 # Runs sed -i, then checks that <expected_fixed_string> exists in <file>.
 _PATCH_OK=0
@@ -114,30 +114,46 @@ patch_sed() {
     fi
 }
 
-if [ -n "$PATCH_VER" ] && [ -f "$PATCH_FILE" ]; then
-    log "Applying patches: ${PATCH_VER}.sh (JS=main-${JS_HASH}.js)"
+FAMILY_FILE="$PATCHES_DIR/families/${DETECTED_FAMILY}.sh"
+
+if [ -n "$BUNDLE_ENUM" ] && [ -n "$DETECTED_FAMILY" ] && [ -f "$FAMILY_FILE" ]; then
+    log "Auto-patching: family=$DETECTED_FAMILY enum=$BUNDLE_ENUM (JS=main-${JS_HASH}.js)"
+
+    # Backup bundle for rollback on partial failure
+    cp "$BUNDLE" "$BUNDLE.orig"
+
+    # Source family and apply patches with detected enum
     # shellcheck source=/dev/null
-    . "$PATCH_FILE"
-    # apply_patches is defined in the sourced file;
-    # it calls verify_patch() after each sed for per-patch diagnostics
-    apply_patches "$BUNDLE"
+    . "$FAMILY_FILE"
+    case "$DETECTED_FAMILY" in
+        signal) _apply_signal_patches "$BUNDLE_ENUM" "$BUNDLE" ;;
+        setter) _apply_setter_patches "$BUNDLE_ENUM" "$BUNDLE" ;;
+    esac
 
-    # -- Summary --------------------------------------------------------
+    # -- Summary & rollback on failure ----------------------------------
+    _PATCH_TOTAL=$((_PATCH_OK + _PATCH_FAIL))
     if [ "$_PATCH_FAIL" -gt 0 ]; then
-        log "WARN: $_PATCH_FAIL/$((_PATCH_OK + _PATCH_FAIL)) patches failed (${PATCH_VER}, JS=main-${JS_HASH}.js)"
+        log "WARN: $_PATCH_FAIL/$_PATCH_TOTAL patches failed — rolling back to stock bundle"
+        cp "$BUNDLE.orig" "$BUNDLE"
+        printf 'PATCH_SET=\nPATCH_ENUM=%s\nPATCH_FAMILY=%s\nFW_VERSION=%s\nJS_HASH=%s\nCSS_HASH=%s\nPATCH_OK=0\nPATCH_FAIL=%s\n' \
+            "$BUNDLE_ENUM" "$DETECTED_FAMILY" "$FW_TITLE" "$JS_HASH" "$CSS_HASH" "$_PATCH_FAIL" \
+            > "$CACHE/.patch-state"
     else
-        log "OK: $_PATCH_OK/$((_PATCH_OK + _PATCH_FAIL)) patches verified (${PATCH_VER}, JS=main-${JS_HASH}.js)"
+        log "OK: $_PATCH_OK/$_PATCH_TOTAL patches applied (family=$DETECTED_FAMILY, enum=$BUNDLE_ENUM)"
+        printf 'PATCH_SET=auto-%s\nPATCH_ENUM=%s\nPATCH_FAMILY=%s\nFW_VERSION=%s\nJS_HASH=%s\nCSS_HASH=%s\nPATCH_OK=%s\nPATCH_FAIL=0\n' \
+            "$DETECTED_FAMILY" "$BUNDLE_ENUM" "$DETECTED_FAMILY" "$FW_TITLE" "$JS_HASH" "$CSS_HASH" "$_PATCH_OK" \
+            > "$CACHE/.patch-state"
     fi
-
-    # Write state file for status.sh (sourced as key=value)
-    printf 'PATCH_SET=%s\nFW_VERSION=%s\nJS_HASH=%s\nCSS_HASH=%s\nPATCH_OK=%s\nPATCH_FAIL=%s\n' \
-        "$PATCH_VER" "$FW_TITLE" "$JS_HASH" "$CSS_HASH" "$_PATCH_OK" "$_PATCH_FAIL" \
-        > "$CACHE/.patch-state"
+    rm -f "$BUNDLE.orig"
 else
-    log "WARN: unknown bundle enum — no matching patch set (JS=main-${JS_HASH}.js)"
-    log "WARN: serving stock UI + inject.js only; create new vN.sh if this is a new firmware"
-    printf 'PATCH_SET=\nFW_VERSION=%s\nJS_HASH=%s\nCSS_HASH=%s\nPATCH_OK=0\nPATCH_FAIL=0\n' \
-        "$FW_TITLE" "$JS_HASH" "$CSS_HASH" \
+    if [ -z "$BUNDLE_ENUM" ]; then
+        log "WARN: DashboardSection enum not found in bundle (JS=main-${JS_HASH}.js)"
+    elif [ -z "$DETECTED_FAMILY" ]; then
+        log "WARN: unknown architecture — no matching family (enum=$BUNDLE_ENUM, JS=main-${JS_HASH}.js)"
+    fi
+    log "WARN: serving stock UI + inject.js only"
+    printf 'PATCH_SET=\nPATCH_ENUM=%s\nPATCH_FAMILY=\nFW_VERSION=%s\nJS_HASH=%s\nCSS_HASH=%s\nPATCH_OK=0\nPATCH_FAIL=0\n' \
+        "${BUNDLE_ENUM:-}" "$FW_TITLE" "$JS_HASH" "$CSS_HASH" \
         > "$CACHE/.patch-state"
 fi
 

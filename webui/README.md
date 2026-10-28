@@ -50,7 +50,7 @@ Browser → nginx :8080
   ├── /api/*        → content_by_lua (api-router.lua) → shell → JSON
   ├── /auth, /rci/  → proxy_pass 127.0.0.1:80 (stock httpd, WebSocket)
   └── /*            → static webui/htdocs-cache/ (patched bundles) + @stock /usr/share/htdocs_ (flash)
-                      └── patch-stock-ui.sh: inject.js + inject.css + v1/v2/v3/v4.sh bundle patches
+                      └── patch-stock-ui.sh: inject.js + inject.css + auto-detected bundle patches
 ```
 
 ### Stock UI patching
@@ -59,23 +59,21 @@ On `start` or `reload`, script `patch-stock-ui.sh`:
 
 1. Copies only bundle files (`index.html`, `main-*.js`, `polyfills-*.js`, `styles-*.css`) from `/usr/share/htdocs_/` → `webui/htdocs-cache/`
 2. Patches `index.html` — injects `<script>` and `<link>` tags (`inject.js`, `inject.css`)
-3. Auto-detects patch set by scanning the stock bundle for `PATCH_ENUM` patterns
-4. Calls `source patches/vN.sh` → `apply_patches` on JS bundle (sed replacements for CDK DragDrop integration)
-5. Pre-compresses bundles with gzip for `gzip_static`
-6. Writes `webui/htdocs-cache/.patch-state` for `status.sh`
-7. nginx serves patched files from htdocs-cache/, unpatched files via `@stock` fallback from flash
+3. Auto-detects patch family from architecture markers in the stock bundle
+4. Sources `patches/families/<family>.sh` and applies patches with the runtime-detected enum
+5. On any patch failure: rolls back to clean stock bundle
+6. Pre-compresses bundles with gzip for `gzip_static`
+7. Writes `webui/htdocs-cache/.patch-state` for `status.sh`
+8. nginx serves patched files from htdocs-cache/, unpatched files via `@stock` fallback from flash
 
-**Auto-detection** — each `vN.sh` declares `PATCH_ENUM="<EnumName>"` (the Angular DashboardSection enum). The script greps the stock bundle for `Xx={INTERNET:"INTERNET"` — the enum **definition** — and matches exactly one patch set:
+**Auto-detection** — the script greps the stock bundle for `Xx={INTERNET:"INTERNET"` (the DashboardSection enum definition), then detects the patch **family** from architecture markers:
 
-| Patch set | Enum | Firmware |
-|-----------|------|----------|
-| `v1` | `Po` | KeeneticOS 5.0.x |
-| `v2` | `Vo` | KeeneticOS 5.1 pre-release |
-| `v3` | `Mo` | KeeneticOS 5.1.0+ |
-| `v4` | `Oo` | KeeneticOS 5.1.1+ |
-| `v5` | `Lo` | KeeneticOS 5.2.x |
+| Family | Marker | Firmware |
+|--------|--------|----------|
+| `signal` | `this.templateMap().get` | KeeneticOS 5.1.0+ |
+| `setter` | `set order(e){this.elementsOrder=e}` | KeeneticOS 5.0.x |
 
-**Adding a new firmware:** if enum changed, create `vN.sh` with new `PATCH_ENUM` and updated sed patterns. See [patches/README.md](patches/README.md).
+Enum renames (minifier changes) are handled automatically — no package update needed. See [patches/README.md](patches/README.md).
 
 ## Management commands
 
@@ -235,13 +233,8 @@ nginx-webui status:
 | `lua/api-data.lua` | Lua: zone/provider data endpoints |
 | `lua/api-system.lua` | Lua: system info, clients, interfaces |
 | `lua/api-utils.lua` | Lua: shared utilities (exec, JSON, caching) |
-| `patches/v1.sh` | Patch set v1: Po enum (KeeneticOS 5.0.x) |
-| `patches/v2.sh` | Patch set v2: Vo enum (KeeneticOS 5.1 pre-release) |
-| `patches/v3.sh` | Patch set v3: Mo enum (KeeneticOS 5.1.0+) |
-| `patches/v4.sh` | Patch set v4: Oo enum (KeeneticOS 5.1.1+) |
-| `patches/v5.sh` | Patch set v5: Lo enum (KeeneticOS 5.2.x) |
-| `patches/families/setter.sh` | Shared patch logic for setter-based Angular (v1, v2) |
-| `patches/families/signal.sh` | Shared patch logic for signal-based Angular (v3, v4, v5) |
+| `patches/families/setter.sh` | Auto-detected patch logic for setter-based Angular (5.0.x) |
+| `patches/families/signal.sh` | Auto-detected patch logic for signal-based Angular (5.1.0+) |
 | `scripts/patch-stock-ui.sh` | Copies stock UI to tmpfs and applies patches |
 | `scripts/status.sh` | Diagnostics: process, port, config, HTTP, logrotate |
 | `static/index.html` | Custom dashboard — HTML |

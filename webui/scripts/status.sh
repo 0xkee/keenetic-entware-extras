@@ -100,17 +100,20 @@ check_upstream() {
 
 # Check firmware patch state.
 # Reads $SCRIPT_DIR/../htdocs-cache/.patch-state written by patch-stock-ui.sh.
-# Sets: _ck_patch_set ("v1"|"v2"|"v3"|""), _ck_fw_version, _ck_patch_ok ("true"|"false")
+# Sets: _ck_patch_set ("auto-signal"|"auto-setter"|""), _ck_patch_enum,
+#        _ck_fw_version, _ck_patch_ok ("true"|"false")
 check_patch_compat() {
   _ck_patch_set=""
+  _ck_patch_enum=""
   _ck_fw_version=""
   _ck_patch_ok="false"
   local _state="$SCRIPT_DIR/../htdocs-cache/.patch-state"
   if [ -f "$_state" ]; then
-    # State file is key=value (PATCH_SET, FW_VERSION, JS_HASH, CSS_HASH)
+    # State file is key=value (PATCH_SET, PATCH_ENUM, PATCH_FAMILY, FW_VERSION, ...)
     # shellcheck source=/dev/null
     . "$_state"
     _ck_patch_set="${PATCH_SET:-}"
+    _ck_patch_enum="${PATCH_ENUM:-}"
     _ck_fw_version="${FW_VERSION:-}"
     [ -n "$_ck_patch_set" ] && _ck_patch_ok="true"
   else
@@ -209,7 +212,9 @@ show_patch_compat() {
   if [ -z "$_ck_fw_version" ]; then
     status_line "Firmware" "unknown (ndmc unavailable)"
   elif [ "$_ck_patch_ok" = "true" ]; then
-    status_line "Firmware" "$_ck_fw_version → patch ${_ck_patch_set}" "ok"
+    local _patch_desc="${_ck_patch_set}"
+    [ -n "$_ck_patch_enum" ] && _patch_desc="${_patch_desc} (${_ck_patch_enum})"
+    status_line "Firmware" "$_ck_fw_version → ${_patch_desc}" "ok"
   else
     status_line "Firmware" "$_ck_fw_version → no patch set" "warn"
   fi
@@ -249,6 +254,7 @@ json_output() {
   status_detail "config" "$config_ok_val" "bool"
   status_detail "firmware" "${_ck_fw_version:-unknown}"
   status_detail "patch_set" "${_ck_patch_set:-none}"
+  status_detail "patch_enum" "${_ck_patch_enum:-none}"
   # Details — Infrastructure
   status_detail "upstream" "$_ck_upstream_addr"
   status_detail "lua_module" "$lua_module_ok_val" "bool"

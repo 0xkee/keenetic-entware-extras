@@ -33,6 +33,7 @@ webui/patches/
 ├── v5.sh           # Patch set v5: Lo enum (KeeneticOS 5.2.5 Alpha)
 ├── v6.sh           # Patch set v6: Qo enum (KeeneticOS 5.2 Alpha 11+)
 ├── v7.sh           # Patch set v7: jo enum (KeeneticOS 5.2 Beta 0+)
+├── v8.sh           # Patch set v8: zo enum (KeeneticOS 5.2 Beta 2+)
 └── README.md
 ```
 
@@ -45,7 +46,7 @@ the common logic is extracted into **family files** under `families/`:
 | Family | File | Architecture | Used by |
 |--------|------|-------------|---------|
 | **setter** | `families/setter.sh` | `set order(e)`, `templateMap.get(e)`, single layout array | v1, v2 |
-| **signal** | `families/signal.sh` | `order=V([])` signal, `templateMap().get(e)`, desktop/mobile split | v3, v4, v5, v6, v7 |
+| **signal** | `families/signal.sh` | `order=V([])` signal, `templateMap().get(e)`, desktop/mobile split | v3, v4, v5, v6, v7, v8 |
 
 Each `v<N>.sh` is now a ~20-line declarative wrapper:
 1. Declares `PATCH_ENUM="<EnumName>"`
@@ -125,6 +126,8 @@ ssh root@router /opt/etc/init.d/S80nginx-webui restart
 | `9B8F16F` | `9B8F16F` | KeeneticOS 5.1.5 | mipsel | v4 | Oo |
 | `2CA2915` | `2CA2915` | KeeneticOS 5.2.5 Alpha | mipsel | v5 | Lo |
 | `AF1F402` | `AF1F402` | KeeneticOS 5.2 Alpha 11 | NC-1812 | v6 | Qo |
+| `9F0A454` | `9F0A454` | KeeneticOS 5.2 Beta 0 | mipsel | v7 | jo |
+| `2258318` | `2258318` | KeeneticOS 5.2 Beta 2 | mipsel | v8 | zo |
 
 ## Patch set contract
 

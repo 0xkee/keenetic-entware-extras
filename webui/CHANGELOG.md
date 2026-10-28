@@ -5,6 +5,11 @@ All notable changes to `webui` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.38.3] - 2026-10-28
+
+### Added
+- **KeeneticOS 5.2 Beta 2 support** — new patch set v8.sh (`zo` enum, signal family). Bundle hash `2258318`. All 9/9 sed patterns compatible (same architecture as v3–v7)
+
 ## [0.38.2] - 2026-10-12
 
 ### Added

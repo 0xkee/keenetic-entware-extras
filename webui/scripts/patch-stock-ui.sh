@@ -175,20 +175,24 @@ done
 
 # Custom dashboard: JS/CSS/HTML in webui/static/.
 # .gz companions may already be shipped in the .ipk package (build-time
-# compression at -9). Skip files that already have a .gz companion —
-# avoids redundant gzip on slow MIPS and preserves build-time -9 quality.
+# compression at -9). Skip files that already have an UP-TO-DATE .gz companion.
+# If source is newer than .gz (spike deploy via scp), re-compress — stale .gz
+# with gzip_static causes nginx to serve old code → blank page.
 STATIC_DIR="$PROJECT_DIR/webui/static"
 GZ_SHIPPED=0
+GZ_STALE=0
 for f in "$STATIC_DIR"/*.js "$STATIC_DIR"/*.css "$STATIC_DIR"/*.html; do
     [ -f "$f" ] || continue
-    if [ -f "$f.gz" ]; then
+    if [ -f "$f.gz" ] && [ "$f.gz" -nt "$f" ]; then
         GZ_SHIPPED=$((GZ_SHIPPED + 1))
         continue
     fi
-    gzip -6 -k "$f"
+    # Source newer than .gz (spike deploy) or no .gz — (re)compress
+    [ -f "$f.gz" ] && GZ_STALE=$((GZ_STALE + 1))
+    gzip -6 -k -f "$f"
     GZ_COUNT=$((GZ_COUNT + 1))
 done
-log "gzip_static: compressed $GZ_COUNT files, $GZ_SHIPPED already shipped"
+log "gzip_static: compressed $GZ_COUNT files ($GZ_STALE stale), $GZ_SHIPPED shipped"
 
 # Success: disable cleanup trap (keep cache)
 trap - EXIT

@@ -11,12 +11,14 @@
 # NOTE: Router load averages are inflated by kernel SoftIRQ (NAT, routing,
 # iptables) — a 2-core router with load 10+ is normal. Thresholds are set
 # high to avoid over-throttling; net-check is I/O-bound (curl), not CPU-bound.
-# Memory boost: when free memory > 10%, batch gets +1 (I/O-bound tasks benefit
-# from extra parallelism if RAM permits). When memory < 10%, no boost applied.
+# Memory cap: mem_cap = floor(MemAvailable_MB / 15), min 1.
+# Each batch slot spawns curl+TLS per interface (~15MB combined).
+# If CPU-batch > mem_cap → capped (prevents OOM on low-RAM devices).
+# If mem_cap > CPU-batch → boost +1 (I/O-bound tasks benefit from parallelism).
 # Args: $1 - default base batch size (used as max when idle)
 # stdout: computed batch size (integer >= 1)
 _auto_batch_size() {
-  local _base="$1" _ncpu _load _pressure _batch _mem_ok
+  local _base="$1" _ncpu _load _pressure _batch _mem_avail_mb _mem_cap
 
   # --- CPU pressure → baseline batch ---
   _ncpu=$(grep -c '^processor' /proc/cpuinfo 2>/dev/null) || _ncpu=2
@@ -34,21 +36,19 @@ _auto_batch_size() {
     *) _batch="$(( _base > 2 ? _base / 2 : 1 ))" ;;              # extreme: half batch
   esac
 
-  # --- Memory boost: +1 if free memory > 10% ---
-  # MemAvailable is the best metric (includes reclaimable caches).
-  # Fallback to MemFree if MemAvailable is absent (older kernels).
-  _mem_ok=$(awk '
-    /^MemTotal:/     { total = $2 }
-    /^MemAvailable:/ { avail = $2 }
-    /^MemFree:/      { free  = $2 }
-    END {
-      a = (avail > 0) ? avail : free
-      if (total > 0 && (a / total) > 0.10) print 1; else print 0
-    }
-  ' /proc/meminfo 2>/dev/null) || _mem_ok=0
+  # --- Memory cap & boost (single formula, no hard thresholds) ---
+  # ~15MB per batch slot (curl + TLS per interface, conservative estimate).
+  # mem_cap = how many slots available RAM can sustain (minimum 1).
+  # Cap prevents OOM on low-RAM (e.g. KN-2310 124MB); boost helps on high-RAM.
+  _mem_avail_mb=$(awk '/^MemAvailable:/{printf "%d", $2/1024}' /proc/meminfo 2>/dev/null) || _mem_avail_mb=0
+  [ -z "$_mem_avail_mb" ] && _mem_avail_mb=0
+  _mem_cap=$(( _mem_avail_mb / 15 ))
+  [ "$_mem_cap" -lt 1 ] && _mem_cap=1
 
-  if [ "$_mem_ok" = 1 ]; then
-    _batch=$((_batch + 1))
+  if [ "$_batch" -gt "$_mem_cap" ]; then
+    _batch="$_mem_cap"                                                # cap: not enough RAM
+  elif [ "$_mem_cap" -gt "$_batch" ]; then
+    _batch=$((_batch + 1))                                            # boost: RAM headroom
   fi
 
   printf '%s' "$_batch"

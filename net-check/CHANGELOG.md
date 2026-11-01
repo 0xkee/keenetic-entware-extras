@@ -5,6 +5,11 @@ All notable changes to `net-check` are documented here.
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.2.15] - 2026-11-01
+
+### Fixed
+- `lib/batch.sh`: `_auto_batch_size()` — formula-based memory cap to prevent OOM on low-RAM devices (e.g. KN-2310, 124MB). `mem_cap = floor(MemAvailable_MB / 15)` — each batch slot ~15MB for curl+TLS per interface. Caps batch when RAM is tight, boosts +1 when headroom exists. Replaces percentage-only check that ignored absolute memory
+
 ## [0.2.14] - 2026-08-30
 
 ### Fixed

@@ -9,7 +9,7 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 - **CSRF Origin mismatch** — stock NDM auth backend rejects POST requests with `Origin: http://<IP>:8080` (expects port 80). Added `proxy_set_header Origin/Referer` rewrite in `/auth` and `/rci/` locations to strip non-standard port. Fixes 403 on login and RCI API calls
-- **proxy_bind 127.0.0.1** — added to server block to avoid TCP conntrack issues when src=dst=LAN_IP
+- **proxy_bind 127.0.0.1** — documented as optional troubleshooting measure for TCP conntrack (src=dst=LAN_IP); not required in practice — security level 6 (LAN) works correctly without it
 
 ## [0.39.0] - 2026-10-28
 

@@ -48,9 +48,9 @@ Description: Shared shell libraries and CLI tools for keenetic-entware-extras.
 Section: lib
 Priority: optional
 Filename: keenetic-entware-extras_0.20.0_all.ipk
-Size: 43696
-MD5sum: c743ba147f67082abef4c8b163d934dd
-SHA256sum: 4aaf440ea214a49ec216c1140c6bca12c1b024592d228f58c5c0321ea0210c7c
+Size: 43581
+MD5sum: 5aee7c1d0dd445e33505c9533b2b8972
+SHA256sum: 54e90a234d2e98db9779198f1a328e37caaf581f282f9590af25cac8a7422b4c
 
 Package: net-check
 Version: 0.2.15

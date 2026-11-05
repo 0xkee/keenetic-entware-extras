@@ -622,15 +622,13 @@ show_menu() {
     # Entware system package upgrade hint
     _sys_upgr_count=0
     _sys_upgr_list=""
-    for _upkg in $(echo "$_upgradable_cache" | awk 'NF{print $1}'); do
-        _is_kee=false
-        for _kp in $KEE_ALL_PKGS; do
-            [ "$_upkg" = "$_kp" ] && { _is_kee=true; break; }
-        done
-        if ! $_is_kee; then
-            _sys_upgr_count=$((_sys_upgr_count + 1))
-            _sys_upgr_list="${_sys_upgr_list:+$_sys_upgr_list, }$_upkg"
-        fi
+    _kee_set=" $KEE_ALL_PKGS "
+    for _upkg in $(echo "$_upgradable_cache" | awk '$2=="-" && $4=="-" {print $1}'); do
+        case "$_kee_set" in
+            *" $_upkg "*) continue ;;  # kee package — skip
+        esac
+        _sys_upgr_count=$((_sys_upgr_count + 1))
+        _sys_upgr_list="${_sys_upgr_list:+$_sys_upgr_list, }$_upkg"
     done
     if [ "$_sys_upgr_count" -gt 0 ]; then
         echo ""

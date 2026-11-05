@@ -5,6 +5,15 @@ All notable changes to `keenetic-entware-extras` (base package) are documented h
 Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
+## [0.20.0] - 2026-11-05
+
+### Fixed
+- `scripts/install.sh`: `geo-split-data` and other hidden kee dependencies not upgraded — `install_pkg()` now uses `opkg upgrade` for already-installed packages (upgrades dependencies too); `upgradable_pkgs()` tracks hidden kee packages (`geo-split-data`, `aggregate6`) for upgrade detection
+
+### Added
+- `scripts/install.sh`: hidden dependency upgrade display — shows `geo-split-data`, `aggregate6` upgrade info below the package table when updates available
+- `scripts/install.sh`: Entware system package upgrade hint — counts non-kee upgradable packages and shows `opkg upgrade` recommendation in the menu
+
 ## [0.19.2] - 2026-10-28
 
 ### Fixed

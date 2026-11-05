@@ -47,6 +47,10 @@ webui|web dashboard (port 8080)"
 PKG_COUNT=$(printf '%s\n' "$CATALOG" | wc -l)
 ALL_PKGS=$(printf '%s\n' "$CATALOG" | cut -d'|' -f1 | tr '\n' ' ')
 
+# Hidden kee-feed packages (not in menu, tracked for upgrades/uninstall)
+KEE_HIDDEN_PKGS="geo-split-data aggregate6"
+KEE_ALL_PKGS="$ALL_PKGS$KEE_HIDDEN_PKGS"
+
 # Get package name by 1-based index (empty if out of range)
 pkg_name() {
     printf '%s\n' "$CATALOG" | sed -n "${1}p" | cut -d'|' -f1
@@ -91,9 +95,9 @@ pkg_upgrade_ver() {
     echo "$_upgradable_cache" | awk -v p="$1" '$1==p {print $5; exit}'
 }
 
-# Upgradable catalog package names only (space-separated)
+# Upgradable kee package names including hidden deps (space-separated)
 upgradable_pkgs() {
-    for pkg in $ALL_PKGS; do
+    for pkg in $KEE_ALL_PKGS; do
         echo "$_upgradable_cache" | grep -q "^${pkg} " && printf "%s " "$pkg"
     done
     return 0
@@ -445,8 +449,13 @@ install_pkg() {
         return 0
     fi
 
-    # Normal: stream install output, check result after
-    opkg install "$pkg" 2>&1 | tee "$_tmp" | indent
+    # Use 'upgrade' for already-installed packages (also upgrades dependencies
+    # like geo-split-data); use 'install' for fresh installs
+    if pkg_installed_ver "$pkg" | grep -q .; then
+        opkg upgrade "$pkg" 2>&1 | tee "$_tmp" | indent
+    else
+        opkg install "$pkg" 2>&1 | tee "$_tmp" | indent
+    fi
 
     if grep -q "Collected errors" "$_tmp" 2>/dev/null; then
         # Non-fatal: opkg configured the package despite warnings
@@ -582,6 +591,20 @@ show_menu() {
         i=$((i + 1))
     done
 
+    # Check hidden kee packages for upgrades (e.g. geo-split-data)
+    _hidden_upgr_list=""
+    for _hp in $KEE_HIDDEN_PKGS; do
+        _hp_upgr=$(pkg_upgrade_ver "$_hp")
+        if [ -n "$_hp_upgr" ]; then
+            _hp_inst=$(pkg_installed_ver "$_hp")
+            _hidden_upgr_list="${_hidden_upgr_list:+$_hidden_upgr_list, }${_hp} ${_hp_inst} -> ${_hp_upgr}"
+            _menu_upgr_count=$((_menu_upgr_count + 1))
+        fi
+    done
+    if [ -n "$_hidden_upgr_list" ]; then
+        echo "      + dependency updates: $_hidden_upgr_list"
+    fi
+
     # Summary hint for updates/new packages
     if [ "$_menu_upgr_count" -gt 0 ] || [ "$_menu_new_count" -gt 0 ]; then
         echo ""
@@ -594,6 +617,25 @@ show_menu() {
             hint="$hint ${_menu_new_count} new"
         fi
         echo "${hint} — choose packages or press A to install all"
+    fi
+
+    # Entware system package upgrade hint
+    _sys_upgr_count=0
+    _sys_upgr_list=""
+    for _upkg in $(echo "$_upgradable_cache" | awk 'NF{print $1}'); do
+        _is_kee=false
+        for _kp in $KEE_ALL_PKGS; do
+            [ "$_upkg" = "$_kp" ] && { _is_kee=true; break; }
+        done
+        if ! $_is_kee; then
+            _sys_upgr_count=$((_sys_upgr_count + 1))
+            _sys_upgr_list="${_sys_upgr_list:+$_sys_upgr_list, }$_upkg"
+        fi
+    done
+    if [ "$_sys_upgr_count" -gt 0 ]; then
+        echo ""
+        echo "  📦 ${_sys_upgr_count} Entware system package update(s): ${_sys_upgr_list}"
+        echo "     To upgrade, run:  opkg upgrade"
     fi
 
     echo ""
